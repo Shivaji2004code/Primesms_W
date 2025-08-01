@@ -63,3 +63,104 @@ export interface CreateBusinessInfoRequest {
   webhookVerifyToken?: string;
   isActive?: boolean;
 }
+
+// Template types
+export type TemplateCategory = 'UTILITY' | 'MARKETING' | 'AUTHENTICATION';
+export type TemplateStatus = 'DRAFT' | 'IN_REVIEW' | 'PENDING' | 'ACTIVE' | 'REJECTED' | 'PAUSED' | 'DISABLED' | 'APPEAL_REQUESTED';
+export type QualityRating = 'HIGH' | 'MEDIUM' | 'LOW' | 'QUALITY_PENDING';
+export type ComponentType = 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS';
+export type HeaderFormat = 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'LOCATION';
+export type ButtonType = 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER' | 'OTP' | 'CATALOG' | 'ORDER_DETAILS';
+
+export interface TemplateParameter {
+  type: 'text' | 'currency' | 'date_time' | 'image' | 'document' | 'video';
+  text?: string;
+  currency?: {
+    fallback_value: string;
+    code: string;
+    amount_1000: number;
+  };
+  date_time?: {
+    fallback_value: string;
+  };
+}
+
+export interface TemplateExample {
+  header_text?: string[];
+  body_text?: string[][];
+  header_handle?: string[];
+}
+
+export interface TemplateButton {
+  type: ButtonType;
+  text: string;
+  url?: string;
+  phone_number?: string;
+  example?: string[];
+  otp_type?: 'COPY_CODE' | 'ONE_TAP';
+}
+
+export interface TemplateComponent {
+  type: ComponentType;
+  format?: HeaderFormat;
+  text?: string;
+  parameters?: TemplateParameter[];
+  example?: TemplateExample;
+  buttons?: TemplateButton[];
+  add_security_recommendation?: boolean;
+  code_expiration_minutes?: number;
+}
+
+export interface Template {
+  id: string;
+  userId: string;
+  name: string;
+  category: TemplateCategory;
+  language: string;
+  status: TemplateStatus;
+  components: TemplateComponent[];
+  templateId?: string;
+  messageSendTtlSeconds?: number;
+  allowCategoryChange?: boolean;
+  qualityRating?: QualityRating;
+  whatsappResponse?: any;
+  rejectionReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTemplateRequest {
+  name: string;
+  category: TemplateCategory;
+  language?: string;
+  components: TemplateComponent[];
+  message_send_ttl_seconds?: number;
+  allow_category_change?: boolean;
+  submit_to_whatsapp?: boolean;
+}
+
+export interface UpdateTemplateRequest {
+  name?: string;
+  category?: TemplateCategory;
+  language?: string;
+  components?: TemplateComponent[];
+  message_send_ttl_seconds?: number;
+  allow_category_change?: boolean;
+}
+
+export interface TemplateVariable {
+  name: string;
+  example: string;
+  description?: string;
+}
+
+export interface TemplatesResponse {
+  templates: Template[];
+  pagination: {
+    currentPage: number;
+    totalPages: number;
+    totalTemplates: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
+}

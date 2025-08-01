@@ -8,6 +8,7 @@ A complete WhatsApp Business API SaaS platform with modern landing page, authent
 - Modern hero section with compelling messaging
 - Feature showcase (Developer Friendly, Transparent Pricing, Powerful Management)
 - Credit-based pricing display
+
 - Professional header and footer
 
 ### 🔐 Authentication System

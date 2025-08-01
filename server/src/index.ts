@@ -11,6 +11,7 @@ dotenv.config();
 // Import routes
 import authRoutes from './routes/auth';
 import adminRoutes from './routes/admin';
+import templateRoutes from './routes/templates';
 
 const app = express();
 const PORT = process.env.PORT || 5050;
@@ -64,6 +65,7 @@ app.use(session({
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/templates', templateRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

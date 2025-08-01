@@ -122,6 +122,15 @@ const DialogClose: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({
   </button>
 )
 
+const DialogTrigger: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
+  children,
+  ...props
+}) => (
+  <div {...props}>
+    {children}
+  </div>
+)
+
 export {
   Dialog,
   DialogContent,
@@ -129,5 +138,6 @@ export {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogClose
+  DialogClose,
+  DialogTrigger
 }

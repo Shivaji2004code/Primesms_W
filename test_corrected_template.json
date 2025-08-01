@@ -1,0 +1,24 @@
+{
+  "name": "final_test_template",
+  "category": "UTILITY",
+  "language": "en_US",
+  "components": [
+    {
+      "type": "HEADER",
+      "format": "TEXT",
+      "text": "Order Confirmation"
+    },
+    {
+      "type": "BODY",
+      "text": "Hello {{1}}, your order {{2}} has been confirmed. Total amount: ${{3}}. Expected delivery: {{4}}.",
+      "example": {
+        "body_text": [["John Doe", "ORD12345", "99.99", "Dec 25, 2025"]]
+      }
+    },
+    {
+      "type": "FOOTER",
+      "text": "Thank you for choosing us!"
+    }
+  ],
+  "submit_to_whatsapp": true
+}

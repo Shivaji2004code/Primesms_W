@@ -8,6 +8,8 @@ import Signup from './pages/Signup';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUserDetails from './pages/AdminUserDetails';
 import UserDashboard from './pages/UserDashboard';
+import ManageTemplatesWrapper from './components/ManageTemplatesWrapper';
+import CreateTemplateWrapper from './components/CreateTemplateWrapper';
 
 function App() {
   return (
@@ -63,6 +65,30 @@ function App() {
           element={
             <UserRoute>
               <UserDashboard />
+            </UserRoute>
+          } 
+        />
+        <Route 
+          path="/user/templates" 
+          element={
+            <UserRoute>
+              <ManageTemplatesWrapper />
+            </UserRoute>
+          } 
+        />
+        <Route 
+          path="/user/templates/create" 
+          element={
+            <UserRoute>
+              <CreateTemplateWrapper />
+            </UserRoute>
+          } 
+        />
+        <Route 
+          path="/user/templates/:id/edit" 
+          element={
+            <UserRoute>
+              <CreateTemplateWrapper />
             </UserRoute>
           } 
         />

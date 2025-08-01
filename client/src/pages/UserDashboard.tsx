@@ -83,7 +83,7 @@ export default function UserDashboard() {
       title: 'Manage Templates',
       description: 'Create and manage WhatsApp message templates for consistent messaging',
       icon: <FileText className="h-8 w-8" />,
-      status: 'coming_soon',
+      status: 'access',
       gradient: 'from-green-500 to-teal-500',
       iconBg: 'bg-green-100 text-green-600'
     },
@@ -118,11 +118,16 @@ export default function UserDashboard() {
 
   const handleFeatureClick = (feature: FeatureCard) => {
     if (feature.status === 'coming_soon') {
-      // For now, all features show coming soon
       alert(`${feature.title} is coming soon! We're working hard to bring you this feature.`);
     } else {
       // Handle access to available features
-      console.log(`Accessing ${feature.title}`);
+      switch (feature.id) {
+        case 'manage-templates':
+          navigate('/user/templates');
+          break;
+        default:
+          console.log(`Accessing ${feature.title}`);
+      }
     }
   };
 

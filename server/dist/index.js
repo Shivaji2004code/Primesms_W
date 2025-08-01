@@ -15,6 +15,7 @@ dotenv_1.default.config();
 // Import routes
 const auth_1 = __importDefault(require("./routes/auth"));
 const admin_1 = __importDefault(require("./routes/admin"));
+const templates_1 = __importDefault(require("./routes/templates"));
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5050;
 // Database connection
@@ -61,6 +62,7 @@ app.use((0, express_session_1.default)({
 // Routes
 app.use('/api/auth', auth_1.default);
 app.use('/api/admin', admin_1.default);
+app.use('/api/templates', templates_1.default);
 // Health check endpoint
 app.get('/api/health', (req, res) => {
     res.json({ status: 'Server is running', timestamp: new Date().toISOString() });

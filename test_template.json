@@ -1,0 +1,19 @@
+{
+  "name": "welcome_message_test",
+  "category": "UTILITY",
+  "language": "en_US",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Hello {{customer_name}}, welcome to our service! Your order #{{order_id}} has been confirmed.",
+      "example": {
+        "body_text": [["John Doe", "12345"]]
+      }
+    },
+    {
+      "type": "FOOTER",
+      "text": "Thank you for choosing us!"
+    }
+  ],
+  "submit_to_whatsapp": true
+}
