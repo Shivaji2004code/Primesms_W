@@ -164,3 +164,11 @@ export interface TemplatesResponse {
     hasPrev: boolean;
   };
 }
+
+export interface MediaUploadResponse {
+  message: string;
+  headerHandle: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+}

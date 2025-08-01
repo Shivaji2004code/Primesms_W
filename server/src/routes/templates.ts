@@ -1,4 +1,7 @@
 import express from 'express';
+import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
 import { pool } from '../index';
 import { requireAuth } from '../middleware/auth';
 import { 
@@ -10,10 +13,106 @@ import {
   UserBusinessInfo
 } from '../types';
 
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ 
+  storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Only allow images for now
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  }
+});
+
 const router = express.Router();
 
 // All template routes require authentication
 router.use(requireAuth);
+
+// WhatsApp Resumable Upload API helper function
+const uploadMediaToWhatsApp = async (
+  filePath: string,
+  fileName: string,
+  mimeType: string,
+  businessInfo: UserBusinessInfo
+): Promise<string> => {
+  const { accessToken } = businessInfo;
+  
+  if (!accessToken) {
+    throw new Error('WhatsApp Business API access token not configured');
+  }
+
+  // Read file as buffer
+  const fileBuffer = fs.readFileSync(filePath);
+  const fileSize = fileBuffer.length;
+
+  // Step 1: Create upload session
+  const sessionResponse = await fetch(
+    'https://graph.facebook.com/v23.0/app/uploads',
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        file_length: fileSize,
+        file_type: mimeType,
+        file_name: fileName
+      })
+    }
+  );
+
+  const sessionData = await sessionResponse.json() as any;
+  
+  if (!sessionResponse.ok) {
+    throw new Error(`Upload session error: ${sessionData.error?.message || 'Unknown error'}`);
+  }
+
+  const { id: uploadSessionId } = sessionData;
+
+  // Step 2: Upload file data
+  const uploadResponse = await fetch(
+    `https://graph.facebook.com/v23.0/${uploadSessionId}`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/octet-stream',
+        'file_offset': '0'
+      },
+      body: fileBuffer
+    }
+  );
+
+  const uploadData = await uploadResponse.json() as any;
+  
+  if (!uploadResponse.ok) {
+    throw new Error(`File upload error: ${uploadData.error?.message || 'Unknown error'}`);
+  }
+
+  // Return the handle for template creation
+  return uploadData.h || uploadSessionId;
+};
 
 // WhatsApp Business API helper function
 const createWhatsAppTemplate = async (
@@ -606,6 +705,76 @@ router.post('/variables', (req, res) => {
 
   } catch (error) {
     console.error('Extract variables error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Upload media for template header
+router.post('/upload-media', upload.single('media'), async (req, res) => {
+  try {
+    const userId = req.session.user!.id;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    // Get user's business info
+    const businessResult = await pool.query(
+      'SELECT waba_id, access_token FROM user_business_info WHERE user_id = $1 AND is_active = true',
+      [userId]
+    );
+
+    if (businessResult.rows.length === 0) {
+      // Clean up uploaded file
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ 
+        error: 'WhatsApp Business API credentials not configured. Please set up your business information first.' 
+      });
+    }
+
+    const businessInfo = {
+      wabaId: businessResult.rows[0].waba_id,
+      accessToken: businessResult.rows[0].access_token
+    } as UserBusinessInfo;
+
+    try {
+      // Upload to WhatsApp and get header handle
+      const headerHandle = await uploadMediaToWhatsApp(
+        req.file.path,
+        req.file.originalname,
+        req.file.mimetype,
+        businessInfo
+      );
+
+      // Clean up temporary file
+      fs.unlinkSync(req.file.path);
+
+      res.json({
+        message: 'Media uploaded successfully',
+        headerHandle,
+        fileName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size
+      });
+
+    } catch (uploadError: any) {
+      console.error('WhatsApp media upload error:', uploadError);
+      // Clean up temporary file
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      res.status(400).json({
+        error: 'Failed to upload media to WhatsApp',
+        details: uploadError.message
+      });
+    }
+
+  } catch (error) {
+    console.error('Upload media error:', error);
+    // Clean up temporary file if it exists
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });

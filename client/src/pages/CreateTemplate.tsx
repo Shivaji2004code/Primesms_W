@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -10,7 +10,10 @@ import {
   AlertCircle,
   Info,
   Variable,
-  Smartphone
+  Smartphone,
+  Upload,
+  Image,
+  X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -42,7 +45,9 @@ import type {
   ComponentType,
   ButtonType,
   TemplateVariable,
-  User
+  User,
+  MediaUploadResponse,
+  HeaderFormat
 } from '@/types';
 
 interface CreateTemplateProps {
@@ -72,6 +77,11 @@ const COMPONENT_TYPES: { value: ComponentType; label: string; description: strin
   { value: 'BODY', label: 'Body', description: 'Main message content (required)' },
   { value: 'FOOTER', label: 'Footer', description: 'Optional footer text (60 chars max)' },
   { value: 'BUTTONS', label: 'Buttons', description: 'Interactive buttons for user actions' }
+];
+
+const HEADER_FORMATS: { value: HeaderFormat; label: string; description: string }[] = [
+  { value: 'TEXT', label: 'Text', description: 'Simple text header (60 chars max)' },
+  { value: 'IMAGE', label: 'Image', description: 'Upload an image for the header' }
 ];
 
 const BUTTON_TYPES: { value: ButtonType; label: string; description: string }[] = [
@@ -126,6 +136,13 @@ export default function CreateTemplate({ currentUser }: CreateTemplateProps) {
   }>({ open: false, componentIndex: -1, cursorPosition: 0 });
 
   const [previewDialog, setPreviewDialog] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [uploadedMedia, setUploadedMedia] = useState<Record<number, {
+    headerHandle: string;
+    fileName: string;
+    mimeType: string;
+  }>>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Extract variables from BODY components only (not headers/footers) and set example values
@@ -166,6 +183,10 @@ export default function CreateTemplate({ currentUser }: CreateTemplateProps) {
       text: type === 'BUTTONS' ? undefined : ''
     };
 
+    if (type === 'HEADER') {
+      newComponent.format = 'TEXT';
+    }
+
     if (type === 'BUTTONS') {
       newComponent.buttons = [
         {
@@ -191,9 +212,21 @@ export default function CreateTemplate({ currentUser }: CreateTemplateProps) {
   const updateComponent = (index: number, updates: Partial<TemplateComponent>) => {
     setTemplateData(prev => ({
       ...prev,
-      components: prev.components.map((comp, i) => 
-        i === index ? { ...comp, ...updates } : comp
-      )
+      components: prev.components.map((comp, i) => {
+        if (i === index) {
+          const updatedComp = { ...comp, ...updates };
+          // Clear media data when switching from IMAGE to TEXT format
+          if (comp.format === 'IMAGE' && updates.format === 'TEXT') {
+            delete updatedComp.example;
+            // Remove from uploaded media tracking
+            const newUploadedMedia = { ...uploadedMedia };
+            delete newUploadedMedia[index];
+            setUploadedMedia(newUploadedMedia);
+          }
+          return updatedComp;
+        }
+        return comp;
+      })
     }));
   };
 
@@ -304,8 +337,53 @@ export default function CreateTemplate({ currentUser }: CreateTemplateProps) {
     return errors;
   };
 
+  const handleMediaUpload = async (componentIndex: number, file: File) => {
+    setUploadingMedia(true);
+    try {
+      const formData = new FormData();
+      formData.append('media', file);
+
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/templates/upload-media`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const data: MediaUploadResponse = await response.json();
+        
+        // Store uploaded media info
+        setUploadedMedia(prev => ({
+          ...prev,
+          [componentIndex]: {
+            headerHandle: data.headerHandle,
+            fileName: data.fileName,
+            mimeType: data.mimeType
+          }
+        }));
+
+        // Update component with header handle
+        updateComponent(componentIndex, {
+          example: {
+            header_handle: [data.headerHandle]
+          }
+        });
+
+        console.log('Media uploaded successfully:', data);
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to upload media');
+      }
+    } catch (error) {
+      console.error('Media upload error:', error);
+      setError('Network error occurred during upload');
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
   const generateExamples = () => {
-    return templateData.components.map(component => {
+    return templateData.components.map((component, index) => {
       if (component.type === 'BODY' && component.text) {
         // Extract both positional {{1}} and named {{variable_name}} variables
         const positionalMatches = component.text.match(/\{\{(\d+)\}\}/g);
@@ -337,6 +415,20 @@ export default function CreateTemplate({ currentUser }: CreateTemplateProps) {
           };
         }
       }
+      
+      // For IMAGE headers, ensure we have the header_handle
+      if (component.type === 'HEADER' && component.format === 'IMAGE') {
+        const mediaData = uploadedMedia[index];
+        if (mediaData) {
+          return {
+            ...component,
+            example: {
+              header_handle: [mediaData.headerHandle]
+            }
+          };
+        }
+      }
+      
       return component;
     });
   };
@@ -382,19 +474,20 @@ export default function CreateTemplate({ currentUser }: CreateTemplateProps) {
   };
 
   const renderPreview = () => {
-    const previewText = templateData.components.map(component => {
-      if (component.text) {
-        let text = component.text;
-        Object.entries(previewVariables).forEach(([varName, value]) => {
-          text = text.replace(new RegExp(`\\{\\{${varName}\\}\\}`, 'g'), value);
-        });
-        return text;
-      }
-      return '';
-    }).filter(Boolean).join('\n\n');
-
+    const headerComponent = templateData.components.find(c => c.type === 'HEADER');
+    const bodyComponents = templateData.components.filter(c => c.type === 'BODY');
+    const footerComponent = templateData.components.find(c => c.type === 'FOOTER');
     const buttonComponents = templateData.components.filter(c => c.type === 'BUTTONS');
     const buttons = buttonComponents.flatMap(c => c.buttons || []);
+
+    const getTextWithVariables = (text?: string) => {
+      if (!text) return '';
+      let processedText = text;
+      Object.entries(previewVariables).forEach(([varName, value]) => {
+        processedText = processedText.replace(new RegExp(`\\{\\{${varName}\\}\\}`, 'g'), value);
+      });
+      return processedText;
+    };
 
     return (
       <div className="bg-gray-100 p-4 rounded-lg">
@@ -407,9 +500,38 @@ export default function CreateTemplate({ currentUser }: CreateTemplateProps) {
           
           {/* Message Content */}
           <div className="p-4 space-y-3">
+            {/* Header */}
+            {headerComponent && (
+              <div className="space-y-2">
+                {headerComponent.format === 'IMAGE' && uploadedMedia[templateData.components.indexOf(headerComponent)] && (
+                  <div className="bg-gray-200 rounded-lg p-3 text-center">
+                    <Image className="h-8 w-8 mx-auto text-gray-500" />
+                    <p className="text-xs text-gray-600 mt-1">
+                      {uploadedMedia[templateData.components.indexOf(headerComponent)].fileName}
+                    </p>
+                  </div>
+                )}
+                {headerComponent.format === 'TEXT' && headerComponent.text && (
+                  <div className="font-semibold text-sm">
+                    {getTextWithVariables(headerComponent.text)}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Body */}
             <div className="bg-green-50 p-3 rounded-lg border-l-4 border-green-500">
-              <div className="whitespace-pre-wrap text-sm">{previewText || 'Your message will appear here...'}</div>
+              <div className="whitespace-pre-wrap text-sm">
+                {bodyComponents.map(comp => getTextWithVariables(comp.text)).join('\n\n') || 'Your message will appear here...'}
+              </div>
             </div>
+            
+            {/* Footer */}
+            {footerComponent?.text && (
+              <div className="text-xs text-gray-500">
+                {getTextWithVariables(footerComponent.text)}
+              </div>
+            )}
             
             {/* Buttons */}
             {buttons.length > 0 && (
@@ -610,7 +732,116 @@ export default function CreateTemplate({ currentUser }: CreateTemplateProps) {
                     )}
                   </div>
 
-                  {component.type !== 'BUTTONS' && (
+                  {component.type === 'HEADER' && (
+                    <div className="space-y-3">
+                      <div>
+                        <Label>Header Format</Label>
+                        <Select
+                          value={component.format || 'TEXT'}
+                          onValueChange={(value: HeaderFormat) => 
+                            updateComponent(index, { format: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {HEADER_FORMATS.map(format => (
+                              <SelectItem key={format.value} value={format.value}>
+                                <div>
+                                  <div className="font-medium">{format.label}</div>
+                                  <div className="text-sm text-gray-500">{format.description}</div>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {component.format === 'TEXT' && (
+                        <div>
+                          <Label>Header Text</Label>
+                          <Input
+                            value={component.text || ''}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                              updateComponent(index, { text: e.target.value })
+                            }
+                            placeholder="Header text (60 chars max)"
+                            maxLength={60}
+                          />
+                          <p className="text-sm text-gray-500 mt-1">
+                            {component.text?.length || 0}/60 characters
+                          </p>
+                        </div>
+                      )}
+
+                      {component.format === 'IMAGE' && (
+                        <div>
+                          <Label>Header Image</Label>
+                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                            {uploadedMedia[index] ? (
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-center">
+                                  <Image className="h-8 w-8 text-green-600" />
+                                </div>
+                                <p className="text-sm font-medium text-green-600">
+                                  {uploadedMedia[index].fileName}
+                                </p>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    const newUploadedMedia = { ...uploadedMedia };
+                                    delete newUploadedMedia[index];
+                                    setUploadedMedia(newUploadedMedia);
+                                    updateComponent(index, { example: undefined });
+                                  }}
+                                >
+                                  <X className="h-4 w-4 mr-1" />
+                                  Remove
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-center">
+                                  <Upload className="h-8 w-8 text-gray-400" />
+                                </div>
+                                <p className="text-sm text-gray-600">
+                                  Upload an image for the header
+                                </p>
+                                <input
+                                  ref={fileInputRef}
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      handleMediaUpload(index, file);
+                                    }
+                                  }}
+                                />
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => fileInputRef.current?.click()}
+                                  disabled={uploadingMedia}
+                                >
+                                  <Upload className="h-4 w-4 mr-1" />
+                                  {uploadingMedia ? 'Uploading...' : 'Choose Image'}
+                                </Button>
+                                <p className="text-xs text-gray-500">
+                                  Max file size: 5MB
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {component.type !== 'BUTTONS' && component.type !== 'HEADER' && (
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <Label>Text Content</Label>
@@ -635,13 +866,12 @@ export default function CreateTemplate({ currentUser }: CreateTemplateProps) {
                           updateComponent(index, { text: e.target.value })
                         }
                         placeholder={
-                          component.type === 'HEADER' ? 'Header text (60 chars max)' :
                           component.type === 'BODY' ? 'Your message content with {{variables}}...' :
                           'Footer text (60 chars max)'
                         }
                         rows={component.type === 'BODY' ? 4 : 2}
                       />
-                      {component.type !== 'BODY' && (
+                      {component.type === 'FOOTER' && (
                         <p className="text-sm text-gray-500 mt-1">
                           {component.text?.length || 0}/60 characters
                         </p>
@@ -870,9 +1100,10 @@ export default function CreateTemplate({ currentUser }: CreateTemplateProps) {
                 <li>Template name: lowercase, numbers, underscores only</li>
                 <li>Header/Footer: 60 characters maximum</li>
                 <li>Button text: 25 characters maximum</li>
-                <li>Variables: Use format {`{{variable_name}}`}</li>
+                <li>Variables: Use format {`{{variable_name}}`} (only in BODY)</li>
                 <li>At least one BODY component required</li>
                 <li>Maximum 10 buttons per template</li>
+                <li>Image headers: Upload sample image required</li>
                 <li>Provide clear, realistic examples</li>
               </ul>
             </CardContent>
