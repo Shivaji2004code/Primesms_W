@@ -160,7 +160,8 @@ const uploadMediaToWhatsApp = async (
 // Create WhatsApp Template - Main function
 const createWhatsAppTemplate = async (
   templateData: CreateTemplateRequest,
-  businessInfo: UserBusinessInfo
+  businessInfo: UserBusinessInfo,
+  customExamples: Record<string, string> = {}
 ): Promise<any> => {
   console.log('\n🚀 CREATING WHATSAPP TEMPLATE');
   console.log('==============================');
@@ -168,11 +169,9 @@ const createWhatsAppTemplate = async (
   console.log(`📂 Category: ${templateData.category}`);
   console.log(`🌐 Language: ${templateData.language || 'en_US'}`);
 
-  // Get namespace
-  const namespace = await getNamespace(businessInfo.wabaId!, businessInfo.accessToken!);
-
-  // Process components to fix image headers
+  // FIXED: Process components with proper variable formatting and examples
   const processedComponents = templateData.components.map(component => {
+    // Handle IMAGE headers
     if (component.type === 'HEADER' && component.format === 'IMAGE') {
       let mediaId = '';
       
@@ -195,6 +194,20 @@ const createWhatsAppTemplate = async (
         }
       };
     }
+    
+    // Handle TEXT headers with variables
+    if (component.type === 'HEADER' && component.format === 'TEXT' && component.text) {
+      const processedComponent = processVariablesInComponent(component, customExamples);
+      return processedComponent;
+    }
+    
+    // Handle BODY components with variables
+    if (component.type === 'BODY' && component.text) {
+      const processedComponent = processVariablesInComponent(component, customExamples);
+      return processedComponent;
+    }
+    
+    // Return other components as-is
     return component;
   });
 
@@ -207,12 +220,11 @@ const createWhatsAppTemplate = async (
     });
   }
 
-  // Build payload
+  // FIXED: Build payload without namespace (not required for Cloud API)
   const payload = {
     name: templateData.name,
     language: templateData.language || 'en_US',
     category: templateData.category,
-    namespace,
     components: processedComponents,
     allow_category_change: templateData.allow_category_change ?? true
   };
@@ -221,7 +233,7 @@ const createWhatsAppTemplate = async (
     (payload as any).message_send_ttl_seconds = templateData.message_send_ttl_seconds;
   }
 
-  console.log('📤 Template creation payload:');
+  console.log('📤 Template creation payload (FIXED):');
   console.log(JSON.stringify(payload, null, 2));
 
   try {
@@ -244,6 +256,75 @@ const createWhatsAppTemplate = async (
     console.error('❌ Error:', error.response?.data || error.message);
     throw error;
   }
+};
+
+// FIXED: Process variables in components - now expects {{1}}, {{2}} format from frontend
+const processVariablesInComponent = (component: any, customExamples: Record<string, string> = {}): any => {
+  if (!component.text) return component;
+  
+  // Find numerical variables like {{1}}, {{2}}, etc.
+  const variableMatches = component.text.match(/\{\{\d+\}\}/g) || [];
+  
+  if (variableMatches.length === 0) {
+    // No variables, return as-is
+    return component;
+  }
+  
+  console.log(`🔍 Processing ${component.type} component with ${variableMatches.length} variables`);
+  console.log(`📝 Text with variables: ${component.text}`);
+  console.log(`🏷️ Found variables: ${variableMatches.join(', ')}`);
+  
+  // Generate example values for each variable using custom examples or fallback
+  const exampleValues: string[] = [];
+  variableMatches.forEach((variable: string) => {
+    const variableNumber = variable.replace(/[{}]/g, '');
+    const exampleValue = customExamples[variableNumber] || `Sample${variableNumber}`;
+    exampleValues.push(exampleValue);
+    console.log(`📋 Variable ${variableNumber} -> Example: "${exampleValue}"`);
+  });
+  
+  // Build the processed component with examples
+  const processedComponent = {
+    ...component,
+    text: component.text // Keep the {{1}}, {{2}} format as-is
+  };
+  
+  // Add the mandatory example block per Meta API requirements
+  if (component.type === 'BODY') {
+    processedComponent.example = {
+      body_text: [exampleValues] // Array of arrays per Meta API spec
+    };
+    console.log(`📋 Added body_text example: ${JSON.stringify([exampleValues])}`);
+  } else if (component.type === 'HEADER' && component.format === 'TEXT') {
+    processedComponent.example = {
+      header_text: exampleValues // Array for header text examples
+    };
+    console.log(`📋 Added header_text example: ${JSON.stringify(exampleValues)}`);
+  }
+  
+  return processedComponent;
+};
+
+// Helper function to generate example values based on variable names
+const generateExampleValue = (variableName: string): string => {
+  const lowerName = variableName.toLowerCase();
+  
+  // Generate contextual examples based on variable name
+  if (lowerName.includes('otp') || lowerName.includes('code')) return '123456';
+  if (lowerName.includes('name') || lowerName.includes('user')) return 'John Doe';
+  if (lowerName.includes('amount') || lowerName.includes('price')) return '99.99';
+  if (lowerName.includes('order') || lowerName.includes('id')) return '12345';
+  if (lowerName.includes('date')) return '2024-08-04';
+  if (lowerName.includes('time')) return '10:30 AM';
+  if (lowerName.includes('phone') || lowerName.includes('number')) return '+1234567890';
+  if (lowerName.includes('email')) return 'user@example.com';
+  if (lowerName.includes('company') || lowerName.includes('business')) return 'Company Name';
+  if (lowerName.includes('product')) return 'Product Name';
+  if (lowerName.includes('service')) return 'Service Name';
+  if (lowerName.includes('discount') || lowerName.includes('percent')) return '25';
+  
+  // Default generic example
+  return `Sample${variableName.charAt(0).toUpperCase() + variableName.slice(1)}`;
 };
 
 // Get namespace helper
@@ -405,13 +486,47 @@ router.get('/:id', async (req, res) => {
 router.post('/', upload.single('headerMedia'), async (req, res) => {
   try {
     const userId = req.session.user!.id;
-    let templateData: CreateTemplateRequest;
+        const templateData: CreateTemplateRequest = req.body;
     
-    // Parse template data from request
-    if (typeof req.body.templateData === 'string') {
-      templateData = JSON.parse(req.body.templateData);
-    } else {
-      templateData = req.body;
+    // Manually construct components from form data
+    const components: TemplateComponent[] = [];
+    if (req.body.headerText) {
+      components.push({ type: 'HEADER', format: 'TEXT', text: req.body.headerText });
+    } else if (req.file) {
+      // The file upload logic will handle adding the header component later
+      components.push({ type: 'HEADER', format: 'IMAGE' });
+    }
+    
+    if (req.body.bodyText) {
+      components.push({ type: 'BODY', text: req.body.bodyText });
+    }
+
+    if (req.body.footerText) {
+      components.push({ type: 'FOOTER', text: req.body.footerText });
+    }
+
+    if (req.body.buttons) {
+      try {
+        const buttons = JSON.parse(req.body.buttons);
+        if (Array.isArray(buttons) && buttons.length > 0) {
+          components.push({ type: 'BUTTONS', buttons: buttons });
+        }
+      } catch (e) {
+        console.error("Error parsing buttons JSON:", e);
+        // Optionally, you could return a 400 error here
+      }
+    }
+    templateData.components = components;
+
+    // Parse variable examples if provided
+    let variableExamples: Record<string, string> = {};
+    if (req.body.variableExamples) {
+      try {
+        variableExamples = JSON.parse(req.body.variableExamples);
+        console.log('📝 Variable examples received:', variableExamples);
+      } catch (e) {
+        console.error("Error parsing variableExamples JSON:", e);
+      }
     }
 
     // Validation
@@ -545,7 +660,7 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
           accessToken: businessResult.rows[0].access_token
         } as UserBusinessInfo;
 
-        const whatsappResult = await createWhatsAppTemplate(templateData, businessInfo);
+        const whatsappResult = await createWhatsAppTemplate(templateData, businessInfo, variableExamples);
         template_id = whatsappResult.id;
         whatsapp_response = whatsappResult;
         status = 'IN_REVIEW';
@@ -912,7 +1027,7 @@ router.post('/:id/submit', async (req, res) => {
         allow_category_change: template.allow_category_change
       };
 
-      const whatsappResult = await createWhatsAppTemplate(templateData, businessInfo);
+      const whatsappResult = await createWhatsAppTemplate(templateData, businessInfo, {});
 
       // Update template with WhatsApp response
       await pool.query(

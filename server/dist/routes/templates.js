@@ -124,10 +124,9 @@ const createWhatsAppTemplate = async (templateData, businessInfo) => {
     console.log(`📋 Template Name: ${templateData.name}`);
     console.log(`📂 Category: ${templateData.category}`);
     console.log(`🌐 Language: ${templateData.language || 'en_US'}`);
-    // Get namespace
-    const namespace = await getNamespace(businessInfo.wabaId, businessInfo.accessToken);
-    // Process components to fix image headers
+    // FIXED: Process components with proper variable formatting and examples
     const processedComponents = templateData.components.map(component => {
+        // Handle IMAGE headers
         if (component.type === 'HEADER' && component.format === 'IMAGE') {
             let mediaId = '';
             // Handle different media ID formats
@@ -150,6 +149,17 @@ const createWhatsAppTemplate = async (templateData, businessInfo) => {
                 }
             };
         }
+        // Handle TEXT headers with variables
+        if (component.type === 'HEADER' && component.format === 'TEXT' && component.text) {
+            const processedComponent = processVariablesInComponent(component);
+            return processedComponent;
+        }
+        // Handle BODY components with variables
+        if (component.type === 'BODY' && component.text) {
+            const processedComponent = processVariablesInComponent(component);
+            return processedComponent;
+        }
+        // Return other components as-is
         return component;
     });
     // Add footer for marketing templates
@@ -160,19 +170,18 @@ const createWhatsAppTemplate = async (templateData, businessInfo) => {
             text: 'This is a promotional message' // Default footer text
         });
     }
-    // Build payload
+    // FIXED: Build payload without namespace (not required for Cloud API)
     const payload = {
         name: templateData.name,
         language: templateData.language || 'en_US',
         category: templateData.category,
-        namespace,
         components: processedComponents,
         allow_category_change: templateData.allow_category_change ?? true
     };
     if (templateData.message_send_ttl_seconds) {
         payload.message_send_ttl_seconds = templateData.message_send_ttl_seconds;
     }
-    console.log('📤 Template creation payload:');
+    console.log('📤 Template creation payload (FIXED):');
     console.log(JSON.stringify(payload, null, 2));
     try {
         const response = await axios_1.default.post(`https://graph.facebook.com/v20.0/${businessInfo.wabaId}/message_templates`, payload, {
@@ -190,6 +199,87 @@ const createWhatsAppTemplate = async (templateData, businessInfo) => {
         console.error('❌ Error:', error.response?.data || error.message);
         throw error;
     }
+};
+// FIXED: New helper function to process variables in components based on latest Meta API 2024-2025 requirements
+const processVariablesInComponent = (component) => {
+    if (!component.text)
+        return component;
+    // Find all variables in the text (both named and numbered)
+    const variableMatches = component.text.match(/\{\{[^}]+\}\}/g) || [];
+    if (variableMatches.length === 0) {
+        // No variables, return as-is
+        return component;
+    }
+    console.log(`🔍 Processing ${component.type} component with ${variableMatches.length} variables`);
+    console.log(`📝 Original text: ${component.text}`);
+    console.log(`🏷️ Found variables: ${variableMatches.join(', ')}`);
+    // CRITICAL FIX: Convert named variables to numerical placeholders (Meta API 2024-2025 requirement)
+    let processedText = component.text;
+    const exampleValues = [];
+    const uniqueVariables = [...new Set(variableMatches)]; // Remove duplicates
+    uniqueVariables.forEach((variable, index) => {
+        const variableStr = String(variable);
+        const numericalPlaceholder = `{{${index + 1}}}`;
+        // Replace ALL occurrences of this variable with numerical placeholder
+        const regex = new RegExp(variableStr.replace(/[{}]/g, '\\{\\}'), 'g');
+        processedText = processedText.replace(regex, numericalPlaceholder);
+        // Generate example value
+        const cleanVariable = variableStr.replace(/[{}]/g, '');
+        const exampleValue = generateExampleValue(cleanVariable);
+        exampleValues.push(exampleValue);
+        console.log(`🔄 ${variableStr} → ${numericalPlaceholder} (example: "${exampleValue}")`);
+    });
+    console.log(`✅ Processed text: ${processedText}`);
+    // Build the processed component with numerical placeholders and examples
+    const processedComponent = {
+        ...component,
+        text: processedText
+    };
+    // CRITICAL: Add the mandatory example block per Meta API 2024-2025 requirements
+    if (component.type === 'BODY') {
+        processedComponent.example = {
+            body_text: [exampleValues] // MUST be array of arrays per Meta API spec
+        };
+        console.log(`📋 Added body_text example: ${JSON.stringify([exampleValues])}`);
+    }
+    else if (component.type === 'HEADER' && component.format === 'TEXT') {
+        processedComponent.example = {
+            header_text: exampleValues // Array for header text examples per Meta API spec
+        };
+        console.log(`📋 Added header_text example: ${JSON.stringify(exampleValues)}`);
+    }
+    return processedComponent;
+};
+// Helper function to generate example values based on variable names
+const generateExampleValue = (variableName) => {
+    const lowerName = variableName.toLowerCase();
+    // Generate contextual examples based on variable name
+    if (lowerName.includes('otp') || lowerName.includes('code'))
+        return '123456';
+    if (lowerName.includes('name') || lowerName.includes('user'))
+        return 'John Doe';
+    if (lowerName.includes('amount') || lowerName.includes('price'))
+        return '99.99';
+    if (lowerName.includes('order') || lowerName.includes('id'))
+        return '12345';
+    if (lowerName.includes('date'))
+        return '2024-08-04';
+    if (lowerName.includes('time'))
+        return '10:30 AM';
+    if (lowerName.includes('phone') || lowerName.includes('number'))
+        return '+1234567890';
+    if (lowerName.includes('email'))
+        return 'user@example.com';
+    if (lowerName.includes('company') || lowerName.includes('business'))
+        return 'Company Name';
+    if (lowerName.includes('product'))
+        return 'Product Name';
+    if (lowerName.includes('service'))
+        return 'Service Name';
+    if (lowerName.includes('discount') || lowerName.includes('percent'))
+        return '25';
+    // Default generic example
+    return `Sample${variableName.charAt(0).toUpperCase() + variableName.slice(1)}`;
 };
 // Get namespace helper
 const getNamespace = async (wabaId, accessToken) => {
@@ -327,14 +417,35 @@ router.get('/:id', async (req, res) => {
 router.post('/', upload.single('headerMedia'), async (req, res) => {
     try {
         const userId = req.session.user.id;
-        let templateData;
-        // Parse template data from request
-        if (typeof req.body.templateData === 'string') {
-            templateData = JSON.parse(req.body.templateData);
+        const templateData = req.body;
+        // Manually construct components from form data
+        const components = [];
+        if (req.body.headerText) {
+            components.push({ type: 'HEADER', format: 'TEXT', text: req.body.headerText });
         }
-        else {
-            templateData = req.body;
+        else if (req.file) {
+            // The file upload logic will handle adding the header component later
+            components.push({ type: 'HEADER', format: 'IMAGE' });
         }
+        if (req.body.bodyText) {
+            components.push({ type: 'BODY', text: req.body.bodyText });
+        }
+        if (req.body.footerText) {
+            components.push({ type: 'FOOTER', text: req.body.footerText });
+        }
+        if (req.body.buttons) {
+            try {
+                const buttons = JSON.parse(req.body.buttons);
+                if (Array.isArray(buttons) && buttons.length > 0) {
+                    components.push({ type: 'BUTTONS', buttons: buttons });
+                }
+            }
+            catch (e) {
+                console.error("Error parsing buttons JSON:", e);
+                // Optionally, you could return a 400 error here
+            }
+        }
+        templateData.components = components;
         // Validation
         if (!templateData.name || !templateData.category || !templateData.components) {
             return res.status(400).json({

@@ -88,18 +88,8 @@ const BUTTON_TYPES: { value: ButtonType; label: string; description: string }[] 
   { value: 'OTP', label: 'Copy Code', description: 'Copy OTP code (Authentication only)' }
 ];
 
-const COMMON_VARIABLES: TemplateVariable[] = [
-  { name: 'customer_name', example: 'John Doe', description: 'Customer full name' },
-  { name: 'first_name', example: 'John', description: 'Customer first name' },
-  { name: 'order_id', example: '12345', description: 'Order number' },
-  { name: 'amount', example: '99.99', description: 'Price or amount' },
-  { name: 'date', example: 'Dec 25, 2025', description: 'Date' },
-  { name: 'time', example: '2:30 PM', description: 'Time' },
-  { name: 'company_name', example: 'Your Business', description: 'Business name' },
-  { name: 'phone_number', example: '+1234567890', description: 'Phone number' },
-  { name: 'email', example: 'user@example.com', description: 'Email address' },
-  { name: 'otp_code', example: '123456', description: 'Verification code' }
-];
+// Variables are now numerical format only: {{1}}, {{2}}, etc.
+// Users will provide example values for each variable
 
 export default function CreateTemplate({ }: CreateTemplateProps) {
   const navigate = useNavigate();
@@ -194,11 +184,27 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
     updateTemplateData({ buttons: updatedButtons });
   };
 
-  const insertVariable = (variableName: string) => {
+  const insertVariable = () => {
     const currentText = templateData.bodyText;
-    const newText = `${currentText}{{${variableName}}}`;
+    // Count existing variables to determine the next number
+    const existingVariables = (currentText.match(/\{\{\d+\}\}/g) || []).length;
+    const nextVariableNumber = existingVariables + 1;
+    const newText = `${currentText}{{${nextVariableNumber}}}`;
     updateTemplateData({ bodyText: newText });
+    
+    // Initialize example value for the new variable
+    setVariableExamples(prev => ({
+      ...prev,
+      [nextVariableNumber.toString()]: `Sample${nextVariableNumber}`
+    }));
+    
     setVariableDialog(false);
+  };
+
+  // Extract variables from text to show example inputs
+  const getVariablesFromText = (text: string): string[] => {
+    const matches = text.match(/\{\{\d+\}\}/g) || [];
+    return matches.map(match => match.replace(/[{}]/g, ''));
   };
 
   const validateTemplate = (): string[] => {
@@ -297,7 +303,7 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
       if (templateData.headerType === 'text' && templateData.headerText) {
         formData.append('headerText', templateData.headerText);
       } else if (templateData.headerType === 'image' && templateData.headerImage) {
-        formData.append('imageHeader', templateData.headerImage);
+                formData.append('headerMedia', templateData.headerImage);
       }
       
       // Add footer if present
@@ -315,7 +321,11 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
         formData.append('variableExamples', JSON.stringify(variableExamples));
       }
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/templates/create`, {
+            if (submitToWhatsApp) {
+        formData.append('submit_to_whatsapp', 'true');
+      }
+
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/templates`, {
         method: 'POST',
         body: formData,
         credentials: 'include'
@@ -794,14 +804,45 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
                   rows={6}
                   className="bg-white/80 resize-none"
                 />
+                {/* Variable Examples Section */}
+                {getVariablesFromText(templateData.bodyText).length > 0 && (
+                  <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div className="flex items-start space-x-2 mb-3">
+                      <Info className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                      <div className="text-sm text-yellow-800">
+                        <p className="font-medium">Provide Example Values for Variables</p>
+                        <p className="text-xs mt-1">These examples help WhatsApp approve your template and show users what to expect.</p>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      {getVariablesFromText(templateData.bodyText).map((variableNum) => (
+                        <div key={variableNum} className="flex items-center space-x-3">
+                          <Label className="text-sm font-medium text-gray-700 min-w-[4rem]">
+                            {"{{" + variableNum + "}}:"}
+                          </Label>
+                          <Input
+                            value={variableExamples[variableNum] || ''}
+                            onChange={(e) => setVariableExamples(prev => ({
+                              ...prev,
+                              [variableNum]: e.target.value
+                            }))}
+                            placeholder={`Example for variable ${variableNum}`}
+                            className="flex-1 bg-white/80"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
                 <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="flex items-start space-x-2">
                     <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
                     <div className="text-xs text-blue-800">
                       <p className="font-medium mb-1">Variable Format Notice:</p>
-                      <p>• Named variables like <code className="bg-blue-100 px-1 rounded">{`{{customer_name}}`}</code> will be automatically converted to <code className="bg-blue-100 px-1 rounded">{`{{1}}`}</code>, <code className="bg-blue-100 px-1 rounded">{`{{2}}`}</code>, etc.</p>
-                      <p>• WhatsApp requires numbered format for template approval</p>
-                      <p>• Set example values below for better preview</p>
+                      <p>• Variables use numbered format: <code className="bg-blue-100 px-1 rounded">{`{{1}}`}</code>, <code className="bg-blue-100 px-1 rounded">{`{{2}}`}</code>, etc.</p>
+                      <p>• WhatsApp requires this format for template approval</p>
+                      <p>• Example values above will be included in the submission</p>
                     </div>
                   </div>
                 </div>
@@ -1041,50 +1082,20 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
-            {COMMON_VARIABLES.map(variable => (
-              <div
-                key={variable.name}
-                className="p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
-                onClick={() => insertVariable(variable.name)}
-              >
-                <div className="font-medium text-sm">{`{{${variable.name}}}`}</div>
-                <div className="text-xs text-gray-500 mt-1">{variable.description}</div>
-                <div className="text-xs text-blue-600 mt-1">Example: {variable.example}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="border-t pt-4">
-            <Label htmlFor="custom-variable">Custom Variable</Label>
-            <div className="flex gap-2 mt-1">
-              <Input
-                id="custom-variable"
-                placeholder="variable_name"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    const input = e.target as HTMLInputElement;
-                    const varName = input.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
-                    if (varName) {
-                      insertVariable(varName);
-                      input.value = '';
-                    }
-                  }
-                }}
-              />
-              <Button
-                onClick={() => {
-                  const input = document.getElementById('custom-variable') as HTMLInputElement;
-                  const varName = input.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
-                  if (varName) {
-                    insertVariable(varName);
-                    input.value = '';
-                  }
-                }}
-              >
-                Insert
-              </Button>
-            </div>
+          <div className="text-center">
+            <p className="text-gray-600 mb-4">
+              Click below to add a numbered variable to your template
+            </p>
+            <Button 
+              onClick={insertVariable}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Variable
+            </Button>
+            <p className="text-xs text-gray-500 mt-2">
+              Variables will be automatically numbered. You'll provide example values below.
+            </p>
           </div>
 
           <DialogFooter>

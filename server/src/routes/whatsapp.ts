@@ -9,6 +9,44 @@ import { pool } from '../index';
 import { requireAuth } from '../middleware/auth';
 import { analyzeTemplate, buildTemplatePayload, validateTemplateVariables } from '../utils/template-helper';
 
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ 
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit for Excel files
+  },
+  fileFilter: (req, file, cb) => {
+    // Allow Excel and CSV files for recipient import
+    const allowedMimes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel', // .xls
+      'text/csv', // .csv
+      'text/plain' // .txt
+    ];
+    
+    if (allowedMimes.includes(file.mimetype) || 
+        file.originalname.match(/\.(xlsx|xls|csv|txt)$/i)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only Excel (.xlsx, .xls), CSV (.csv), and text (.txt) files are allowed'));
+    }
+  }
+});
+
 /**
  * Uploads a media file to the WhatsApp Cloud API to get a media ID.
  * @param imageUrl The URL to the image file to download and upload.
@@ -63,22 +101,7 @@ async function uploadWhatsappMedia(imageUrl: string, phoneNumberId: string, acce
 
 const router = express.Router();
 
-// Configure multer for file uploads
-const upload = multer({
-  dest: 'uploads/',
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ['.xlsx', '.xls', '.csv'];
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (allowedTypes.includes(ext)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only Excel and CSV files are allowed'));
-    }
-  },
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
-  }
-});
+// Upload configuration is defined above with multer.diskStorage
 
 // Utility function to validate phone numbers (Meta WhatsApp API format)
 const validatePhoneNumber = (phone: string): boolean => {
@@ -1133,15 +1156,8 @@ async function sendTemplateMessage(
     for (const component of components) {
       if (component.type === 'HEADER') {
         
-        // CRITICAL: For STATIC_IMAGE templates, DO NOT add header component
-        // Meta handles static images automatically based on template name
-        if (headerType === 'STATIC_IMAGE') {
-          console.log(`✅ Correct Logic: Skipping header component for STATIC_IMAGE. Meta will add the image automatically.`);
-          continue; // Skip to next component - this is the correct action
-        }
-        
-        // Handle IMAGE templates - Use stored media_id for sending
-        else if (component.format === 'IMAGE') {
+        // Handle IMAGE templates (both STATIC_IMAGE and dynamic) - Use stored media_id for sending
+        if (component.format === 'IMAGE' || headerType === 'STATIC_IMAGE') {
           console.log(`📸 IMAGE template detected - using stored media_id for sending`);
           console.log(`🔍 Available data:`);
           console.log(`   header_handle: ${headerHandle ? headerHandle.substring(0, 50) + '...' : 'Not set'}`);
