@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import ManageTemplates from '@/pages/ManageTemplates';
-import type { User } from '@/types';
+import ManageTemplates from '../pages/ManageTemplates';
+import DashboardLayout from './layout/DashboardLayout';
+import type { User } from '../types';
 
 export default function ManageTemplatesWrapper() {
   const navigate = useNavigate();
@@ -27,14 +28,26 @@ export default function ManageTemplatesWrapper() {
 
   if (isLoading || !currentUser) {
     return (
-      <div className="p-6 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+      <DashboardLayout 
+        title="Templates"
+        subtitle="Create, edit, and manage your message templates."
+      >
+        <div className="flex items-center justify-center min-h-96">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading templates...</p>
+          </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
-  return <ManageTemplates currentUser={currentUser} />;
+  return (
+    <DashboardLayout 
+      title="Templates"
+      subtitle="Create, edit, and manage your message templates."
+    >
+      <ManageTemplates currentUser={currentUser} />
+    </DashboardLayout>
+  );
 }

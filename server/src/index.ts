@@ -12,6 +12,8 @@ dotenv.config();
 import authRoutes from './routes/auth';
 import adminRoutes from './routes/admin';
 import templateRoutes from './routes/templates';
+import whatsappRoutes from './routes/whatsapp';
+import sendRoutes from './routes/send';
 
 const app = express();
 const PORT = process.env.PORT || 5050;
@@ -43,7 +45,7 @@ app.use(helmet({
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? ['https://yourdomain.com'] 
-    : ['http://localhost:3000', 'http://localhost:5173'],
+    : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174'],
   credentials: true
 }));
 
@@ -65,7 +67,9 @@ app.use(session({
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/templates', templateRoutes);
+app.use('/api', sendRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

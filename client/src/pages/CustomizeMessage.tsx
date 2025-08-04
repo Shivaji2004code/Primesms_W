@@ -1,0 +1,1060 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { 
+  ArrowLeft, 
+  Upload, 
+  Download,
+  FileSpreadsheet,
+  Eye,
+  Send,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  Phone,
+  FileText,
+  Globe,
+  Users,
+  Settings,
+  Sparkles,
+  ChevronRight,
+  Info,
+  Zap,
+  Target,
+  Star,
+  Crown,
+  RefreshCw
+} from 'lucide-react';
+import DashboardLayout from '../components/layout/DashboardLayout';
+import { Button } from '../components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Badge } from '../components/ui/badge';
+import { Alert, AlertDescription } from '../components/ui/alert';
+import { Progress } from '../components/ui/progress';
+import { useToast } from '../components/ui/use-toast';
+
+interface WhatsAppNumber {
+  id: string;
+  phone_number_id: string;
+  phone_number: string;
+  display_name: string;
+  label: string;
+}
+
+interface Template {
+  id: string;
+  name: string;
+  language: string;
+  category: string;
+  status: string;
+  components: any[];
+  hasVariables: boolean;
+  hasButtons: boolean;
+}
+
+interface Language {
+  code: string;
+  name: string;
+}
+
+export default function CustomizeMessage() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  // Form state
+  const [selectedWabaId, setSelectedWabaId] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  const [selectedLanguage, setSelectedLanguage] = useState('en_US');
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [recipientColumn, setRecipientColumn] = useState('');
+  const [templateVariables, setTemplateVariables] = useState<string[]>([]);
+  const [variableMappings, setVariableMappings] = useState<Record<string, string>>({});
+  const [useVariables, setUseVariables] = useState(false);
+  const [previewData, setPreviewData] = useState<any>(null);
+
+  // Data state
+  const [whatsappNumbers, setWhatsappNumbers] = useState<WhatsAppNumber[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [languages, setLanguages] = useState<Language[]>([]);
+  const [excelData, setExcelData] = useState<any[]>([]);
+  const [columnNames, setColumnNames] = useState<string[]>([]);
+
+  // Loading states
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [sendingLoading, setSendingLoading] = useState(false);
+
+  // Form progress tracking
+  const [currentStep, setCurrentStep] = useState(1);
+  const totalSteps = 4;
+
+  // Load initial data
+  useEffect(() => {
+    loadWhatsAppNumbers();
+    loadLanguages();
+  }, []);
+
+  // Load templates when language changes
+  useEffect(() => {
+    if (selectedLanguage) {
+      loadTemplates();
+    }
+  }, [selectedLanguage]);
+
+  // Parse template variables when template is selected
+  useEffect(() => {
+    if (selectedTemplate?.components) {
+      const foundVariables: string[] = [];
+      
+      console.log('Template components:', selectedTemplate.components);
+      
+      selectedTemplate.components.forEach(component => {
+        console.log('Processing component:', component);
+        
+        // Check BODY component text
+        if (component.type === 'BODY' && component.text) {
+          // Look for both {{1}} and {{variable_name}} patterns
+          const matches = component.text.match(/{{\s*(\d+|[a-zA-Z_][a-zA-Z0-9_]*)\s*}}/g) || [];
+          console.log('BODY variables found:', matches);
+          matches.forEach((match: string) => {
+            if (!foundVariables.includes(match)) {
+              foundVariables.push(match);
+            }
+          });
+        }
+        
+        // Check HEADER component text
+        if (component.type === 'HEADER' && component.text) {
+          const matches = component.text.match(/{{\s*(\d+|[a-zA-Z_][a-zA-Z0-9_]*)\s*}}/g) || [];
+          console.log('HEADER variables found:', matches);
+          matches.forEach((match: string) => {
+            if (!foundVariables.includes(match)) {
+              foundVariables.push(match);
+            }
+          });
+        }
+        
+        // Check button URLs and text for variables
+        if (component.type === 'BUTTONS' && component.buttons) {
+          component.buttons.forEach((button: any) => {
+            if (button.url) {
+              const matches = button.url.match(/{{\s*(\d+|[a-zA-Z_][a-zA-Z0-9_]*)\s*}}/g) || [];
+              console.log('BUTTON URL variables found:', matches);
+              matches.forEach((match: string) => {
+                if (!foundVariables.includes(match)) {
+                  foundVariables.push(match);
+                }
+              });
+            }
+            if (button.text) {
+              const matches = button.text.match(/{{\s*(\d+|[a-zA-Z_][a-zA-Z0-9_]*)\s*}}/g) || [];
+              console.log('BUTTON TEXT variables found:', matches);
+              matches.forEach((match: string) => {
+                if (!foundVariables.includes(match)) {
+                  foundVariables.push(match);
+                }
+              });
+            }
+          });
+        }
+      });
+      
+      // Sort variables naturally ({{1}}, {{2}}, {{3}}, etc.)
+      foundVariables.sort((a, b) => {
+        const numA = parseInt(a.replace(/{|}/g, ''));
+        const numB = parseInt(b.replace(/{|}/g, ''));
+        if (!isNaN(numA) && !isNaN(numB)) {
+          return numA - numB;
+        }
+        return a.localeCompare(b);
+      });
+      
+      console.log('Total variables found:', foundVariables);
+      setTemplateVariables(foundVariables);
+      setUseVariables(foundVariables.length > 0);
+    } else {
+      setTemplateVariables([]);
+      setUseVariables(false);
+    }
+  }, [selectedTemplate]);
+
+  // Calculate form completion percentage
+  const getFormProgress = () => {
+    let completed = 0;
+    if (selectedWabaId) completed++;
+    if (selectedTemplate) completed++;
+    if (uploadedFile && recipientColumn) completed++;
+    if (useVariables ? Object.keys(variableMappings).length === templateVariables.length : true) completed++;
+    return (completed / totalSteps) * 100;
+  };
+
+  const loadWhatsAppNumbers = async () => {
+    try {
+      console.log('Loading WhatsApp numbers...');
+      console.log('Current user from localStorage:', localStorage.getItem('user'));
+      
+      const response = await fetch('/api/whatsapp/numbers', {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('WhatsApp numbers response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('WhatsApp numbers loaded:', data);
+        setWhatsappNumbers(data.data || []);
+      } else if (response.status === 401) {
+        console.error('Authentication required for WhatsApp numbers');
+        toast({
+          title: "Authentication required",
+          description: "Please log in first to access WhatsApp functionality",
+          variant: "destructive"
+        });
+      } else {
+        console.error('Failed to load WhatsApp numbers:', response.status);
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        toast({
+          title: "Error loading WhatsApp numbers",
+          description: `Status: ${response.status}. Please try again.`,
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error loading WhatsApp numbers:', error);
+      toast({
+        title: "Connection error",
+        description: "Please check your connection and try again",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const loadTemplates = async () => {
+    if (!selectedLanguage) return;
+    
+    setTemplatesLoading(true);
+    try {
+      console.log('Loading templates for language:', selectedLanguage);
+      console.log('Current user from localStorage:', localStorage.getItem('user'));
+      
+      const response = await fetch(`/api/whatsapp/templates?language=${selectedLanguage}`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('Templates response status:', response.status);
+      console.log('Templates response headers:', response.headers);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Templates loaded:', data);
+        setTemplates(data.data || []);
+      } else if (response.status === 401) {
+        console.error('Authentication required for templates');
+        toast({
+          title: "Authentication required",
+          description: "Please log in first to access templates",
+          variant: "destructive"
+        });
+      } else {
+        console.error('Failed to load templates:', response.status);
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        toast({
+          title: "Error loading templates",
+          description: `Status: ${response.status}. Please try again.`,
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error loading templates:', error);
+      toast({
+        title: "Error loading templates",
+        description: "Please check your connection",
+        variant: "destructive"
+      });
+    } finally {
+      setTemplatesLoading(false);
+    }
+  };
+
+  const loadLanguages = async () => {
+    try {
+      const response = await fetch('/api/whatsapp/languages', {
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Languages loaded:', data.data);
+        setLanguages(data.data || []);
+      } else {
+        console.error('Failed to load languages:', response.status);
+        toast({
+          title: "Error loading languages",
+          description: "Please try again",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error loading languages:', error);
+      toast({
+        title: "Error loading languages",
+        description: "Please check your connection",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls') && !file.name.endsWith('.csv')) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload an Excel file (.xlsx, .xls) or CSV file (.csv)",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setUploadedFile(file);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      console.log('Uploading file:', file.name, 'Size:', file.size, 'Type:', file.type);
+      
+      const response = await fetch('/api/whatsapp/parse-excel', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+
+      console.log('Upload response status:', response.status);
+      console.log('Upload response headers:', Object.fromEntries(response.headers.entries()));
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Upload response data:', data);
+        
+        if (data.success && data.data) {
+          const rows = data.data.rows || [];
+          const columns = data.data.columns || [];
+          
+          console.log('Parsed rows:', rows.length);
+          console.log('Parsed columns:', columns);
+          
+          setExcelData(rows);
+          setColumnNames(columns);
+          
+          toast({
+            title: "File uploaded successfully",
+            description: `Processed ${rows.length} rows with ${columns.length} columns`,
+            variant: "default"
+          });
+        } else {
+          console.error('Invalid response format:', data);
+          throw new Error(data.error || 'Invalid response format');
+        }
+      } else {
+        const responseText = await response.text();
+        console.error('Upload error response:', responseText);
+        
+        let errorData;
+        try {
+          errorData = JSON.parse(responseText);
+        } catch (e) {
+          errorData = { error: responseText };
+        }
+        
+        throw new Error(errorData.error || `Upload failed with status ${response.status}`);
+      }
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      toast({
+        title: "Upload failed",
+        description: error instanceof Error ? error.message : "Please try again with a valid file",
+        variant: "destructive"
+      });
+      
+      // Reset the file input on error
+      const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+      setUploadedFile(null);
+    }
+  };
+
+  const handleMappingChange = (variable: string, columnName: string) => {
+    setVariableMappings(prev => ({
+      ...prev,
+      [variable]: columnName
+    }));
+  };
+
+  const generatePreview = async () => {
+    if (!selectedTemplate || !excelData.length) return;
+
+    setPreviewLoading(true);
+    try {
+      console.log('Generating preview for template:', selectedTemplate.name);
+      console.log('Sample data:', excelData.slice(0, 3));
+      
+      // Generate actual preview using template and data
+      const sampleData = excelData.slice(0, 3);
+      const previewMessages = sampleData.map((row, index) => {
+        let messageText = '';
+        
+        // Replace variables in template components
+        if (selectedTemplate.components) {
+          selectedTemplate.components.forEach(component => {
+            if (component.type === 'BODY' && component.text) {
+              let text = component.text;
+              // Replace variables with actual data
+              templateVariables.forEach((variable, varIndex) => {
+                const columnName = variableMappings[variable];
+                if (columnName && row[columnName]) {
+                  text = text.replace(variable, row[columnName]);
+                }
+              });
+              messageText += text + '\n';
+            }
+          });
+        }
+        
+        return {
+          recipient: row[recipientColumn] || 'Unknown',
+          message: messageText.trim(),
+          index
+        };
+      });
+      
+      setPreviewData(previewMessages);
+      
+      toast({
+        title: "Preview generated",
+        description: `Showing preview for ${previewMessages.length} recipients`,
+        variant: "default"
+      });
+    } catch (error) {
+      console.error('Error generating preview:', error);
+      toast({
+        title: "Preview failed",
+        description: "Please check your data and try again",
+        variant: "destructive"
+      });
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleSendCustomMessages = async () => {
+    if (!selectedWabaId || !selectedTemplate || !uploadedFile || !recipientColumn) {
+      toast({
+        title: "Missing information",
+        description: "Please fill in all required fields",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setSendingLoading(true);
+    try {
+      console.log('Sending custom messages...');
+      console.log('Template:', selectedTemplate.name);
+      console.log('Recipients:', excelData.length);
+      
+      // Prepare the payload for sending
+      const payload = {
+        templateName: selectedTemplate.name,
+        language: selectedLanguage,
+        phoneNumberId: selectedWabaId,
+        recipientColumn: recipientColumn,
+        variableMappings: variableMappings,
+        data: excelData
+      };
+      
+      console.log('Sending payload:', payload);
+      
+      const response = await fetch('/api/whatsapp/send-custom-messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload)
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Send result:', result);
+        
+        toast({
+          title: "Messages sent successfully",
+          description: `Sent ${result.sent_count || excelData.length} personalized messages`,
+          variant: "default"
+        });
+        
+        // Reset form
+        setSelectedWabaId('');
+        setSelectedTemplate(null);
+        setUploadedFile(null);
+        setRecipientColumn('');
+        setVariableMappings({});
+        setPreviewData(null);
+        setExcelData([]);
+        setColumnNames([]);
+        
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Sending failed with status ${response.status}`);
+      }
+      
+    } catch (error) {
+      console.error('Error sending messages:', error);
+      toast({
+        title: "Sending failed",
+        description: error instanceof Error ? error.message : "Please try again",
+        variant: "destructive"
+      });
+    } finally {
+      setSendingLoading(false);
+    }
+  };
+
+  const getStepStatus = (step: number) => {
+    if (step === 1) return selectedWabaId ? 'completed' : 'current';
+    if (step === 2) return selectedTemplate ? 'completed' : selectedWabaId ? 'current' : 'pending';
+    if (step === 3) return uploadedFile && recipientColumn ? 'completed' : selectedTemplate ? 'current' : 'pending';
+    if (step === 4) return useVariables ? Object.keys(variableMappings).length === templateVariables.length : true ? 'completed' : uploadedFile ? 'current' : 'pending';
+    return 'pending';
+  };
+
+  return (
+    <DashboardLayout
+      title="Customize Message"
+      subtitle="Send personalized WhatsApp messages using Excel data with dynamic variables"
+    >
+      <div className="space-y-6">
+        {/* Back Button */}
+        <Button 
+          variant="ghost" 
+          onClick={() => navigate('/user/dashboard')}
+          className="text-green-600 hover:text-green-700 hover:bg-green-50"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Dashboard
+        </Button>
+
+        {/* Authentication Notice */}
+        {!localStorage.getItem('user') && (
+          <div className="bg-gradient-to-r from-yellow-500 to-orange-500 rounded-xl p-6 text-white shadow-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                  <AlertCircle className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">Authentication Required</h2>
+                  <p className="text-yellow-100">Please log in to access WhatsApp functionality</p>
+                </div>
+              </div>
+              <Button
+                onClick={() => navigate('/login')}
+                className="bg-white text-orange-600 hover:bg-yellow-50 font-semibold"
+              >
+                Go to Login
+              </Button>
+            </div>
+          </div>
+        )}
+
+
+
+        {/* Progress Indicator */}
+        <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 shadow-lg">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Setup Progress</h2>
+              <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                {Math.round(getFormProgress())}% Complete
+              </Badge>
+            </div>
+            <Progress value={getFormProgress()} className="h-3 bg-blue-100" />
+            <div className="flex justify-between mt-3 text-sm text-gray-600">
+              <span className="flex items-center">
+                <Target className="h-4 w-4 mr-1" />
+                WhatsApp Number
+              </span>
+              <span className="flex items-center">
+                <FileText className="h-4 w-4 mr-1" />
+                Template
+              </span>
+              <span className="flex items-center">
+                <FileSpreadsheet className="h-4 w-4 mr-1" />
+                Excel Data
+              </span>
+              <span className="flex items-center">
+                <Settings className="h-4 w-4 mr-1" />
+                Variables
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Form */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Step 1: WhatsApp Configuration */}
+            <Card className={`border-2 shadow-lg transition-all duration-300 ${getStepStatus(1) === 'completed' ? 'border-green-200 bg-gradient-to-br from-green-50 to-emerald-50' : getStepStatus(1) === 'current' ? 'border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50' : 'border-gray-200 bg-white'}`}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${getStepStatus(1) === 'completed' ? 'bg-gradient-to-r from-green-500 to-emerald-500' : getStepStatus(1) === 'current' ? 'bg-gradient-to-r from-blue-500 to-indigo-500' : 'bg-gray-300'}`}>
+                      {getStepStatus(1) === 'completed' ? (
+                        <CheckCircle2 className="h-6 w-6 text-white" />
+                      ) : (
+                        <span className="text-white font-bold text-lg">1</span>
+                      )}
+                    </div>
+                    <div>
+                      <CardTitle className="flex items-center text-xl">
+                        <Phone className="h-6 w-6 mr-3 text-blue-600" />
+                        WhatsApp Configuration
+                      </CardTitle>
+                      <CardDescription className="text-base">Select your WhatsApp Business number and template</CardDescription>
+                    </div>
+                  </div>
+                  {getStepStatus(1) === 'completed' && (
+                    <Badge variant="secondary" className="bg-green-100 text-green-800 px-3 py-1">
+                      <CheckCircle2 className="h-4 w-4 mr-1" />
+                      Complete
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="whatsapp-number" className="text-sm font-semibold text-gray-700">WhatsApp Business Number *</Label>
+                    <Select value={selectedWabaId} onValueChange={setSelectedWabaId}>
+                      <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors">
+                        <SelectValue placeholder="Select WhatsApp number" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {whatsappNumbers.length === 0 ? (
+                          <div className="p-4 text-center text-gray-500">
+                            <Phone className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                            <div className="text-sm font-medium mb-1">No WhatsApp numbers configured</div>
+                            <div className="text-xs text-gray-400">
+                              Configure your WhatsApp Business API first
+                            </div>
+                          </div>
+                        ) : (
+                          whatsappNumbers.map((number) => (
+                            <SelectItem key={number.id} value={number.phone_number_id}>
+                              <div className="flex items-center py-1">
+                                <Phone className="h-5 w-5 mr-3 text-green-600" />
+                                <div>
+                                  <div className="font-medium">{number.label}</div>
+                                  <div className="text-sm text-gray-500">{number.phone_number}</div>
+                                </div>
+                              </div>
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="language" className="text-sm font-semibold text-gray-700">Language *</Label>
+                    <Select 
+                      value={selectedLanguage} 
+                      onValueChange={(value) => {
+                        setSelectedLanguage(value);
+                        setSelectedTemplate(null); // Reset template when language changes
+                      }}
+                    >
+                      <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors">
+                        <SelectValue placeholder={languages.length === 0 ? "Loading languages..." : "Select language"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {languages.map((language) => (
+                          <SelectItem key={language.code} value={language.code}>
+                            <div className="flex items-center py-1">
+                              <Globe className="h-5 w-5 mr-3 text-blue-600" />
+                              <div>
+                                <div className="font-medium">{language.name}</div>
+                                <div className="text-sm text-gray-500">{language.code}</div>
+                              </div>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="template" className="text-sm font-semibold text-gray-700 flex items-center">
+                      Template *
+                      {templatesLoading && <Loader2 className="h-4 w-4 ml-2 animate-spin text-blue-600" />}
+                    </Label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={loadTemplates}
+                      disabled={templatesLoading || !selectedLanguage}
+                      className="h-6 px-2 text-xs"
+                    >
+                      <RefreshCw className="h-3 w-3 mr-1" />
+                      Refresh
+                    </Button>
+                  </div>
+                  <Select 
+                    value={selectedTemplate ? selectedTemplate.name : ''} 
+                    onValueChange={(value) => {
+                      const template = templates.find(t => t.name === value);
+                      setSelectedTemplate(template || null);
+                    }}
+                    disabled={templatesLoading}
+                  >
+                                          <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors">
+                        <SelectValue placeholder={templatesLoading ? "Loading templates..." : templates.length === 0 ? "No templates available" : "Select template"} />
+                      </SelectTrigger>
+                    <SelectContent>
+                      {templates.length === 0 ? (
+                        <div className="p-4 text-center text-gray-500">
+                          {templatesLoading ? (
+                            <div className="flex items-center justify-center">
+                              <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                              Loading templates...
+                            </div>
+                          ) : (
+                            <div>
+                              <FileText className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                              <div className="text-sm font-medium mb-1">No templates available</div>
+                              <div className="text-xs text-gray-400">
+                                Create a template first in the Templates section
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        templates.map((template) => (
+                          <SelectItem key={template.id} value={template.name}>
+                            <div className="flex items-center justify-between w-full py-1">
+                              <div className="flex items-center">
+                                <FileText className="h-5 w-5 mr-3 text-purple-600" />
+                                <div>
+                                  <div className="font-medium">{template.name}</div>
+                                  <div className="text-sm text-gray-500">{template.language}</div>
+                                </div>
+                              </div>
+                              <Badge variant="outline" className="ml-2">
+                                {template.category}
+                              </Badge>
+                            </div>
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Step 2: Excel Data Upload */}
+            <Card className={`border-2 shadow-lg transition-all duration-300 ${getStepStatus(3) === 'completed' ? 'border-green-200 bg-gradient-to-br from-green-50 to-emerald-50' : getStepStatus(3) === 'current' ? 'border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50' : 'border-gray-200 bg-white'}`}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${getStepStatus(3) === 'completed' ? 'bg-gradient-to-r from-green-500 to-emerald-500' : getStepStatus(3) === 'current' ? 'bg-gradient-to-r from-blue-500 to-indigo-500' : 'bg-gray-300'}`}>
+                      {getStepStatus(3) === 'completed' ? (
+                        <CheckCircle2 className="h-6 w-6 text-white" />
+                      ) : (
+                        <span className="text-white font-bold text-lg">2</span>
+                      )}
+                    </div>
+                    <div>
+                      <CardTitle className="flex items-center text-xl">
+                        <FileSpreadsheet className="h-6 w-6 mr-3 text-green-600" />
+                        Excel Data Upload
+                      </CardTitle>
+                      <CardDescription className="text-base">Upload your Excel file with recipient data</CardDescription>
+                    </div>
+                  </div>
+                  {getStepStatus(3) === 'completed' && (
+                    <Badge variant="secondary" className="bg-green-100 text-green-800 px-3 py-1">
+                      <CheckCircle2 className="h-4 w-4 mr-1" />
+                      Complete
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-green-400 transition-all duration-300 bg-gradient-to-br from-gray-50 to-white">
+                                     <input
+                     type="file"
+                     accept=".xlsx,.xls,.csv"
+                     onChange={handleFileUpload}
+                     className="hidden"
+                     id="file-upload"
+                   />
+                  <label htmlFor="file-upload" className="cursor-pointer">
+                    <Upload className="h-16 w-16 text-gray-400 mx-auto mb-4 hover:text-green-500 transition-colors" />
+                    <div className="text-xl font-semibold text-gray-900 mb-2">
+                      {uploadedFile ? uploadedFile.name : 'Upload Excel File'}
+                    </div>
+                    <div className="text-sm text-gray-500 mb-6">
+                      {uploadedFile ? `${excelData.length} rows processed` : 'Drag and drop or click to browse'}
+                    </div>
+                    {!uploadedFile && (
+                      <Button variant="outline" className="bg-white border-2 border-gray-300 hover:border-green-400 hover:bg-green-50 transition-all duration-300">
+                        <Upload className="h-5 w-5 mr-2" />
+                        Choose File
+                      </Button>
+                    )}
+                  </label>
+                </div>
+
+                {uploadedFile && columnNames.length > 0 && (
+                  <div className="space-y-2">
+                    <Label htmlFor="recipient-column" className="text-sm font-semibold text-gray-700">Recipient Phone Number Column *</Label>
+                    <Select value={recipientColumn} onValueChange={setRecipientColumn}>
+                      <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors">
+                        <SelectValue placeholder="Select column containing phone numbers" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {columnNames.map((column) => (
+                          <SelectItem key={column} value={column}>
+                            <div className="flex items-center py-1">
+                              <Users className="h-5 w-5 mr-3 text-blue-600" />
+                              {column}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Step 3: Variable Mapping */}
+            {useVariables && templateVariables.length > 0 && (
+              <Card className={`border-2 shadow-lg transition-all duration-300 ${getStepStatus(4) === 'completed' ? 'border-green-200 bg-gradient-to-br from-green-50 to-emerald-50' : getStepStatus(4) === 'current' ? 'border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50' : 'border-gray-200 bg-white'}`}>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${getStepStatus(4) === 'completed' ? 'bg-gradient-to-r from-green-500 to-emerald-500' : getStepStatus(4) === 'current' ? 'bg-gradient-to-r from-blue-500 to-indigo-500' : 'bg-gray-300'}`}>
+                        {getStepStatus(4) === 'completed' ? (
+                          <CheckCircle2 className="h-6 w-6 text-white" />
+                        ) : (
+                          <span className="text-white font-bold text-lg">3</span>
+                        )}
+                      </div>
+                      <div>
+                        <CardTitle className="flex items-center text-xl">
+                          <Settings className="h-6 w-6 mr-3 text-orange-600" />
+                          Variable Mapping
+                        </CardTitle>
+                        <CardDescription className="text-base">Map template variables to Excel columns</CardDescription>
+                      </div>
+                    </div>
+                    {getStepStatus(4) === 'completed' && (
+                      <Badge variant="secondary" className="bg-green-100 text-green-800 px-3 py-1">
+                        <CheckCircle2 className="h-4 w-4 mr-1" />
+                        Complete
+                      </Badge>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {templateVariables.map((variable) => (
+                    <div key={variable} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold text-gray-700">Template Variable</Label>
+                        <div className="p-3 bg-gray-100 rounded-lg border-2 border-gray-200 text-sm font-mono">
+                          {variable}
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold text-gray-700">Excel Column</Label>
+                        <Select 
+                          value={variableMappings[variable] || ''} 
+                          onValueChange={(value) => handleMappingChange(variable, value)}
+                        >
+                          <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors">
+                            <SelectValue placeholder="Select column" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {columnNames.map((column) => (
+                              <SelectItem key={column} value={column}>
+                                <div className="flex items-center py-1">
+                                  <FileSpreadsheet className="h-5 w-5 mr-3 text-green-600" />
+                                  {column}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Button
+                onClick={generatePreview}
+                disabled={!selectedTemplate || !uploadedFile || !recipientColumn || previewLoading}
+                className="flex-1 h-14 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+              >
+                {previewLoading ? (
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                ) : (
+                  <Eye className="h-5 w-5 mr-2" />
+                )}
+                Generate Preview
+              </Button>
+              
+              <Button
+                onClick={handleSendCustomMessages}
+                disabled={!selectedWabaId || !selectedTemplate || !uploadedFile || !recipientColumn || sendingLoading}
+                className="flex-1 h-14 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+              >
+                {sendingLoading ? (
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                ) : (
+                  <Send className="h-5 w-5 mr-2" />
+                )}
+                Send Messages ({excelData.length})
+              </Button>
+            </div>
+          </div>
+
+          {/* Right Sidebar - Preview & Info */}
+          <div className="space-y-6">
+            {/* Campaign Summary */}
+            <Card className="bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200 shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center text-lg">
+                  <Sparkles className="h-5 w-5 mr-2 text-purple-600" />
+                  Campaign Summary
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-center p-4 bg-white rounded-lg border border-purple-200 shadow-sm">
+                    <div className="text-3xl font-bold text-purple-600">{excelData.length}</div>
+                    <div className="text-sm text-gray-600">Recipients</div>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg border border-purple-200 shadow-sm">
+                    <div className="text-3xl font-bold text-green-600">{templateVariables.length}</div>
+                    <div className="text-sm text-gray-600">Variables</div>
+                  </div>
+                </div>
+                
+                {selectedTemplate && (
+                  <div className="p-4 bg-white rounded-lg border border-purple-200 shadow-sm">
+                    <div className="text-sm font-semibold text-gray-900 mb-2">Selected Template</div>
+                    <div className="text-sm text-gray-600 mb-2">{selectedTemplate.name}</div>
+                    <div className="flex items-center justify-between">
+                      <Badge variant="outline" className="text-xs">
+                        {selectedTemplate.category}
+                      </Badge>
+                      <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
+                        {selectedTemplate.language}
+                      </Badge>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Preview Section */}
+            {previewData && (
+              <Card className="shadow-lg">
+                <CardHeader>
+                  <CardTitle className="flex items-center text-lg">
+                    <Eye className="h-5 w-5 mr-2 text-blue-600" />
+                    Message Preview
+                  </CardTitle>
+                  <CardDescription>Preview of your personalized messages</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {previewData.map((row: any, index: number) => (
+                    <div key={index} className="p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
+                      <div className="text-sm font-semibold text-gray-900 mb-2">
+                        To: {row[recipientColumn]}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {selectedTemplate?.components?.map((component: any, compIndex: number) => (
+                          <div key={compIndex} className="mb-1">
+                            {component.text && (
+                              <span className="text-xs text-gray-500">
+                                {component.text.replace(/{{\s*\d+\s*}}/g, '[Variable]')}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Help & Tips */}
+            <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200 shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center text-lg">
+                  <Info className="h-5 w-5 mr-2 text-blue-600" />
+                  Tips & Help
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="text-sm text-gray-700">
+                  <div className="font-semibold mb-2 flex items-center">
+                    <FileSpreadsheet className="h-4 w-4 mr-2 text-green-600" />
+                    Excel Format:
+                  </div>
+                  <ul className="space-y-1 text-xs">
+                    <li>• First row should contain column headers</li>
+                    <li>• Phone numbers should include country code</li>
+                    <li>• Variables will be replaced automatically</li>
+                  </ul>
+                </div>
+                
+                <div className="text-sm text-gray-700">
+                  <div className="font-semibold mb-2 flex items-center">
+                    <Zap className="h-4 w-4 mr-2 text-yellow-600" />
+                    Quick Tips:
+                  </div>
+                  <ul className="space-y-1 text-xs">
+                    <li>• Test with a small file first</li>
+                    <li>• Ensure phone numbers are valid</li>
+                    <li>• Check template approval status</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </DashboardLayout>
+  );
+}

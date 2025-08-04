@@ -1,0 +1,633 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { 
+  ArrowLeft, 
+  Download, 
+  Filter,
+  RefreshCw,
+  FileText,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Phone,
+  MessageSquare,
+  Calendar
+} from 'lucide-react';
+import DashboardLayout from '../components/layout/DashboardLayout';
+import { Button } from '../components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { useToast } from '../components/ui/use-toast';
+
+interface MessageReport {
+  id: string;
+  campaign_name: string;
+  template_used: string;
+  from_number: string;
+  recipient_number: string;
+  status: 'sent' | 'delivered' | 'read' | 'failed';
+  read_status: string | null;
+  error_message: string | null;
+  sent_at: string | null;
+  delivered_at: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+interface CampaignSummary {
+  total_campaigns: number;
+  total_messages: number;
+  successful_messages: number;
+  failed_messages: number;
+  success_rate: number;
+}
+
+export default function ManageReports() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  // State
+  const [reports, setReports] = useState<MessageReport[]>([]);
+  const [summary, setSummary] = useState<CampaignSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({
+    dateFrom: '',
+    dateTo: '',
+    recipientNumber: '',
+    template: '',
+    status: 'all'
+  });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [pageSize] = useState(50);
+  const [availableTemplates, setAvailableTemplates] = useState<string[]>([]);
+
+  // Load reports data
+  useEffect(() => {
+    loadReports();
+    loadSummary();
+    loadAvailableTemplates();
+  }, [currentPage]);
+
+  // Reload when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+    loadReports();
+  }, [filters]);
+
+  const loadReports = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: pageSize.toString(),
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+        recipientNumber: filters.recipientNumber,
+        template: filters.template,
+        status: filters.status
+      });
+
+      // Remove empty parameters
+      for (const [key, value] of params.entries()) {
+        if (!value || value === 'all') {
+          params.delete(key);
+        }
+      }
+
+      const response = await fetch(`/api/whatsapp/reports?${params}`, {
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setReports(data.data.reports || []);
+        setTotalPages(Math.ceil(data.data.total / pageSize));
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Reports API Error:', response.status, errorData);
+        toast({
+          title: "Error",
+          description: `Failed to load reports: ${errorData.error || response.status}`,
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error loading reports:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load reports - Network error",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadSummary = async () => {
+    try {
+      const response = await fetch('/api/whatsapp/reports/summary', {
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSummary(data.data);
+      }
+    } catch (error) {
+      console.error('Error loading summary:', error);
+    }
+  };
+
+  const loadAvailableTemplates = async () => {
+    try {
+      const response = await fetch('/api/whatsapp/reports/templates', {
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableTemplates(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error loading templates:', error);
+    }
+  };
+
+  const handleFilterChange = (key: string, value: string) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      dateFrom: '',
+      dateTo: '',
+      recipientNumber: '',
+      template: '',
+      status: 'all'
+    });
+  };
+
+  const exportReports = async () => {
+    try {
+      const params = new URLSearchParams({
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+        recipientNumber: filters.recipientNumber,
+        template: filters.template,
+        status: filters.status,
+        export: 'csv'
+      });
+
+      // Remove empty parameters
+      for (const [key, value] of params.entries()) {
+        if (!value || value === 'all') {
+          params.delete(key);
+        }
+      }
+
+      const response = await fetch(`/api/whatsapp/reports?${params}`, {
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        
+        // Generate filename based on filters
+        const filterStr = Object.entries(filters)
+          .filter(([key, value]) => value && value !== 'all')
+          .map(([key, value]) => `${key}-${value}`)
+          .join('_');
+        
+        const filename = filterStr 
+          ? `whatsapp_reports_filtered_${filterStr}_${new Date().toISOString().split('T')[0]}.csv`
+          : `whatsapp_reports_all_${new Date().toISOString().split('T')[0]}.csv`;
+        
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        toast({
+          title: "Success",
+          description: filterStr ? "Filtered reports exported successfully" : "All reports exported successfully",
+          variant: "default"
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to export reports",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error exporting reports:', error);
+      toast({
+        title: "Error",
+        description: "Failed to export reports",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'sent':
+        return (
+          <div className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+            <CheckCircle2 className="h-3 w-3" />
+            Sent
+          </div>
+        );
+      case 'delivered':
+        return (
+          <div className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
+            <CheckCircle2 className="h-3 w-3" />
+            Delivered
+          </div>
+        );
+      case 'failed':
+        return (
+          <div className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs font-medium">
+            <XCircle className="h-3 w-3" />
+            Failed
+          </div>
+        );
+      case 'read':
+        return (
+          <div className="flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
+            <CheckCircle2 className="h-3 w-3" />
+            Read
+          </div>
+        );
+      default:
+        return (
+          <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
+            <Clock className="h-3 w-3" />
+            Pending
+          </div>
+        );
+    }
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const formatPhoneNumber = (phone: string) => {
+    return phone.startsWith('+') ? phone : `+${phone}`;
+  };
+
+  return (
+    <DashboardLayout
+      title="Manage Reports"
+      subtitle="View and analyze your WhatsApp campaign performance and message delivery reports"
+    >
+      <div className="space-y-6">
+        {/* Back Button */}
+        <Button 
+          variant="ghost" 
+          onClick={() => navigate('/user/dashboard')}
+          className="text-green-600 hover:text-green-700 hover:bg-green-50"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Dashboard
+        </Button>
+
+        {/* Summary Cards */}
+        {summary && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-blue-600 text-sm font-medium">Total Campaigns</p>
+                    <p className="text-2xl font-bold text-blue-900">{summary.total_campaigns}</p>
+                  </div>
+                  <FileText className="h-8 w-8 text-blue-600" />
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-green-600 text-sm font-medium">Total Messages</p>
+                    <p className="text-2xl font-bold text-green-900">{summary.total_messages}</p>
+                  </div>
+                  <MessageSquare className="h-8 w-8 text-green-600" />
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-emerald-600 text-sm font-medium">Successful</p>
+                    <p className="text-2xl font-bold text-emerald-900">{summary.successful_messages}</p>
+                  </div>
+                  <CheckCircle2 className="h-8 w-8 text-emerald-600" />
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-purple-600 text-sm font-medium">Success Rate</p>
+                    <p className="text-2xl font-bold text-purple-900">{summary.success_rate.toFixed(1)}%</p>
+                  </div>
+                  <div className="h-8 w-8 rounded-full bg-purple-600 flex items-center justify-center">
+                    <span className="text-white text-xs font-bold">%</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Filters and Search */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>Message Reports</span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={loadReports}
+                  disabled={loading}
+                  className="text-green-600 border-green-600 hover:bg-green-50"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={exportReports}
+                  className="text-blue-600 border-blue-600 hover:bg-blue-50"
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Export CSV
+                </Button>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {/* Enhanced Filters */}
+            <div className="bg-gray-50 p-4 rounded-lg mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-5 w-5 text-gray-600" />
+                  <span className="font-medium text-gray-900">Filter Reports</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearFilters}
+                  className="text-gray-600 hover:text-gray-800"
+                >
+                  Clear All
+                </Button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                {/* Date From */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    From Date
+                  </label>
+                  <input
+                    type="date"
+                    value={filters.dateFrom}
+                    onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                  />
+                </div>
+
+                {/* Date To */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    To Date
+                  </label>
+                  <input
+                    type="date"
+                    value={filters.dateTo}
+                    onChange={(e) => handleFilterChange('dateTo', e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                  />
+                </div>
+
+                {/* Recipient Number */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Recipient Number
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., +919398424270"
+                    value={filters.recipientNumber}
+                    onChange={(e) => handleFilterChange('recipientNumber', e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                  />
+                </div>
+
+                {/* Template */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Template
+                  </label>
+                  <select
+                    value={filters.template}
+                    onChange={(e) => handleFilterChange('template', e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                  >
+                    <option value="">All Templates</option>
+                    {availableTemplates.map((template) => (
+                      <option key={template} value={template}>
+                        {template}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Status */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={filters.status}
+                    onChange={(e) => handleFilterChange('status', e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="sent">Sent</option>
+                    <option value="delivered">Delivered</option>
+                    <option value="failed">Failed</option>
+                    <option value="read">Read</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Active Filters Display */}
+              {Object.entries(filters).some(([key, value]) => value && value !== 'all') && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="text-sm text-gray-600">Active filters:</span>
+                  {Object.entries(filters).map(([key, value]) => {
+                    if (!value || value === 'all') return null;
+                    return (
+                      <span
+                        key={key}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs"
+                      >
+                        {key}: {value}
+                        <button
+                          onClick={() => handleFilterChange(key, key === 'status' ? 'all' : '')}
+                          className="hover:text-green-900"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Reports Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 border-b">
+                    <th className="text-left p-3 font-semibold text-gray-900">Campaign Name</th>
+                    <th className="text-left p-3 font-semibold text-gray-900">Template</th>
+                    <th className="text-left p-3 font-semibold text-gray-900">From Number</th>
+                    <th className="text-left p-3 font-semibold text-gray-900">Recipient</th>
+                    <th className="text-left p-3 font-semibold text-gray-900">Status</th>
+                    <th className="text-left p-3 font-semibold text-gray-900">Sent At</th>
+                    <th className="text-left p-3 font-semibold text-gray-900">Failure Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={7} className="text-center p-8">
+                        <div className="flex items-center justify-center">
+                          <RefreshCw className="h-6 w-6 animate-spin text-green-600 mr-2" />
+                          Loading reports...
+                        </div>
+                      </td>
+                    </tr>
+                  ) : reports.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="text-center p-8 text-gray-500">
+                        <div className="flex flex-col items-center">
+                          <FileText className="h-12 w-12 text-gray-300 mb-2" />
+                          No reports found
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    reports.map((report) => (
+                      <tr key={report.id} className="border-b hover:bg-gray-50 transition-colors">
+                        <td className="p-3">
+                          <div className="font-medium text-gray-900 truncate max-w-xs" title={report.campaign_name}>
+                            {report.campaign_name}
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            <MessageSquare className="h-4 w-4 text-blue-600" />
+                            <span className="text-gray-900 font-medium">{report.template_used}</span>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-4 w-4 text-green-600" />
+                            <span className="text-gray-900 font-mono text-sm">
+                              {formatPhoneNumber(report.from_number)}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <span className="text-gray-900 font-mono text-sm">
+                            {formatPhoneNumber(report.recipient_number)}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          {getStatusBadge(report.status)}
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4 text-gray-400" />
+                            <span className="text-gray-900 text-sm">
+                              {formatDate(report.sent_at)}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          {report.error_message ? (
+                            <div 
+                              className="text-red-600 text-sm truncate max-w-xs cursor-help"
+                              title={report.error_message}
+                            >
+                              {report.error_message}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 text-sm">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-6">
+                <div className="text-sm text-gray-500">
+                  Page {currentPage} of {totalPages}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </DashboardLayout>
+  );
+}

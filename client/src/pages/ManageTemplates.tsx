@@ -17,11 +17,11 @@ import {
   Pause,
   Ban
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { Button } from '../components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { Input } from '../components/ui/input';
+import { Badge } from '../components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -29,29 +29,27 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle
-} from '@/components/ui/dialog';
+} from '../components/ui/dialog';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from '../components/ui/select';
 import type { 
   Template, 
   TemplatesResponse,
   TemplateStatus,
   TemplateCategory,
   User 
-} from '@/types';
+} from '../types';
 
 interface ManageTemplatesProps {
   currentUser: User;
 }
 
 export default function ManageTemplates({ currentUser }: ManageTemplatesProps) {
-  // Use currentUser for potential future features like user-specific templates
-  console.log('Current user:', currentUser.name);
   const navigate = useNavigate();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [pagination, setPagination] = useState<TemplatesResponse['pagination'] | null>(null);
@@ -93,14 +91,14 @@ export default function ManageTemplates({ currentUser }: ManageTemplatesProps) {
         params.append('category', categoryFilter);
       }
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/templates?${params}`, {
+      const response = await fetch(`/api/templates?${params}`, {
         credentials: 'include'
       });
 
       if (response.ok) {
-        const data: TemplatesResponse = await response.json();
-        setTemplates(data.templates);
-        setPagination(data.pagination);
+        const responseData: TemplatesResponse = await response.json();
+        setTemplates(responseData.data || []);
+        setPagination(responseData.pagination);
       } else {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to fetch templates');
@@ -108,6 +106,7 @@ export default function ManageTemplates({ currentUser }: ManageTemplatesProps) {
 
     } catch (error) {
       setError('Network error occurred');
+      setTemplates([]); // Ensure templates is always an array
       console.error('Fetch templates error:', error);
     } finally {
       setIsLoading(false);
@@ -119,7 +118,7 @@ export default function ManageTemplates({ currentUser }: ManageTemplatesProps) {
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/templates/${deleteTemplateDialog.template.id}`,
+        `/api/templates/${deleteTemplateDialog.template.id}`,
         {
           method: 'DELETE',
           credentials: 'include'
@@ -142,7 +141,7 @@ export default function ManageTemplates({ currentUser }: ManageTemplatesProps) {
   const handleSubmitTemplate = async (templateId: string) => {
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/templates/${templateId}/submit`,
+        `/api/templates/${templateId}/submit`,
         {
           method: 'POST',
           credentials: 'include'
@@ -166,6 +165,7 @@ export default function ManageTemplates({ currentUser }: ManageTemplatesProps) {
       DRAFT: { variant: 'secondary' as const, icon: Edit, label: 'Draft' },
       IN_REVIEW: { variant: 'default' as const, icon: Clock, label: 'In Review' },
       PENDING: { variant: 'default' as const, icon: Clock, label: 'Pending' },
+      APPROVED: { variant: 'default' as const, icon: CheckCircle, label: 'Approved' },
       ACTIVE: { variant: 'default' as const, icon: CheckCircle, label: 'Active' },
       REJECTED: { variant: 'destructive' as const, icon: XCircle, label: 'Rejected' },
       PAUSED: { variant: 'secondary' as const, icon: Pause, label: 'Paused' },
@@ -213,7 +213,7 @@ export default function ManageTemplates({ currentUser }: ManageTemplatesProps) {
     }).filter(Boolean);
   };
 
-  const filteredTemplates = templates.filter(template =>
+  const filteredTemplates = (templates || []).filter(template =>
     searchTerm === '' || 
     template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     template.category.toLowerCase().includes(searchTerm.toLowerCase())
@@ -254,12 +254,8 @@ export default function ManageTemplates({ currentUser }: ManageTemplatesProps) {
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Manage Templates</h1>
-          <p className="text-gray-600">Create and manage your WhatsApp message templates</p>
-        </div>
+      {/* Action Button */}
+      <div className="flex justify-end mb-6">
         <Button onClick={() => navigate('/user/templates/create')}>
           <Plus className="h-4 w-4 mr-2" />
           Create Template
@@ -283,21 +279,22 @@ export default function ManageTemplates({ currentUser }: ManageTemplatesProps) {
             </div>
             
             <div className="flex gap-2">
-              <Select value={statusFilter} onValueChange={(value: TemplateStatus | 'ALL') => setStatusFilter(value)}>
+              <Select value={statusFilter} onValueChange={(value: string) => setStatusFilter(value as TemplateStatus | 'ALL')}>
                 <SelectTrigger className="w-[140px]">
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Status</SelectItem>
                   <SelectItem value="DRAFT">Draft</SelectItem>
-                  <SelectItem value="IN_REVIEW">In Review</SelectItem>
+                  <SelectItem value="PENDING">Pending</SelectItem>
+                  <SelectItem value="APPROVED">Approved</SelectItem>
                   <SelectItem value="ACTIVE">Active</SelectItem>
                   <SelectItem value="REJECTED">Rejected</SelectItem>
                   <SelectItem value="PAUSED">Paused</SelectItem>
                 </SelectContent>
               </Select>
 
-              <Select value={categoryFilter} onValueChange={(value: TemplateCategory | 'ALL') => setCategoryFilter(value)}>
+              <Select value={categoryFilter} onValueChange={(value: string) => setCategoryFilter(value as TemplateCategory | 'ALL')}>
                 <SelectTrigger className="w-[140px]">
                   <SelectValue placeholder="All Categories" />
                 </SelectTrigger>

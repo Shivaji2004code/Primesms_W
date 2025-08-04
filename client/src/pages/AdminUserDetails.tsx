@@ -4,7 +4,7 @@ import { ArrowLeft, Save, X, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import AdminLayout from '@/components/AdminLayout';
+import DashboardLayout from '../components/layout/DashboardLayout';
 import type { User, UserWithBusinessInfo, CreateBusinessInfoRequest } from '@/types';
 
 export default function AdminUserDetails() {
@@ -65,7 +65,7 @@ export default function AdminUserDetails() {
 
     try {
       setIsLoading(true);
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/admin/users/${id}/details`, {
+      const response = await fetch(`/api/admin/users/${id}/details`, {
         credentials: 'include'
       });
 
@@ -153,7 +153,7 @@ export default function AdminUserDetails() {
 
     try {
       // Update basic user info
-      const basicResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/admin/users/${id}`, {
+      const basicResponse = await fetch(`/api/admin/users/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -168,7 +168,7 @@ export default function AdminUserDetails() {
       }
 
       // Update business info
-      const businessResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/admin/users/${id}/business-info`, {
+      const businessResponse = await fetch(`/api/admin/users/${id}/business-info`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -215,19 +215,25 @@ export default function AdminUserDetails() {
 
   if (isLoading) {
     return (
-      <AdminLayout currentUser={currentUser}>
+      <DashboardLayout 
+        title="User Details"
+        subtitle="Loading user information..."
+      >
         <div className="p-6 flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading user details...</p>
           </div>
         </div>
-      </AdminLayout>
+      </DashboardLayout>
     );
   }
 
   return (
-    <AdminLayout currentUser={currentUser}>
+    <DashboardLayout 
+      title="User Details"
+      subtitle="Edit user information"
+    >
       <div className="p-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -486,6 +492,6 @@ export default function AdminUserDetails() {
           </Card>
         </div>
       </div>
-    </AdminLayout>
+    </DashboardLayout>
   );
 }

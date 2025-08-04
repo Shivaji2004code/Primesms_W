@@ -1,13 +1,52 @@
 
-> server@1.0.0 dev
-> nodemon src/index.ts
+> server@1.0.0 start
+> node dist/index.js
 
-[33m[nodemon] 3.1.10[39m
-[33m[nodemon] to restart at any time, enter `rs`[39m
-[33m[nodemon] watching path(s): *.*[39m
-[33m[nodemon] watching extensions: ts,json[39m
-[32m[nodemon] starting `ts-node src/index.ts`[39m
-[dotenv@17.2.1] injecting env (8) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[dotenv@17.2.1] injecting env (8) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
 Server running on port 5050
 Environment: development
 Connected to PostgreSQL database
+Get user details error: error: invalid input syntax for type uuid: "3"
+    at /Users/shivaji/Desktop/PROJECTS/Prime SMS W/server/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async /Users/shivaji/Desktop/PROJECTS/Prime SMS W/server/dist/routes/admin.js:281:28 {
+  length: 133,
+  severity: 'ERROR',
+  code: '22P02',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: "unnamed portal parameter $1 = '...'",
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'uuid.c',
+  line: '141',
+  routine: 'string_to_uuid'
+}
+Get user details error: error: invalid input syntax for type uuid: "3"
+    at /Users/shivaji/Desktop/PROJECTS/Prime SMS W/server/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async /Users/shivaji/Desktop/PROJECTS/Prime SMS W/server/dist/routes/admin.js:281:28 {
+  length: 133,
+  severity: 'ERROR',
+  code: '22P02',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: "unnamed portal parameter $1 = '...'",
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'uuid.c',
+  line: '141',
+  routine: 'string_to_uuid'
+}

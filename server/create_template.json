@@ -1,0 +1,20 @@
+{
+  "name": "logoasf_test_static",
+  "category": "MARKETING",
+  "language": "en_US",
+  "components": [
+    {
+      "type": "HEADER",
+      "format": "IMAGE",
+      "text": "",
+      "example": {
+        "header_handle": ["3243715509116913"]
+      }
+    },
+    {
+      "type": "BODY",
+      "text": "This is a test template with static image!"
+    }
+  ],
+  "submit_to_whatsapp": true
+}

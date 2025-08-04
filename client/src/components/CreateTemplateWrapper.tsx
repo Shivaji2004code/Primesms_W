@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CreateTemplate from '@/pages/CreateTemplate';
+import DashboardLayout from './layout/DashboardLayout';
 import type { User } from '@/types';
 
 export default function CreateTemplateWrapper() {
@@ -27,14 +28,26 @@ export default function CreateTemplateWrapper() {
 
   if (isLoading || !currentUser) {
     return (
-      <div className="p-6 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+      <DashboardLayout 
+        title="Create Template"
+        subtitle="Design a new WhatsApp message template for your campaigns."
+      >
+        <div className="flex items-center justify-center min-h-96">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading template creator...</p>
+          </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
-  return <CreateTemplate currentUser={currentUser} />;
+  return (
+    <DashboardLayout 
+      title="Create Template"
+      subtitle="Design a new WhatsApp message template for your campaigns."
+    >
+      <CreateTemplate currentUser={currentUser} />
+    </DashboardLayout>
+  );
 }

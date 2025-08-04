@@ -108,6 +108,9 @@ export interface TemplateComponent {
   buttons?: TemplateButton[];
   add_security_recommendation?: boolean;
   code_expiration_minutes?: number;
+  media?: {
+    id: string;
+  };
 }
 
 export interface Template {
@@ -135,6 +138,7 @@ export interface CreateTemplateRequest {
   components: TemplateComponent[];
   message_send_ttl_seconds?: number;
   allow_category_change?: boolean;
+  submit_to_whatsapp?: boolean;
 }
 
 export interface UpdateTemplateRequest {

@@ -456,5 +456,135 @@ router.put('/users/:id/business-info', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+// Get user's templates for admin management
+router.get('/users/:id/templates', async (req, res) => {
+    try {
+        const { id } = req.params;
+        // Verify user exists
+        const userCheck = await index_1.pool.query('SELECT id FROM users WHERE id = $1', [id]);
+        if (userCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        // Get templates with stats
+        const templatesResult = await index_1.pool.query(`SELECT id, name, category, language, status, components, created_at, updated_at 
+       FROM templates WHERE user_id = $1 ORDER BY created_at DESC`, [id]);
+        // Get template stats
+        const statsResult = await index_1.pool.query(`SELECT 
+         COUNT(*) as total,
+         COUNT(CASE WHEN status = 'PENDING' THEN 1 END) as pending,
+         COUNT(CASE WHEN status = 'APPROVED' THEN 1 END) as approved,
+         COUNT(CASE WHEN status = 'REJECTED' THEN 1 END) as rejected
+       FROM templates WHERE user_id = $1`, [id]);
+        const templates = templatesResult.rows.map(template => ({
+            id: template.id,
+            name: template.name,
+            category: template.category,
+            language: template.language,
+            status: template.status,
+            components: template.components,
+            createdAt: template.created_at,
+            updatedAt: template.updated_at
+        }));
+        const stats = {
+            total: parseInt(statsResult.rows[0].total),
+            pending: parseInt(statsResult.rows[0].pending),
+            approved: parseInt(statsResult.rows[0].approved),
+            rejected: parseInt(statsResult.rows[0].rejected)
+        };
+        res.json({ templates, stats });
+    }
+    catch (error) {
+        console.error('Get user templates error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Update template status (approve/reject)
+router.put('/templates/:templateId/status', async (req, res) => {
+    try {
+        const { templateId } = req.params;
+        const { status } = req.body;
+        // Validate status
+        if (!['APPROVED', 'REJECTED', 'PENDING'].includes(status)) {
+            return res.status(400).json({ error: 'Invalid status. Must be APPROVED, REJECTED, or PENDING' });
+        }
+        // Check if template exists
+        const templateCheck = await index_1.pool.query('SELECT id, name, user_id FROM templates WHERE id = $1', [templateId]);
+        if (templateCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Template not found' });
+        }
+        const template = templateCheck.rows[0];
+        // Update template status
+        const updateResult = await index_1.pool.query('UPDATE templates SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *', [status, templateId]);
+        if (updateResult.rows.length === 0) {
+            return res.status(500).json({ error: 'Failed to update template status' });
+        }
+        // Log the admin action (optional - for audit trail)
+        const adminUserId = req.user?.id;
+        if (adminUserId) {
+            try {
+                await index_1.pool.query(`INSERT INTO admin_actions (admin_user_id, action_type, target_type, target_id, details, created_at) 
+           VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`, [
+                    adminUserId,
+                    'template_status_update',
+                    'template',
+                    templateId,
+                    JSON.stringify({
+                        templateName: template.name,
+                        userId: template.user_id,
+                        oldStatus: template.status || 'PENDING',
+                        newStatus: status
+                    })
+                ]);
+            }
+            catch (logError) {
+                // Log error but don't fail the main operation
+                console.error('Failed to log admin action:', logError);
+            }
+        }
+        const updatedTemplate = updateResult.rows[0];
+        res.json({
+            message: `Template ${status.toLowerCase()} successfully`,
+            template: {
+                id: updatedTemplate.id,
+                name: updatedTemplate.name,
+                status: updatedTemplate.status,
+                updatedAt: updatedTemplate.updated_at
+            }
+        });
+    }
+    catch (error) {
+        console.error('Update template status error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Get all pending templates across all users (for admin overview)
+router.get('/templates/pending', async (req, res) => {
+    try {
+        const result = await index_1.pool.query(`SELECT t.id, t.name, t.category, t.language, t.status, t.created_at,
+              u.name as user_name, u.username, u.id as user_id
+       FROM templates t
+       JOIN users u ON t.user_id = u.id
+       WHERE t.status = 'PENDING'
+       ORDER BY t.created_at ASC`);
+        const pendingTemplates = result.rows.map(row => ({
+            id: row.id,
+            name: row.name,
+            category: row.category,
+            language: row.language,
+            status: row.status,
+            createdAt: row.created_at,
+            user: {
+                id: row.user_id,
+                name: row.user_name,
+                username: row.username
+            }
+        }));
+        res.json({ templates: pendingTemplates });
+    }
+    catch (error) {
+        console.error('Get pending templates error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 exports.default = router;
 //# sourceMappingURL=admin.js.map

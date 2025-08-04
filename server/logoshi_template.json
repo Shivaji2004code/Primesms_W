@@ -1,0 +1,19 @@
+{
+  "name": "logoshi",
+  "category": "MARKETING",
+  "language": "en_US",
+  "components": [
+    {
+      "type": "HEADER",
+      "format": "IMAGE",
+      "example": {
+        "header_handle": ["1140421944578993"]
+      }
+    },
+    {
+      "type": "BODY",
+      "text": "Hello! This is our amazing new logo. Check it out!"
+    }
+  ],
+  "submit_to_whatsapp": true
+}
