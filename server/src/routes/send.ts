@@ -1,8 +1,15 @@
+// [Claude AI] Credit System Enhancement — Aug 2025
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import axios from 'axios';
 import { pool } from '../index';
 import { validatePhoneNumber, sanitizeInput, extractVariables } from '../utils/sendApiHelpers';
+import { 
+  deductCredits, 
+  CreditTransactionType, 
+  calculateCreditCost, 
+  TemplateCategory 
+} from '../utils/creditSystem';
 
 const router = express.Router();
 
@@ -145,7 +152,33 @@ router.all('/send', async (req, res) => {
       });
     }
 
-    // Step 6: Log successful send and return response
+    // Step 6: CREDIT DEDUCTION - For API calls, deduct credits on successful delivery
+    try {
+      const templateCategory = template.category as TemplateCategory;
+      const { cost } = await calculateCreditCost(userId, template.name, 1);
+      
+      const creditResult = await deductCredits({
+        userId,
+        amount: cost,
+        transactionType: CreditTransactionType.DEDUCTION_API_DELIVERED,
+        templateCategory,
+        templateName: template.name,
+        messageId: sendResult.data.message_id,
+        description: `API message sent successfully to ${params.recipient_number}`
+      });
+      
+      if (!creditResult.success) {
+        console.warn(`[CREDIT SYSTEM] Failed to deduct credits for API delivery: insufficient balance`);
+        // Note: Message was already sent, so we continue but log the issue
+      } else {
+        console.log(`[CREDIT SYSTEM] Deducted ${cost} credits for API delivery. New balance: ${creditResult.newBalance}`);
+      }
+    } catch (creditError) {
+      console.error('Credit deduction error for API delivery:', creditError);
+      // Continue with successful response even if credit deduction fails
+    }
+
+    // Step 7: Log successful send and return response
     await logMessageSend(userId, template.id, params.recipient_number, sendResult.data.message_id, template.name);
 
     return res.status(200).json({

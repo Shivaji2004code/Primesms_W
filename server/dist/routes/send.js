@@ -3,11 +3,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+// [Claude AI] Credit System Enhancement — Aug 2025
 const express_1 = __importDefault(require("express"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const axios_1 = __importDefault(require("axios"));
 const index_1 = require("../index");
 const sendApiHelpers_1 = require("../utils/sendApiHelpers");
+const creditSystem_1 = require("../utils/creditSystem");
 const router = express_1.default.Router();
 // Rate limiting middleware - 100 requests per 15 minutes per IP
 const sendRateLimit = (0, express_rate_limit_1.default)({
@@ -131,7 +133,32 @@ router.all('/send', async (req, res) => {
                 message: sendResult.message
             });
         }
-        // Step 6: Log successful send and return response
+        // Step 6: CREDIT DEDUCTION - For API calls, deduct credits on successful delivery
+        try {
+            const templateCategory = template.category;
+            const { cost } = await (0, creditSystem_1.calculateCreditCost)(userId, template.name, 1);
+            const creditResult = await (0, creditSystem_1.deductCredits)({
+                userId,
+                amount: cost,
+                transactionType: creditSystem_1.CreditTransactionType.DEDUCTION_API_DELIVERED,
+                templateCategory,
+                templateName: template.name,
+                messageId: sendResult.data.message_id,
+                description: `API message sent successfully to ${params.recipient_number}`
+            });
+            if (!creditResult.success) {
+                console.warn(`[CREDIT SYSTEM] Failed to deduct credits for API delivery: insufficient balance`);
+                // Note: Message was already sent, so we continue but log the issue
+            }
+            else {
+                console.log(`[CREDIT SYSTEM] Deducted ${cost} credits for API delivery. New balance: ${creditResult.newBalance}`);
+            }
+        }
+        catch (creditError) {
+            console.error('Credit deduction error for API delivery:', creditError);
+            // Continue with successful response even if credit deduction fails
+        }
+        // Step 7: Log successful send and return response
         await logMessageSend(userId, template.id, params.recipient_number, sendResult.data.message_id, template.name);
         return res.status(200).json({
             success: true,

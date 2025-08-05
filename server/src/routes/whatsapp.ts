@@ -1,3 +1,4 @@
+// [Claude AI] Credit System Enhancement — Aug 2025
 import express from 'express';
 import multer from 'multer';
 import XLSX from 'xlsx';
@@ -8,6 +9,13 @@ import FormData from 'form-data';
 import { pool } from '../index';
 import { requireAuth } from '../middleware/auth';
 import { analyzeTemplate, buildTemplatePayload, validateTemplateVariables } from '../utils/template-helper';
+import { 
+  deductCredits, 
+  CreditTransactionType, 
+  preCheckCreditsForBulk, 
+  calculateCreditCost,
+  TemplateCategory 
+} from '../utils/creditSystem';
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -742,6 +750,31 @@ router.post('/quick-send', requireAuth, async (req, res) => {
     }
 
     console.log(`✅ DEBUG QUICK-SEND: Phone validation passed`);
+    
+    // CREDIT SYSTEM: Pre-check credits before sending
+    try {
+      const creditCheck = await preCheckCreditsForBulk(userId, template_name, validRecipients.length);
+      
+      if (!creditCheck.sufficient) {
+        return res.status(400).json({
+          success: false,
+          error: `Insufficient credits. Required: ${creditCheck.requiredCredits.toFixed(2)}, Available: ${creditCheck.currentBalance.toFixed(2)}`,
+          details: {
+            requiredCredits: creditCheck.requiredCredits,
+            currentBalance: creditCheck.currentBalance,
+            templateCategory: creditCheck.category
+          }
+        });
+      }
+      
+      console.log(`[CREDIT SYSTEM] Pre-check passed: ${creditCheck.requiredCredits} credits required for ${validRecipients.length} ${creditCheck.category} messages`);
+    } catch (creditError) {
+      console.error('Credit pre-check error:', creditError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to check credit balance'
+      });
+    }
 
     // Get WhatsApp number details and verify ownership
     const numberResult = await pool.query(
@@ -853,6 +886,46 @@ router.post('/quick-send', requireAuth, async (req, res) => {
     );
 
     const campaignId = campaignResult.rows[0].id;
+    
+    // CREDIT SYSTEM: Deduct credits upfront for Quicksend (deduct on push, not delivery)
+    let creditDeductionSuccess = false;
+    let creditBalance = 0;
+    
+    try {
+      // Get the credit check result from the earlier pre-check
+      const { cost, category } = await calculateCreditCost(userId, template_name, validRecipients.length);
+      const creditResult = await deductCredits({
+        userId,
+        amount: cost,
+        transactionType: CreditTransactionType.DEDUCTION_QUICKSEND,
+        templateCategory: category,
+        templateName: template_name,
+        campaignId,
+        description: `Quicksend campaign: ${campaign_name || 'Unnamed'} (${validRecipients.length} recipients)`
+      });
+      
+      if (creditResult.success) {
+        creditDeductionSuccess = true;
+        creditBalance = creditResult.newBalance;
+        console.log(`[CREDIT SYSTEM] Deducted ${cost} credits for Quicksend. New balance: ${creditBalance}`);
+      } else {
+        // This shouldn't happen since we pre-checked, but handle it
+        throw new Error('Insufficient credits after pre-check');
+      }
+    } catch (creditError) {
+      console.error('Credit deduction error for Quicksend:', creditError);
+      // Update campaign status to failed
+      await pool.query(
+        'UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3',
+        ['failed', 'Credit deduction failed', campaignId]
+      );
+      
+      return res.status(400).json({
+        success: false,
+        error: 'Credit deduction failed',
+        details: creditError instanceof Error ? creditError.message : 'Unknown error'
+      });
+    }
 
     // Send messages
     let successCount = 0;
@@ -897,7 +970,11 @@ router.post('/quick-send', requireAuth, async (req, res) => {
         successful_sends: successCount,
         failed_sends: failCount,
         invalid_numbers: phoneNumbers.length - validRecipients.length,
-        status: 'completed'
+        status: 'completed',
+        creditInfo: {
+          deducted: creditDeductionSuccess,
+          newBalance: creditBalance
+        }
       }
     });
 
@@ -939,6 +1016,31 @@ router.post('/send-bulk', requireAuth, async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'No valid phone numbers provided'
+      });
+    }
+    
+    // CREDIT SYSTEM: Pre-check credits before sending
+    try {
+      const creditCheck = await preCheckCreditsForBulk(userId, template_name, validRecipients.length);
+      
+      if (!creditCheck.sufficient) {
+        return res.status(400).json({
+          success: false,
+          error: `Insufficient credits. Required: ${creditCheck.requiredCredits.toFixed(2)}, Available: ${creditCheck.currentBalance.toFixed(2)}`,
+          details: {
+            requiredCredits: creditCheck.requiredCredits,
+            currentBalance: creditCheck.currentBalance,
+            templateCategory: creditCheck.category
+          }
+        });
+      }
+      
+      console.log(`[CREDIT SYSTEM] Pre-check passed: ${creditCheck.requiredCredits} credits required for ${validRecipients.length} ${creditCheck.category} messages`);
+    } catch (creditError) {
+      console.error('Credit pre-check error:', creditError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to check credit balance'
       });
     }
 
@@ -1052,6 +1154,46 @@ router.post('/send-bulk', requireAuth, async (req, res) => {
     );
 
     const campaignId = campaignResult.rows[0].id;
+    
+    // CREDIT SYSTEM: Deduct credits upfront for Customise SMS (deduct on push, not delivery)
+    let creditDeductionSuccess = false;
+    let creditBalance = 0;
+    
+    try {
+      // Get the credit check result from the earlier pre-check
+      const { cost, category } = await calculateCreditCost(userId, template_name, validRecipients.length);
+      const creditResult = await deductCredits({
+        userId,
+        amount: cost,
+        transactionType: CreditTransactionType.DEDUCTION_CUSTOMISE_SMS,
+        templateCategory: category,
+        templateName: template_name,
+        campaignId,
+        description: `Customise SMS campaign: ${campaign_name || 'Unnamed'} (${validRecipients.length} recipients)`
+      });
+      
+      if (creditResult.success) {
+        creditDeductionSuccess = true;
+        creditBalance = creditResult.newBalance;
+        console.log(`[CREDIT SYSTEM] Deducted ${cost} credits for Customise SMS. New balance: ${creditBalance}`);
+      } else {
+        // This shouldn't happen since we pre-checked, but handle it
+        throw new Error('Insufficient credits after pre-check');
+      }
+    } catch (creditError) {
+      console.error('Credit deduction error for Customise SMS:', creditError);
+      // Update campaign status to failed
+      await pool.query(
+        'UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3',
+        ['failed', 'Credit deduction failed', campaignId]
+      );
+      
+      return res.status(400).json({
+        success: false,
+        error: 'Credit deduction failed',
+        details: creditError instanceof Error ? creditError.message : 'Unknown error'
+      });
+    }
 
     // Start sending messages (in a real app, this would be a background job)
     // For demo purposes, we'll simulate the sending process
@@ -1118,7 +1260,11 @@ router.post('/send-bulk', requireAuth, async (req, res) => {
         total_recipients: validRecipients.length,
         successful_sends: successCount,
         failed_sends: failCount,
-        status: 'completed'
+        status: 'completed',
+        creditInfo: {
+          deducted: creditDeductionSuccess,
+          newBalance: creditBalance
+        }
       }
     });
 
@@ -1608,6 +1754,31 @@ router.post('/custom-send', requireAuth, upload.single('file'), async (req, res)
 
       // Parse variable mappings
       const parsedVariableMappings = JSON.parse(variableMappings);
+      
+      // CREDIT SYSTEM: Pre-check credits before sending
+      try {
+        const creditCheck = await preCheckCreditsForBulk(userId, templateName, data.length);
+        
+        if (!creditCheck.sufficient) {
+          return res.status(400).json({
+            success: false,
+            error: `Insufficient credits. Required: ${creditCheck.requiredCredits.toFixed(2)}, Available: ${creditCheck.currentBalance.toFixed(2)}`,
+            details: {
+              requiredCredits: creditCheck.requiredCredits,
+              currentBalance: creditCheck.currentBalance,
+              templateCategory: creditCheck.category
+            }
+          });
+        }
+        
+        console.log(`[CREDIT SYSTEM] Pre-check passed: ${creditCheck.requiredCredits} credits required for ${data.length} ${creditCheck.category} messages`);
+      } catch (creditError) {
+        console.error('Credit pre-check error:', creditError);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to check credit balance'
+        });
+      }
 
       // Get WhatsApp number details and verify ownership
       const numberResult = await pool.query(
@@ -1658,6 +1829,46 @@ router.post('/custom-send', requireAuth, upload.single('file'), async (req, res)
       );
 
       const campaignId = campaignResult.rows[0].id;
+      
+      // CREDIT SYSTEM: Deduct credits upfront for Custom Send (deduct on push, not delivery)
+      let creditDeductionSuccess = false;
+      let creditBalance = 0;
+      
+      try {
+        // Get the credit check result from the earlier pre-check
+        const { cost, category } = await calculateCreditCost(userId, templateName, data.length);
+        const creditResult = await deductCredits({
+          userId,
+          amount: cost,
+          transactionType: CreditTransactionType.DEDUCTION_CUSTOMISE_SMS,
+          templateCategory: category,
+          templateName: templateName,
+          campaignId,
+          description: `Custom Send campaign: ${campaignName || 'Unnamed'} (${data.length} recipients)`
+        });
+        
+        if (creditResult.success) {
+          creditDeductionSuccess = true;
+          creditBalance = creditResult.newBalance;
+          console.log(`[CREDIT SYSTEM] Deducted ${cost} credits for Custom Send. New balance: ${creditBalance}`);
+        } else {
+          // This shouldn't happen since we pre-checked, but handle it
+          throw new Error('Insufficient credits after pre-check');
+        }
+      } catch (creditError) {
+        console.error('Credit deduction error for Custom Send:', creditError);
+        // Update campaign status to failed
+        await pool.query(
+          'UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3',
+          ['failed', 'Credit deduction failed', campaignId]
+        );
+        
+        return res.status(400).json({
+          success: false,
+          error: 'Credit deduction failed',
+          details: creditError instanceof Error ? creditError.message : 'Unknown error'
+        });
+      }
 
       // Send messages to each recipient
       let successCount = 0;
@@ -1718,7 +1929,11 @@ router.post('/custom-send', requireAuth, upload.single('file'), async (req, res)
           campaignId: campaignId,
           totalRecipients: data.length,
           successfulSends: successCount,
-          failedSends: failCount
+          failedSends: failCount,
+          creditInfo: {
+            deducted: creditDeductionSuccess,
+            newBalance: creditBalance
+          }
         }
       });
 
@@ -2068,6 +2283,31 @@ router.post('/send-custom-messages', requireAuth, async (req, res) => {
       });
     }
 
+    // CREDIT SYSTEM: Pre-check credits before sending
+    try {
+      const creditCheck = await preCheckCreditsForBulk(userId, templateName, data.length);
+      
+      if (!creditCheck.sufficient) {
+        return res.status(400).json({
+          success: false,
+          error: `Insufficient credits. Required: ${creditCheck.requiredCredits.toFixed(2)}, Available: ${creditCheck.currentBalance.toFixed(2)}`,
+          details: {
+            requiredCredits: creditCheck.requiredCredits,
+            currentBalance: creditCheck.currentBalance,
+            templateCategory: creditCheck.category
+          }
+        });
+      }
+      
+      console.log(`[CREDIT SYSTEM] Pre-check passed: ${creditCheck.requiredCredits} credits required for ${data.length} ${creditCheck.category} messages`);
+    } catch (creditError) {
+      console.error('Credit pre-check error:', creditError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to check credit balance'
+      });
+    }
+
     // Get user's business info
     const businessResult = await pool.query(
       'SELECT access_token, whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND whatsapp_number_id = $2 AND is_active = true',
@@ -2108,6 +2348,46 @@ router.post('/send-custom-messages', requireAuth, async (req, res) => {
     );
 
     const campaignId = campaignResult.rows[0].id;
+    
+    // CREDIT SYSTEM: Deduct credits upfront for Custom Messages (deduct on push, not delivery)
+    let creditDeductionSuccess = false;
+    let creditBalance = 0;
+    
+    try {
+      // Get the credit check result from the earlier pre-check
+      const { cost, category } = await calculateCreditCost(userId, templateName, data.length);
+      const creditResult = await deductCredits({
+        userId,
+        amount: cost,
+        transactionType: CreditTransactionType.DEDUCTION_CUSTOMISE_SMS,
+        templateCategory: category,
+        templateName: templateName,
+        campaignId,
+        description: `Custom Messages campaign: ${templateName} (${data.length} recipients)`
+      });
+      
+      if (creditResult.success) {
+        creditDeductionSuccess = true;
+        creditBalance = creditResult.newBalance;
+        console.log(`[CREDIT SYSTEM] Deducted ${cost} credits for Custom Messages. New balance: ${creditBalance}`);
+      } else {
+        // This shouldn't happen since we pre-checked, but handle it
+        throw new Error('Insufficient credits after pre-check');
+      }
+    } catch (creditError) {
+      console.error('Credit deduction error for Custom Messages:', creditError);
+      // Update campaign status to failed
+      await pool.query(
+        'UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3',
+        ['failed', 'Credit deduction failed', campaignId]
+      );
+      
+      return res.status(400).json({
+        success: false,
+        error: 'Credit deduction failed',
+        details: creditError instanceof Error ? creditError.message : 'Unknown error'
+      });
+    }
 
     let successfulSends = 0;
     let failedSends = 0;
@@ -2171,7 +2451,11 @@ router.post('/send-custom-messages', requireAuth, async (req, res) => {
         sent_count: successfulSends,
         failed_count: failedSends,
         total_count: data.length,
-        errors: errors.slice(0, 10) // Return first 10 errors
+        errors: errors.slice(0, 10), // Return first 10 errors
+        creditInfo: {
+          deducted: creditDeductionSuccess,
+          newBalance: creditBalance
+        }
       }
     });
 

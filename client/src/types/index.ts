@@ -89,7 +89,7 @@ export interface TemplateParameter {
 export interface TemplateExample {
   header_text?: string[];
   body_text?: string[][];
-  header_handle?: string[];
+  header_media_handle?: string[]; // FIXED: Use header_media_handle for template creation
 }
 
 export interface TemplateButton {
@@ -168,7 +168,8 @@ export interface TemplatesResponse {
 
 export interface MediaUploadResponse {
   message: string;
-  headerHandle: string;
+  mediaHandle: string; // FIXED: Use mediaHandle for template creation
+  headerHandle: string; // Keep for backward compatibility
   fileName: string;
   mimeType: string;
   size: number;

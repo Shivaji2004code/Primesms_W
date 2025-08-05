@@ -90,6 +90,8 @@ export function useAuth() {
           isAuthenticated: true,
           lastActivity: Date.now(),
         });
+        // Still refresh from server to get latest data
+        refreshUserData();
         return;
       }
 
@@ -127,6 +129,29 @@ export function useAuth() {
         lastActivity: Date.now(),
       });
     }
+  };
+
+  // [Claude AI] Credit System Enhancement — Aug 2025
+  // Function to refresh user data (especially credit balance) from server
+  const refreshUserData = async () => {
+    try {
+      const response = await fetch('/api/auth/me', {
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        localStorage.setItem('user', JSON.stringify(data.user));
+        setAuthState(prev => ({
+          ...prev,
+          user: data.user,
+        }));
+        return data.user;
+      }
+    } catch (error) {
+      console.error('Error refreshing user data:', error);
+    }
+    return null;
   };
 
   const signup = async (data: {
@@ -179,5 +204,6 @@ export function useAuth() {
     signup,
     checkAuth,
     updateLastActivity,
+    refreshUserData,
   };
 }

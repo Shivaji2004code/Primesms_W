@@ -42,7 +42,6 @@ import type {
   TemplateButton,
   TemplateCategory,
   ButtonType,
-  TemplateVariable,
   User
 } from '@/types';
 
@@ -139,6 +138,24 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
       }
     };
   }, []);
+
+  // Clear invalid fields when category changes
+  useEffect(() => {
+    if (templateData.category === 'AUTHENTICATION') {
+      // Clear header, footer, and buttons for AUTHENTICATION
+      if (templateData.headerType !== 'none' || templateData.footerText || templateData.buttons.length > 0) {
+        updateTemplateData({
+          headerType: 'none',
+          headerText: '',
+          headerImage: null,
+          footerText: '',
+          buttons: []
+        });
+      }
+    } else if (templateData.category === 'MARKETING') {
+      // MARKETING: All components allowed - no cleanup needed
+    }
+  }, [templateData.category]);
 
   // Extract variables from body text for preview
   useEffect(() => {
@@ -262,6 +279,24 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
         errors.push(`Invalid phone number format in button ${btnIndex + 1}`);
       }
     });
+
+    // META WHATSAPP CATEGORY-SPECIFIC VALIDATION
+    if (templateData.category === 'AUTHENTICATION') {
+      // AUTHENTICATION: Only BODY allowed
+      if (templateData.headerType !== 'none') {
+        errors.push('AUTHENTICATION templates cannot have headers');
+      }
+      if (templateData.footerText.trim()) {
+        errors.push('AUTHENTICATION templates cannot have footers');
+      }
+      if (templateData.buttons.length > 0) {
+        errors.push('AUTHENTICATION templates cannot have buttons');
+      }
+    } else if (templateData.category === 'MARKETING') {
+      // MARKETING: All components allowed like UTILITY (no restrictions)
+    } else if (templateData.category === 'UTILITY') {
+      // UTILITY: All components allowed (no additional restrictions)
+    }
 
     return errors;
   };
@@ -610,10 +645,7 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
                       <SelectContent>
                         {TEMPLATE_CATEGORIES.map(cat => (
                           <SelectItem key={cat.value} value={cat.value}>
-                            <div>
-                              <div className="font-medium">{cat.label}</div>
-                              <div className="text-xs text-gray-500">{cat.description}</div>
-                            </div>
+                            {cat.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -651,10 +683,14 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Image className="h-5 w-5 mr-2 text-indigo-600" />
-                  Header (Optional)
+                  Header {templateData.category === 'AUTHENTICATION' ? '(Not Allowed)' : '(Optional)'}
                 </CardTitle>
                 <CardDescription>
-                  Add a text or image header to your template
+                  {templateData.category === 'AUTHENTICATION' 
+                    ? 'AUTHENTICATION templates cannot have headers' 
+                    : templateData.category === 'MARKETING'
+                    ? 'MARKETING templates can have IMAGE or TEXT headers (all components allowed)'
+                    : 'Add a text or image header to your template'}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -675,6 +711,7 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
                       variant={templateData.headerType === 'text' ? 'default' : 'outline'}
                       size="sm"
                       onClick={() => updateTemplateData({ headerType: 'text', headerImage: null })}
+                      disabled={templateData.category === 'AUTHENTICATION'}
                       className="flex-1"
                     >
                       Text
@@ -684,6 +721,7 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
                       variant={templateData.headerType === 'image' ? 'default' : 'outline'}
                       size="sm"
                       onClick={() => updateTemplateData({ headerType: 'image', headerText: '' })}
+                      disabled={templateData.category === 'AUTHENTICATION'}
                       className="flex-1"
                     >
                       Image
@@ -863,146 +901,150 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
               </CardContent>
             </Card>
 
-            {/* Footer Card */}
-            <Card className="bg-white/80 backdrop-blur-sm border-gray-200 shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Info className="h-5 w-5 mr-2 text-indigo-600" />
-                  Footer (Optional)
-                </CardTitle>
-                <CardDescription>
-                  Add a small footer text to your template
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Input
-                  value={templateData.footerText}
-                  onChange={(e) => updateTemplateData({ footerText: e.target.value })}
-                  placeholder="Footer text (60 chars max)"
-                  maxLength={60}
-                  className="bg-white/80"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  {templateData.footerText.length}/60 characters
-                </p>
-              </CardContent>
-            </Card>
+            {/* Footer Card - For UTILITY and MARKETING templates */}
+            {(templateData.category === 'UTILITY' || templateData.category === 'MARKETING') && (
+              <Card className="bg-white/80 backdrop-blur-sm border-gray-200 shadow-lg">
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Info className="h-5 w-5 mr-2 text-indigo-600" />
+                    Footer (Optional)
+                  </CardTitle>
+                  <CardDescription>
+                    Add a small footer text to your template
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Input
+                    value={templateData.footerText}
+                    onChange={(e) => updateTemplateData({ footerText: e.target.value })}
+                    placeholder="Footer text (60 chars max)"
+                    maxLength={60}
+                    className="bg-white/80"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {templateData.footerText.length}/60 characters
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
-            {/* Buttons Card */}
-            <Card className="bg-white/80 backdrop-blur-sm border-gray-200 shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <Plus className="h-5 w-5 mr-2 text-indigo-600" />
-                    Action Buttons (Optional)
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={addButton}
-                    disabled={templateData.buttons.length >= 10}
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Button
-                  </Button>
-                </CardTitle>
-                <CardDescription>
-                  Add interactive buttons for user actions
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {templateData.buttons.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <Plus className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>No buttons added yet</p>
-                    <p className="text-xs">Click "Add Button" to get started</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {templateData.buttons.map((button, index) => (
-                      <div key={index} className="border rounded-lg p-4 bg-gray-50/50">
-                        <div className="flex items-center justify-between mb-3">
-                          <Label className="text-sm font-medium">Button {index + 1}</Label>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeButton(index)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div>
-                            <Label className="text-xs text-gray-600">Type</Label>
-                            <Select
-                              value={button.type}
-                              onValueChange={(value: string) => 
-                                updateButton(index, { type: value as ButtonType })
-                              }
+            {/* Buttons Card - For UTILITY and MARKETING templates */}
+            {(templateData.category === 'UTILITY' || templateData.category === 'MARKETING') && (
+              <Card className="bg-white/80 backdrop-blur-sm border-gray-200 shadow-lg">
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <Plus className="h-5 w-5 mr-2 text-indigo-600" />
+                      Action Buttons (Optional)
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addButton}
+                      disabled={templateData.buttons.length >= 10}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Button
+                    </Button>
+                  </CardTitle>
+                  <CardDescription>
+                    Add interactive buttons for user actions
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {templateData.buttons.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <Plus className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p>No buttons added yet</p>
+                      <p className="text-xs">Click "Add Button" to get started</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {templateData.buttons.map((button, index) => (
+                        <div key={index} className="border rounded-lg p-4 bg-gray-50/50">
+                          <div className="flex items-center justify-between mb-3">
+                            <Label className="text-sm font-medium">Button {index + 1}</Label>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeButton(index)}
                             >
-                              <SelectTrigger className="h-9 bg-white">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {BUTTON_TYPES
-                                  .filter(btnType => 
-                                    templateData.category === 'AUTHENTICATION' ? 
-                                    btnType.value === 'OTP' : 
-                                    btnType.value !== 'OTP'
-                                  )
-                                  .map(btnType => (
-                                    <SelectItem key={btnType.value} value={btnType.value}>
-                                      {btnType.label}
-                                    </SelectItem>
-                                  ))}
-                              </SelectContent>
-                            </Select>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </div>
 
-                          <div>
-                            <Label className="text-xs text-gray-600">Text</Label>
-                            <Input
-                              value={button.text}
-                              onChange={(e) => updateButton(index, { text: e.target.value })}
-                              placeholder="Button text"
-                              className="h-9 bg-white"
-                              maxLength={25}
-                            />
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <Label className="text-xs text-gray-600">Type</Label>
+                              <Select
+                                value={button.type}
+                                onValueChange={(value: string) => 
+                                  updateButton(index, { type: value as ButtonType })
+                                }
+                              >
+                                <SelectTrigger className="h-9 bg-white">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {BUTTON_TYPES
+                                    .filter(btnType => 
+                                      templateData.category === 'AUTHENTICATION' ? 
+                                      btnType.value === 'OTP' : 
+                                      btnType.value !== 'OTP'
+                                    )
+                                    .map(btnType => (
+                                      <SelectItem key={btnType.value} value={btnType.value}>
+                                        {btnType.label}
+                                      </SelectItem>
+                                    ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div>
+                              <Label className="text-xs text-gray-600">Text</Label>
+                              <Input
+                                value={button.text}
+                                onChange={(e) => updateButton(index, { text: e.target.value })}
+                                placeholder="Button text"
+                                className="h-9 bg-white"
+                                maxLength={25}
+                              />
+                            </div>
                           </div>
+
+                          {button.type === 'URL' && (
+                            <div className="mt-3">
+                              <Label className="text-xs text-gray-600">URL</Label>
+                              <Input
+                                value={button.url || ''}
+                                onChange={(e) => updateButton(index, { url: e.target.value })}
+                                placeholder="https://example.com"
+                                className="h-9 bg-white"
+                              />
+                            </div>
+                          )}
+
+                          {button.type === 'PHONE_NUMBER' && (
+                            <div className="mt-3">
+                              <Label className="text-xs text-gray-600">Phone Number</Label>
+                              <Input
+                                value={button.phone_number || ''}
+                                onChange={(e) => updateButton(index, { phone_number: e.target.value })}
+                                placeholder="+1234567890"
+                                className="h-9 bg-white"
+                              />
+                            </div>
+                          )}
                         </div>
-
-                        {button.type === 'URL' && (
-                          <div className="mt-3">
-                            <Label className="text-xs text-gray-600">URL</Label>
-                            <Input
-                              value={button.url || ''}
-                              onChange={(e) => updateButton(index, { url: e.target.value })}
-                              placeholder="https://example.com"
-                              className="h-9 bg-white"
-                            />
-                          </div>
-                        )}
-
-                        {button.type === 'PHONE_NUMBER' && (
-                          <div className="mt-3">
-                            <Label className="text-xs text-gray-600">Phone Number</Label>
-                            <Input
-                              value={button.phone_number || ''}
-                              onChange={(e) => updateButton(index, { phone_number: e.target.value })}
-                              placeholder="+1234567890"
-                              className="h-9 bg-white"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
           
           {/* Right Column - Preview (40% on desktop) */}

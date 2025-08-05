@@ -49,29 +49,33 @@ const router = express.Router();
 // All template routes require authentication
 router.use(requireAuth);
 
-// WhatsApp Cloud API Media Upload - WORKING IMPLEMENTATION
-const uploadMedia = async (
+// FIXED: WhatsApp Cloud API Media Upload for Template Creation
+const uploadMediaForTemplate = async (
   phoneNumberId: string,
   filePath: string,
-  accessToken: string
+  accessToken: string,
+  mimeType: string = 'image/jpeg'
 ): Promise<string> => {
-  console.log('\n🚀 UPLOADING MEDIA TO WHATSAPP CLOUD API');
-  console.log('============================================');
+  console.log('\n🚀 UPLOADING MEDIA FOR TEMPLATE CREATION');
+  console.log('==========================================');
   console.log(`📱 Phone Number ID: ${phoneNumberId}`);
   console.log(`📁 File Path: ${filePath}`);
   console.log(`🔑 Token: ${accessToken.substring(0, 20)}...`);
+  console.log(`📎 MIME Type: ${mimeType}`);
 
   const FormData = require('form-data');
   const form = new FormData();
   
+  // CRITICAL: Upload media with is_reusable=true for template creation
   form.append('file', fs.createReadStream(filePath));
-  form.append('type', 'image/png');
+  form.append('type', mimeType);
   form.append('messaging_product', 'whatsapp');
-
-  console.log('📤 Making upload request...');
+  form.append('is_reusable', 'true'); // Essential for template creation
+  
+  console.log('📤 Making template media upload request...');
   
   try {
-    const resp = await axios.post(
+    const response = await axios.post(
       `https://graph.facebook.com/v20.0/${phoneNumberId}/media`,
       form,
       { 
@@ -82,13 +86,17 @@ const uploadMedia = async (
       }
     );
     
-    console.log('✅ Upload successful!');
-    console.log('📋 Media ID:', resp.data.id);
-    console.log('📥 Full response:', JSON.stringify(resp.data, null, 2));
+    console.log('✅ Template media upload successful!');
+    console.log('📋 Media Handle:', response.data.id);
+    console.log('📥 Full response:', JSON.stringify(response.data, null, 2));
     
-    return resp.data.id;
+    if (!response.data.id || typeof response.data.id !== 'string') {
+      throw new Error(`Invalid media handle received: ${JSON.stringify(response.data)}`);
+    }
+    
+    return response.data.id;
   } catch (error: any) {
-    console.error('❌ Upload failed!');
+    console.error('❌ Template media upload failed!');
     console.error('❌ Error:', error.response?.data || error.message);
     throw error;
   }
@@ -169,55 +177,148 @@ const createWhatsAppTemplate = async (
   console.log(`📂 Category: ${templateData.category}`);
   console.log(`🌐 Language: ${templateData.language || 'en_US'}`);
 
-  // FIXED: Process components with proper variable formatting and examples
-  const processedComponents = templateData.components.map(component => {
-    // Handle IMAGE headers
-    if (component.type === 'HEADER' && component.format === 'IMAGE') {
-      let mediaId = '';
-      
-      // Handle different media ID formats
-      if (component.media?.id) {
-        mediaId = component.media.id;
-      } else if (component.example?.header_handle) {
-        if (Array.isArray(component.example.header_handle)) {
-          mediaId = component.example.header_handle[0] || '';
-        } else if (typeof component.example.header_handle === 'string') {
-          mediaId = component.example.header_handle;
+  // META WHATSAPP RULES: Process components according to category-specific rules
+  let processedComponents: any[] = [];
+
+  // AUTHENTICATION: Only BODY component allowed
+  if (templateData.category === 'AUTHENTICATION') {
+    const bodyComponent = templateData.components.find(c => c.type === 'BODY');
+    if (!bodyComponent) {
+      throw new Error('AUTHENTICATION templates must have a BODY component');
+    }
+    
+    // Process BODY with variables
+    const processedBody = processVariablesInComponent(bodyComponent, customExamples);
+    processedComponents = [processedBody];
+    
+    console.log('🔐 AUTHENTICATION template: Only BODY component included');
+  }
+  
+  // MARKETING: Allow all components like UTILITY
+  else if (templateData.category === 'MARKETING') {
+    processedComponents = templateData.components.map(component => {
+      // FIXED: Handle IMAGE headers with header_media_handle
+      if (component.type === 'HEADER' && component.format === 'IMAGE') {
+        let mediaHandle = '';
+        if (component.example?.header_media_handle) {
+          if (Array.isArray(component.example.header_media_handle)) {
+            mediaHandle = component.example.header_media_handle[0] || '';
+          } else if (typeof component.example.header_media_handle === 'string') {
+            mediaHandle = component.example.header_media_handle;
+          }
+        } else if (component.media?.id) {
+          mediaHandle = component.media.id;
         }
+        
+        console.log(`🔍 IMAGE HEADER DEBUG: mediaHandle = "${mediaHandle}"`);
+        console.log(`🔍 IMAGE HEADER type: ${typeof mediaHandle}`);
+        console.log(`🔍 IMAGE HEADER length: ${mediaHandle.length}`);
+        
+        // Validate media handle before using it
+        if (!mediaHandle || typeof mediaHandle !== 'string' || mediaHandle.trim().length === 0) {
+          throw new Error(`Invalid media handle for IMAGE template: "${mediaHandle}"`);
+        }
+        
+        return {
+          type: 'HEADER',
+          format: 'IMAGE',
+          example: {
+            header_media_handle: [mediaHandle] // FIXED: Use header_media_handle
+          }
+        };
       }
       
-      return {
-        ...component,
-        media: undefined, // Remove media property
-        example: {
-          header_handle: [mediaId] // Must be array of handles
-        }
-      };
-    }
-    
-    // Handle TEXT headers with variables
-    if (component.type === 'HEADER' && component.format === 'TEXT' && component.text) {
-      const processedComponent = processVariablesInComponent(component, customExamples);
-      return processedComponent;
-    }
-    
-    // Handle BODY components with variables
-    if (component.type === 'BODY' && component.text) {
-      const processedComponent = processVariablesInComponent(component, customExamples);
-      return processedComponent;
-    }
-    
-    // Return other components as-is
-    return component;
-  });
-
-  // Add footer for marketing templates
-  const hasFooter = processedComponents.some(c => c.type === 'FOOTER');
-  if (templateData.category === 'MARKETING' && !hasFooter) {
-    processedComponents.push({
-      type: 'FOOTER',
-      text: 'This is a promotional message' // Default footer text
+      // Handle TEXT headers with variables
+      if (component.type === 'HEADER' && component.format === 'TEXT' && component.text) {
+        return processVariablesInComponent(component, customExamples);
+      }
+      
+      // Handle BODY components with variables
+      if (component.type === 'BODY' && component.text) {
+        return processVariablesInComponent(component, customExamples);
+      }
+      
+      // Handle FOOTER components
+      if (component.type === 'FOOTER') {
+        return {
+          type: 'FOOTER',
+          text: component.text
+        };
+      }
+      
+      // Handle BUTTONS components
+      if (component.type === 'BUTTONS') {
+        return component;
+      }
+      
+      return component;
     });
+    
+    console.log('📢 MARKETING template: All components allowed');
+  }
+  
+  // UTILITY: All components allowed
+  else if (templateData.category === 'UTILITY') {
+    processedComponents = templateData.components.map(component => {
+      // FIXED: Handle IMAGE headers with header_media_handle
+      if (component.type === 'HEADER' && component.format === 'IMAGE') {
+        let mediaHandle = '';
+        if (component.example?.header_media_handle) {
+          if (Array.isArray(component.example.header_media_handle)) {
+            mediaHandle = component.example.header_media_handle[0] || '';
+          } else if (typeof component.example.header_media_handle === 'string') {
+            mediaHandle = component.example.header_media_handle;
+          }
+        } else if (component.media?.id) {
+          // Fallback to media.id if header_media_handle not available
+          mediaHandle = component.media.id;
+        }
+        
+        console.log(`🔍 UTILITY IMAGE HEADER DEBUG: mediaHandle = "${mediaHandle}"`);
+        console.log(`🔍 UTILITY IMAGE HEADER type: ${typeof mediaHandle}`);
+        console.log(`🔍 UTILITY IMAGE HEADER length: ${mediaHandle.length}`);
+        
+        // Validate media handle before using it
+        if (!mediaHandle || typeof mediaHandle !== 'string' || mediaHandle.trim().length === 0) {
+          throw new Error(`Invalid media handle for IMAGE template: "${mediaHandle}"`);
+        }
+        
+        return {
+          type: 'HEADER',
+          format: 'IMAGE',
+          example: {
+            header_media_handle: [mediaHandle] // FIXED: Use header_media_handle
+          }
+        };
+      }
+      
+      // Handle TEXT headers with variables
+      if (component.type === 'HEADER' && component.format === 'TEXT' && component.text) {
+        return processVariablesInComponent(component, customExamples);
+      }
+      
+      // Handle BODY components with variables
+      if (component.type === 'BODY' && component.text) {
+        return processVariablesInComponent(component, customExamples);
+      }
+      
+      // Handle FOOTER components
+      if (component.type === 'FOOTER') {
+        return {
+          type: 'FOOTER',
+          text: component.text
+        };
+      }
+      
+      // Handle BUTTONS components
+      if (component.type === 'BUTTONS') {
+        return component;
+      }
+      
+      return component;
+    });
+    
+    console.log('📎 UTILITY template: All components allowed');
   }
 
   // FIXED: Build payload without namespace (not required for Cloud API)
@@ -235,6 +336,13 @@ const createWhatsAppTemplate = async (
 
   console.log('📤 Template creation payload (FIXED):');
   console.log(JSON.stringify(payload, null, 2));
+  
+  // EXTRA DEBUG: Check header_handle in payload
+  const headerComponent = payload.components.find((c: any) => c.type === 'HEADER' && c.format === 'IMAGE');
+  if (headerComponent) {
+    console.log('🔍 FINAL PAYLOAD DEBUG - Header component:', JSON.stringify(headerComponent, null, 2));
+    console.log('🔍 FINAL PAYLOAD DEBUG - header_handle value:', headerComponent.example?.header_handle);
+  }
 
   try {
     const response = await axios.post(
@@ -254,6 +362,14 @@ const createWhatsAppTemplate = async (
   } catch (error: any) {
     console.error('❌ Template creation failed!');
     console.error('❌ Error:', error.response?.data || error.message);
+    
+    // Check for specific media handle error
+    if (error.response?.data?.error?.error_subcode === 2494102) {
+      console.error('🚨 SPECIFIC ERROR: Invalid header_media_handle detected!');
+      console.error('💡 This means the media handle used in header_media_handle is invalid or expired');
+      throw new Error('Invalid media handle: The uploaded media handle is not valid for template creation');
+    }
+    
     throw error;
   }
 };
@@ -266,8 +382,11 @@ const processVariablesInComponent = (component: any, customExamples: Record<stri
   const variableMatches = component.text.match(/\{\{\d+\}\}/g) || [];
   
   if (variableMatches.length === 0) {
-    // No variables, return as-is
-    return component;
+    // No variables, return with simple text format (this works for all component types)
+    return {
+      ...component,
+      text: component.text
+    };
   }
   
   console.log(`🔍 Processing ${component.type} component with ${variableMatches.length} variables`);
@@ -283,21 +402,21 @@ const processVariablesInComponent = (component: any, customExamples: Record<stri
     console.log(`📋 Variable ${variableNumber} -> Example: "${exampleValue}"`);
   });
   
-  // Build the processed component with examples
+  // Build the processed component - use simple text format for all (Meta API accepts both)
   const processedComponent = {
     ...component,
-    text: component.text // Keep the {{1}}, {{2}} format as-is
+    text: component.text // Keep {{1}}, {{2}} format for all component types
   };
   
-  // Add the mandatory example block per Meta API requirements
+  // Add the mandatory example block per Meta API requirements - EXACT FORMAT
   if (component.type === 'BODY') {
     processedComponent.example = {
-      body_text: [exampleValues] // Array of arrays per Meta API spec
+      body_text: [exampleValues] // Double array: [["value1", "value2"]]
     };
     console.log(`📋 Added body_text example: ${JSON.stringify([exampleValues])}`);
   } else if (component.type === 'HEADER' && component.format === 'TEXT') {
     processedComponent.example = {
-      header_text: exampleValues // Array for header text examples
+      header_text: exampleValues // Single array: ["value1"]
     };
     console.log(`📋 Added header_text example: ${JSON.stringify(exampleValues)}`);
   }
@@ -563,13 +682,7 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
       });
     }
 
-    // Marketing templates require footer
-    const hasFooter = templateData.components.some(c => c.type === 'FOOTER');
-    if (templateData.category === 'MARKETING' && !hasFooter) {
-      return res.status(400).json({ 
-        error: 'MARKETING templates require a FOOTER component with opt-out text' 
-      });
-    }
+    // MARKETING templates no longer require footer (all components are optional except BODY)
 
     let template_id: string | null = null;
     let whatsapp_response: any = null;
@@ -599,25 +712,34 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
         waba_id: businessResult.rows[0].waba_id,
         phoneNumberId: businessResult.rows[0].whatsapp_number_id
       };
+      
+      console.log('🏢 BUSINESS INFO DEBUG:');
+      console.log(`  - WABA ID: ${businessInfo.waba_id}`);
+      console.log(`  - Phone Number ID: ${businessInfo.phoneNumberId}`);
+      console.log(`  - Access Token: ${businessInfo.accessToken.substring(0, 20)}...`);
 
       try {
-        // Upload media using Cloud API
-        const mediaId = await uploadMedia(
+        // FIXED: Upload media for template creation
+        const mediaHandle = await uploadMediaForTemplate(
           businessInfo.phoneNumberId,
           req.file.path,
-          businessInfo.accessToken
+          businessInfo.accessToken,
+          req.file.mimetype
         );
 
-        console.log('✅ Media uploaded successfully, ID:', mediaId);
+        console.log('✅ Template media uploaded successfully, Handle:', mediaHandle);
+        console.log('🔍 MEDIA HANDLE DEBUG: type:', typeof mediaHandle);
+        console.log('🔍 MEDIA HANDLE DEBUG: length:', mediaHandle.length);
+        console.log('🔍 MEDIA HANDLE DEBUG: value:', JSON.stringify(mediaHandle));
 
-        // Update image header component with media ID in correct format
+        // FIXED: Update image header component with media handle in correct format
         templateData.components = templateData.components.map(component => {
           if (component.type === 'HEADER' && component.format === 'IMAGE') {
             return {
               ...component,
               media: undefined, // Remove media property
               example: {
-                header_handle: [mediaId] // Must be array
+                header_media_handle: [mediaHandle] // FIXED: Use header_media_handle
               }
             };
           }
@@ -681,27 +803,17 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
     
     for (const component of templateData.components) {
       if (component.type === 'HEADER') {
-        if (component.format === 'IMAGE' && component.example?.header_handle) {
+        if (component.format === 'IMAGE' && component.example?.header_media_handle) {
           header_type = 'STATIC_IMAGE';
           
-          // Store the raw header_handle for future reference
-          if (Array.isArray(component.example.header_handle) && component.example.header_handle.length > 0) {
-            header_handle = component.example.header_handle[0];
-            // Extract the actual media_id from the header_handle
-            // Format: "4::base64data:ARxxxxxx:e:timestamp:app_id:media_id:ARxxxxxx"
-            if (typeof header_handle === 'string' && header_handle.includes(':')) {
-              const parts = header_handle.split(':');
-              if (parts.length >= 7) {
-                media_id = parts[6]; // The media_id is usually at index 6
-                header_media_id = media_id; // Use the extracted media_id
-              } else {
-                // Fallback: use the header_handle as media_id if parsing fails
-                header_media_id = header_handle;
-                media_id = header_handle;
-              }
-            }
-          } else if (typeof component.example.header_handle === 'string') {
-            header_handle = component.example.header_handle;
+          // FIXED: Store the raw header_media_handle for future reference
+          if (Array.isArray(component.example.header_media_handle) && component.example.header_media_handle.length > 0) {
+            header_handle = component.example.header_media_handle[0];
+            // Media handle is used for both template creation and messaging
+            header_media_id = header_handle;
+            media_id = header_handle;
+          } else if (typeof component.example.header_media_handle === 'string') {
+            header_handle = component.example.header_media_handle;
             header_media_id = header_handle;
             media_id = header_handle;
           }
@@ -850,13 +962,7 @@ router.put('/:id', async (req, res) => {
         });
       }
 
-      // Marketing templates require footer
-      const hasFooter = updateData.components.some(c => c.type === 'FOOTER');
-      if (updateData.category === 'MARKETING' && !hasFooter) {
-        return res.status(400).json({ 
-          error: 'MARKETING templates require a FOOTER component with opt-out text' 
-        });
-      }
+      // MARKETING templates no longer require footer (all components are optional except BODY)
 
       paramCount++;
       updateFields.push(`components = $${paramCount}`);
@@ -870,21 +976,14 @@ router.put('/:id', async (req, res) => {
       
       for (const component of updateData.components) {
         if (component.type === 'HEADER') {
-          if (component.format === 'IMAGE' && component.example?.header_handle) {
+          if (component.format === 'IMAGE' && component.example?.header_media_handle) {
             header_type = 'STATIC_IMAGE';
             
-            if (Array.isArray(component.example.header_handle) && component.example.header_handle.length > 0) {
-              header_handle = component.example.header_handle[0];
-              if (typeof header_handle === 'string' && header_handle.includes(':')) {
-                const parts = header_handle.split(':');
-                if (parts.length >= 7) {
-                  media_id = parts[6];
-                  header_media_id = media_id;
-                } else {
-                  header_media_id = header_handle;
-                  media_id = header_handle;
-                }
-              }
+            // FIXED: Use header_media_handle
+            if (Array.isArray(component.example.header_media_handle) && component.example.header_media_handle.length > 0) {
+              header_handle = component.example.header_media_handle[0];
+              header_media_id = header_handle;
+              media_id = header_handle;
             }
           } else if (component.format === 'TEXT') {
             header_type = 'TEXT';
@@ -1158,11 +1257,12 @@ router.post('/upload-template-media', upload.single('media'), async (req, res) =
     } as any;
 
     try {
-      // Upload to WhatsApp using Cloud API media upload
-      const mediaId = await uploadMedia(
+      // FIXED: Upload to WhatsApp for template creation
+      const mediaHandle = await uploadMediaForTemplate(
         businessInfo.phoneNumberId,
         req.file.path,
-        businessInfo.accessToken
+        businessInfo.accessToken,
+        req.file.mimetype
       );
 
       // Clean up temporary file
@@ -1170,8 +1270,9 @@ router.post('/upload-template-media', upload.single('media'), async (req, res) =
 
       res.json({
         message: 'Template media uploaded successfully',
-        mediaId: mediaId,
-        templateHandle: mediaId, // Keep for backward compatibility
+        mediaHandle: mediaHandle, // FIXED: Return media handle
+        mediaId: mediaHandle, // Keep for backward compatibility
+        templateHandle: mediaHandle, // Keep for backward compatibility
         fileName: req.file.originalname,
         mimeType: req.file.mimetype,
         size: req.file.size

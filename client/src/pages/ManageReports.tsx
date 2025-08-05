@@ -22,8 +22,8 @@ interface MessageReport {
   id: string;
   campaign_name: string;
   template_used: string;
-  from_number: string;
-  recipient_number: string;
+  from_number: string | null;
+  recipient_number: string | null;
   status: 'sent' | 'delivered' | 'read' | 'failed';
   read_status: string | null;
   error_message: string | null;
@@ -237,37 +237,37 @@ export default function ManageReports() {
     switch (status?.toLowerCase()) {
       case 'sent':
         return (
-          <div className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-            <CheckCircle2 className="h-3 w-3" />
-            Sent
+          <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs font-medium min-w-[60px] justify-center">
+            <CheckCircle2 className="h-2.5 w-2.5" />
+            <span>Sent</span>
           </div>
         );
       case 'delivered':
         return (
-          <div className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
-            <CheckCircle2 className="h-3 w-3" />
-            Delivered
+          <div className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs font-medium min-w-[70px] justify-center">
+            <CheckCircle2 className="h-2.5 w-2.5" />
+            <span>Delivered</span>
           </div>
         );
       case 'failed':
         return (
-          <div className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs font-medium">
-            <XCircle className="h-3 w-3" />
-            Failed
+          <div className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-800 rounded-full text-xs font-medium min-w-[60px] justify-center">
+            <XCircle className="h-2.5 w-2.5" />
+            <span>Failed</span>
           </div>
         );
       case 'read':
         return (
-          <div className="flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
-            <CheckCircle2 className="h-3 w-3" />
-            Read
+          <div className="flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full text-xs font-medium min-w-[50px] justify-center">
+            <CheckCircle2 className="h-2.5 w-2.5" />
+            <span>Read</span>
           </div>
         );
       default:
         return (
-          <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
-            <Clock className="h-3 w-3" />
-            Pending
+          <div className="flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-800 rounded-full text-xs font-medium min-w-[60px] justify-center">
+            <Clock className="h-2.5 w-2.5" />
+            <span>Pending</span>
           </div>
         );
     }
@@ -284,7 +284,8 @@ export default function ManageReports() {
     });
   };
 
-  const formatPhoneNumber = (phone: string) => {
+  const formatPhoneNumber = (phone: string | null) => {
+    if (!phone) return '-';
     return phone.startsWith('+') ? phone : `+${phone}`;
   };
 
@@ -510,86 +511,86 @@ export default function ManageReports() {
             </div>
 
             {/* Reports Table */}
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto bg-white rounded-lg border border-gray-200 shadow-sm">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="bg-gray-50 border-b">
-                    <th className="text-left p-3 font-semibold text-gray-900">Campaign Name</th>
-                    <th className="text-left p-3 font-semibold text-gray-900">Template</th>
-                    <th className="text-left p-3 font-semibold text-gray-900">From Number</th>
-                    <th className="text-left p-3 font-semibold text-gray-900">Recipient</th>
-                    <th className="text-left p-3 font-semibold text-gray-900">Status</th>
-                    <th className="text-left p-3 font-semibold text-gray-900">Sent At</th>
-                    <th className="text-left p-3 font-semibold text-gray-900">Failure Reason</th>
+                  <tr className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+                    <th className="text-left px-3 py-2 font-semibold text-xs text-gray-700 uppercase tracking-wider min-w-[150px]">Campaign</th>
+                    <th className="text-left px-3 py-2 font-semibold text-xs text-gray-700 uppercase tracking-wider min-w-[120px]">Template</th>
+                    <th className="text-left px-3 py-2 font-semibold text-xs text-gray-700 uppercase tracking-wider min-w-[110px]">From</th>
+                    <th className="text-left px-3 py-2 font-semibold text-xs text-gray-700 uppercase tracking-wider min-w-[110px]">Recipient</th>
+                    <th className="text-left px-3 py-2 font-semibold text-xs text-gray-700 uppercase tracking-wider min-w-[80px]">Status</th>
+                    <th className="text-left px-3 py-2 font-semibold text-xs text-gray-700 uppercase tracking-wider min-w-[120px]">Sent At</th>
+                    <th className="text-left px-3 py-2 font-semibold text-xs text-gray-700 uppercase tracking-wider min-w-[140px]">Error</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-gray-100">
                   {loading ? (
                     <tr>
-                      <td colSpan={7} className="text-center p-8">
+                      <td colSpan={7} className="text-center py-8 px-4">
                         <div className="flex items-center justify-center">
-                          <RefreshCw className="h-6 w-6 animate-spin text-green-600 mr-2" />
-                          Loading reports...
+                          <RefreshCw className="h-5 w-5 animate-spin text-green-600 mr-2" />
+                          <span className="text-sm text-gray-600">Loading reports...</span>
                         </div>
                       </td>
                     </tr>
                   ) : reports.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-center p-8 text-gray-500">
+                      <td colSpan={7} className="text-center py-8 px-4 text-gray-500">
                         <div className="flex flex-col items-center">
-                          <FileText className="h-12 w-12 text-gray-300 mb-2" />
-                          No reports found
+                          <FileText className="h-10 w-10 text-gray-300 mb-2" />
+                          <span className="text-sm">No reports found</span>
                         </div>
                       </td>
                     </tr>
                   ) : (
-                    reports.map((report) => (
-                      <tr key={report.id} className="border-b hover:bg-gray-50 transition-colors">
-                        <td className="p-3">
-                          <div className="font-medium text-gray-900 truncate max-w-xs" title={report.campaign_name}>
+                    reports.map((report, index) => (
+                      <tr key={report.id} className={`hover:bg-blue-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
+                        <td className="px-3 py-2">
+                          <div className="font-medium text-xs text-gray-900 truncate max-w-[140px]" title={report.campaign_name}>
                             {report.campaign_name}
                           </div>
                         </td>
-                        <td className="p-3">
-                          <div className="flex items-center gap-2">
-                            <MessageSquare className="h-4 w-4 text-blue-600" />
-                            <span className="text-gray-900 font-medium">{report.template_used}</span>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1">
+                            <MessageSquare className="h-3 w-3 text-blue-600 flex-shrink-0" />
+                            <span className="text-xs text-gray-900 font-medium truncate">{report.template_used}</span>
                           </div>
                         </td>
-                        <td className="p-3">
-                          <div className="flex items-center gap-2">
-                            <Phone className="h-4 w-4 text-green-600" />
-                            <span className="text-gray-900 font-mono text-sm">
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1">
+                            <Phone className="h-3 w-3 text-green-600 flex-shrink-0" />
+                            <span className="text-xs text-gray-900 font-mono">
                               {formatPhoneNumber(report.from_number)}
                             </span>
                           </div>
                         </td>
-                        <td className="p-3">
-                          <span className="text-gray-900 font-mono text-sm">
+                        <td className="px-3 py-2">
+                          <span className="text-xs text-gray-900 font-mono">
                             {formatPhoneNumber(report.recipient_number)}
                           </span>
                         </td>
-                        <td className="p-3">
+                        <td className="px-3 py-2">
                           {getStatusBadge(report.status)}
                         </td>
-                        <td className="p-3">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-gray-400" />
-                            <span className="text-gray-900 text-sm">
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                            <span className="text-xs text-gray-900">
                               {formatDate(report.sent_at)}
                             </span>
                           </div>
                         </td>
-                        <td className="p-3">
+                        <td className="px-3 py-2">
                           {report.error_message ? (
                             <div 
-                              className="text-red-600 text-sm truncate max-w-xs cursor-help"
+                              className="text-red-600 text-xs truncate max-w-[130px] cursor-help"
                               title={report.error_message}
                             >
                               {report.error_message}
                             </div>
                           ) : (
-                            <span className="text-gray-400 text-sm">-</span>
+                            <span className="text-gray-400 text-xs">-</span>
                           )}
                         </td>
                       </tr>
