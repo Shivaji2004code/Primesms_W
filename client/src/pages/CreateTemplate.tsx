@@ -88,6 +88,20 @@ const BUTTON_TYPES: { value: ButtonType; label: string; description: string }[] 
   { value: 'OTP', label: 'Copy Code', description: 'Copy OTP code (Authentication only)' }
 ];
 
+// Common variables with examples for better UX
+const COMMON_VARIABLES = [
+  { name: '1', example: 'John Doe' },
+  { name: '2', example: '12345' },
+  { name: '3', example: '$99.99' },
+  { name: '4', example: 'Dec 25, 2024' },
+  { name: '5', example: 'Order Confirmed' },
+  { name: '6', example: 'Tracking Number' },
+  { name: '7', example: 'Delivery Address' },
+  { name: '8', example: 'Payment Method' },
+  { name: '9', example: 'Customer ID' },
+  { name: '10', example: 'Reference Number' }
+];
+
 // Variables are now numerical format only: {{1}}, {{2}}, etc.
 // Users will provide example values for each variable
 
