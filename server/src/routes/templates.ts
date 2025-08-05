@@ -785,7 +785,7 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
         const whatsappResult = await createWhatsAppTemplate(templateData, businessInfo, variableExamples);
         template_id = whatsappResult.id;
         whatsapp_response = whatsappResult;
-        status = 'IN_REVIEW';
+        status = 'PENDING';
 
       } catch (whatsappError: any) {
         console.error('WhatsApp API error:', whatsappError);
@@ -1131,7 +1131,7 @@ router.post('/:id/submit', async (req, res) => {
       // Update template with WhatsApp response
       await pool.query(
         `UPDATE templates 
-         SET status = 'IN_REVIEW', template_id = $1, whatsapp_response = $2, 
+         SET status = 'PENDING', template_id = $1, whatsapp_response = $2, 
              rejection_reason = NULL, updated_at = CURRENT_TIMESTAMP
          WHERE id = $3`,
         [whatsappResult.id, JSON.stringify(whatsappResult), id]
@@ -1140,7 +1140,7 @@ router.post('/:id/submit', async (req, res) => {
       res.json({
         message: 'Template submitted to WhatsApp successfully',
         templateId: whatsappResult.id,
-        status: 'IN_REVIEW'
+        status: 'PENDING'
       });
 
     } catch (whatsappError: any) {

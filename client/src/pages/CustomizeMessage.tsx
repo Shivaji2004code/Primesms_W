@@ -420,13 +420,24 @@ export default function CustomizeMessage() {
           selectedTemplate.components.forEach(component => {
             if (component.type === 'BODY' && component.text) {
               let text = component.text;
-              // Replace variables with actual data
-              templateVariables.forEach((variable, varIndex) => {
+              // Replace variables with actual data from Excel
+              console.log('🔍 Template text before replacement:', text);
+              console.log('🔍 Available variable mappings:', variableMappings);
+              console.log('🔍 Row data:', row);
+              
+              // Use Object.keys to iterate through variable mappings
+              Object.keys(variableMappings).forEach(variable => {
                 const columnName = variableMappings[variable];
-                if (columnName && row[columnName]) {
-                  text = text.replace(variable, row[columnName]);
+                const value = row[columnName];
+                console.log(`🔍 Replacing ${variable} with "${value}" from column "${columnName}"`);
+                
+                if (value !== undefined && value !== null) {
+                  // Replace the variable placeholder with the actual value
+                  text = text.replace(new RegExp(variable.replace(/[{}]/g, '\\$&'), 'g'), value.toString());
                 }
               });
+              
+              console.log('🔍 Template text after replacement:', text);
               messageText += text + '\n';
             }
           });
@@ -475,14 +486,27 @@ export default function CustomizeMessage() {
       console.log('Recipients:', excelData.length);
       
       // Prepare the payload for sending
+      // Convert variable mappings from {{1}} format to 1 format for backend
+      const convertedMappings: Record<string, string> = {};
+      Object.keys(variableMappings).forEach(variable => {
+        // Extract number from {{1}} format
+        const match = variable.match(/\{\{(\d+)\}\}/);
+        if (match) {
+          const variableIndex = match[1];
+          convertedMappings[variableIndex] = variableMappings[variable];
+        }
+      });
+      
       const payload = {
         templateName: selectedTemplate.name,
         language: selectedLanguage,
         phoneNumberId: selectedWabaId,
         recipientColumn: recipientColumn,
-        variableMappings: variableMappings,
+        variableMappings: convertedMappings,
         data: excelData
       };
+      
+      console.log('Converted variable mappings:', convertedMappings);
       
       console.log('Sending payload:', payload);
       
@@ -647,7 +671,14 @@ export default function CustomizeMessage() {
                     <Label htmlFor="whatsapp-number" className="text-sm font-semibold text-gray-700">WhatsApp Business Number *</Label>
                     <Select value={selectedWabaId} onValueChange={setSelectedWabaId}>
                       <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors">
-                        <SelectValue placeholder="Select WhatsApp number" />
+                        <SelectValue placeholder="Select WhatsApp number">
+                          {selectedWabaId ? (
+                            <div className="flex items-center">
+                              <Phone className="h-4 w-4 mr-2 text-green-600" />
+                              {whatsappNumbers.find(n => n.phone_number_id === selectedWabaId)?.label || 'WhatsApp Business'}
+                            </div>
+                          ) : 'Select WhatsApp number'}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {whatsappNumbers.length === 0 ? (
@@ -685,7 +716,14 @@ export default function CustomizeMessage() {
                       }}
                     >
                       <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors">
-                        <SelectValue placeholder={languages.length === 0 ? "Loading languages..." : "Select language"} />
+                        <SelectValue placeholder={languages.length === 0 ? "Loading languages..." : "Select language"}>
+                          {selectedLanguage ? (
+                            <div className="flex items-center">
+                              <Globe className="h-4 w-4 mr-2 text-blue-600" />
+                              {languages.find(l => l.code === selectedLanguage)?.name || 'Language'}
+                            </div>
+                          ) : 'Select language'}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {languages.map((language) => (
@@ -729,9 +767,16 @@ export default function CustomizeMessage() {
                     }}
                     disabled={templatesLoading}
                   >
-                                          <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors">
-                        <SelectValue placeholder={templatesLoading ? "Loading templates..." : templates.length === 0 ? "No templates available" : "Select template"} />
-                      </SelectTrigger>
+                    <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors">
+                      <SelectValue placeholder={templatesLoading ? "Loading templates..." : templates.length === 0 ? "No templates available" : "Select template"}>
+                        {selectedTemplate ? (
+                          <div className="flex items-center">
+                            <FileText className="h-4 w-4 mr-2 text-purple-600" />
+                            {selectedTemplate.name.replace(/_UTILITY$|_MARKETING$|_AUTHENTICATION$/, '')}
+                          </div>
+                        ) : (templatesLoading ? "Loading templates..." : templates.length === 0 ? "No templates available" : "Select template")}
+                      </SelectValue>
+                    </SelectTrigger>
                     <SelectContent>
                       {templates.length === 0 ? (
                         <div className="p-4 text-center text-gray-500">
@@ -971,13 +1016,13 @@ export default function CustomizeMessage() {
                 {selectedTemplate && (
                   <div className="p-4 bg-white rounded-lg border border-purple-200 shadow-sm">
                     <div className="text-sm font-semibold text-gray-900 mb-2">Selected Template</div>
-                    <div className="text-sm text-gray-600 mb-2">{selectedTemplate.name}</div>
+                    <div className="text-sm text-gray-600 mb-2">{selectedTemplate.name.replace(/_UTILITY$|_MARKETING$|_AUTHENTICATION$/, '')}</div>
                     <div className="flex items-center justify-between">
                       <Badge variant="outline" className="text-xs">
                         {selectedTemplate.category}
                       </Badge>
                       <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
-                        {selectedTemplate.language}
+                        {languages.find(l => l.code === selectedTemplate.language)?.name || selectedTemplate.language}
                       </Badge>
                     </div>
                   </div>
@@ -996,21 +1041,13 @@ export default function CustomizeMessage() {
                   <CardDescription>Preview of your personalized messages</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {previewData.map((row: any, index: number) => (
+                  {previewData.map((preview: any, index: number) => (
                     <div key={index} className="p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
                       <div className="text-sm font-semibold text-gray-900 mb-2">
-                        To: {row[recipientColumn]}
+                        To: {preview.recipient}
                       </div>
-                      <div className="text-sm text-gray-600">
-                        {selectedTemplate?.components?.map((component: any, compIndex: number) => (
-                          <div key={compIndex} className="mb-1">
-                            {component.text && (
-                              <span className="text-xs text-gray-500">
-                                {component.text.replace(/{{\s*\d+\s*}}/g, '[Variable]')}
-                              </span>
-                            )}
-                          </div>
-                        ))}
+                      <div className="text-sm text-gray-600 whitespace-pre-wrap">
+                        {preview.message}
                       </div>
                     </div>
                   ))}

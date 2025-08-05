@@ -57,7 +57,7 @@ export interface CreateBusinessInfoRequest {
     isActive?: boolean;
 }
 export type TemplateCategory = 'UTILITY' | 'MARKETING' | 'AUTHENTICATION';
-export type TemplateStatus = 'DRAFT' | 'IN_REVIEW' | 'PENDING' | 'ACTIVE' | 'REJECTED' | 'PAUSED' | 'DISABLED' | 'APPEAL_REQUESTED';
+export type TemplateStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'ACTIVE' | 'REJECTED' | 'PAUSED' | 'DISABLED';
 export type QualityRating = 'HIGH' | 'MEDIUM' | 'LOW' | 'QUALITY_PENDING';
 export type ComponentType = 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS';
 export type HeaderFormat = 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'LOCATION';

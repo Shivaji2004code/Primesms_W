@@ -97,23 +97,37 @@ const router = express_1.default.Router();
 // Upload configuration is defined above with multer.diskStorage
 // Utility function to validate phone numbers (Meta WhatsApp API format)
 const validatePhoneNumber = (phone) => {
-    // Remove all non-digit characters including +
+    // Remove all non-digit characters including +, spaces, dashes, etc.
     const cleaned = phone.replace(/[^\d]/g, '');
-    // Meta WhatsApp API format: country code + number (no + prefix)
-    // Must start with country code (1-4 digits) followed by local number
-    // Total length should be between 8-15 digits (international standard)
-    return /^[1-9]\d{7,14}$/.test(cleaned);
+    console.log(`🔍 Phone validation: Original="${phone}", Cleaned="${cleaned}", Length=${cleaned.length}`);
+    // More flexible validation for international phone numbers
+    // Allow 8-15 digits (some countries have shorter numbers)
+    // Must start with a digit 1-9 (not 0)
+    const isValid = /^[1-9]\d{7,14}$/.test(cleaned);
+    console.log(`🔍 Phone validation result: ${isValid} for "${cleaned}"`);
+    return isValid;
 };
 // Utility function to format phone number for Meta WhatsApp API
 const formatPhoneNumber = (phone) => {
-    // Remove all non-digits and + symbols
+    // Remove all non-digits, spaces, dashes, + symbols, etc.
     let cleaned = phone.replace(/[^\d]/g, '');
+    console.log(`🔧 Formatting phone: Original="${phone}", Cleaned="${cleaned}"`);
     // Remove leading zeros if present
     cleaned = cleaned.replace(/^0+/, '');
     // Ensure it starts with country code (not 0)
     if (cleaned.length > 0 && cleaned[0] === '0') {
         cleaned = cleaned.substring(1);
     }
+    // Handle common country codes without + prefix
+    // If number starts with 91 (India), 1 (US/Canada), etc., keep as is
+    // If number is 10 digits and starts with 6-9, assume it's Indian number and add 91
+    if (cleaned.length === 10 && /^[6-9]/.test(cleaned)) {
+        cleaned = '91' + cleaned; // Add India country code
+        console.log(`🔧 Added India country code: "${cleaned}"`);
+    }
+    console.log(`🔧 Final formatted phone: "${cleaned}"`);
+    // Return the cleaned number without any + prefix
+    // Format: 919394567890, 1234567890, etc.
     return cleaned;
 };
 // GET /api/whatsapp/numbers - Fetch all WhatsApp numbers for authenticated user
@@ -492,6 +506,179 @@ function replaceVariables(text, variables) {
         return variables[index] || `{{${index}}}`;
     });
 }
+// POST /api/whatsapp/preview-excel - Preview Excel file columns
+router.post('/preview-excel', auth_1.requireAuth, upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                error: 'No file uploaded'
+            });
+        }
+        const filePath = req.file.path;
+        const fileExtension = path_1.default.extname(req.file.originalname).toLowerCase();
+        if (fileExtension !== '.xlsx' && fileExtension !== '.xls') {
+            return res.status(400).json({
+                success: false,
+                error: 'Only Excel files (.xlsx, .xls) are supported for preview'
+            });
+        }
+        try {
+            console.log(`Previewing Excel file: ${req.file.originalname}`);
+            const workbook = xlsx_1.default.readFile(filePath);
+            const sheetName = workbook.SheetNames[0];
+            console.log(`Using sheet: ${sheetName}`);
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = xlsx_1.default.utils.sheet_to_json(worksheet, { header: 1 });
+            console.log(`Total rows in Excel: ${jsonData.length}`);
+            if (jsonData.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Excel file is empty or has no data'
+                });
+            }
+            // Get column headers (first row)
+            const headers = (jsonData[0] || []);
+            const columns = headers.map((header, index) => header?.toString().trim() || `Column ${String.fromCharCode(65 + index)}`);
+            // Get sample data (first 5 rows after header)
+            const sampleData = jsonData.slice(1, 6);
+            res.json({
+                success: true,
+                data: {
+                    columns: columns,
+                    sample_data: sampleData,
+                    total_rows: jsonData.length - 1 // Exclude header row
+                }
+            });
+        }
+        catch (parseError) {
+            console.error('Error parsing Excel file:', parseError);
+            res.status(400).json({
+                success: false,
+                error: 'Failed to parse Excel file. Please ensure it\'s a valid Excel file.'
+            });
+        }
+        finally {
+            // Clean up uploaded file
+            fs_1.default.unlink(filePath, (err) => {
+                if (err)
+                    console.error('Error deleting temp file:', err);
+            });
+        }
+    }
+    catch (error) {
+        console.error('Error previewing Excel file:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to preview Excel file'
+        });
+    }
+});
+// POST /api/whatsapp/import-excel-column - Import from specific Excel column
+router.post('/import-excel-column', auth_1.requireAuth, upload.single('file'), async (req, res) => {
+    try {
+        console.log('🔍 DEBUG IMPORT-EXCEL-COLUMN: Request received');
+        console.log('🔍 DEBUG IMPORT-EXCEL-COLUMN: File:', req.file?.originalname);
+        console.log('🔍 DEBUG IMPORT-EXCEL-COLUMN: Body:', req.body);
+        if (!req.file) {
+            console.log('❌ DEBUG IMPORT-EXCEL-COLUMN: No file uploaded');
+            return res.status(400).json({
+                success: false,
+                error: 'No file uploaded'
+            });
+        }
+        const { column } = req.body;
+        console.log('🔍 DEBUG IMPORT-EXCEL-COLUMN: Column requested:', column);
+        if (!column) {
+            console.log('❌ DEBUG IMPORT-EXCEL-COLUMN: No column specified');
+            return res.status(400).json({
+                success: false,
+                error: 'Column name is required'
+            });
+        }
+        const filePath = req.file.path;
+        const fileExtension = path_1.default.extname(req.file.originalname).toLowerCase();
+        if (fileExtension !== '.xlsx' && fileExtension !== '.xls') {
+            return res.status(400).json({
+                success: false,
+                error: 'Only Excel files (.xlsx, .xls) are supported'
+            });
+        }
+        try {
+            console.log(`Importing from column "${column}" in file: ${req.file.originalname}`);
+            const workbook = xlsx_1.default.readFile(filePath);
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = xlsx_1.default.utils.sheet_to_json(worksheet, { header: 1 });
+            if (jsonData.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Excel file is empty or has no data'
+                });
+            }
+            // Get column headers
+            const headers = (jsonData[0] || []);
+            const columnIndex = headers.findIndex((header) => header?.toString().trim() === column);
+            if (columnIndex === -1) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Column "${column}" not found in Excel file`
+                });
+            }
+            console.log(`Found column "${column}" at index ${columnIndex}`);
+            // Extract phone numbers from the selected column
+            const phoneNumbers = jsonData.slice(1) // Skip header row
+                .map((row, index) => {
+                const phone = row[columnIndex]?.toString().trim();
+                if (phone) {
+                    console.log(`Row ${index + 2}: Found phone number: ${phone}`);
+                }
+                return phone;
+            })
+                .filter(phone => phone && phone !== '');
+            console.log(`Extracted ${phoneNumbers.length} phone numbers from column "${column}"`);
+            console.log(`Raw phone numbers:`, phoneNumbers);
+            // For Excel import, accept all values from the selected column as-is
+            // User can review and edit them in the manual entry field
+            console.log(`\n📊 Excel Import - Accepting all values from column "${column}"`);
+            console.log(`- Total numbers found: ${phoneNumbers.length}`);
+            console.log(`- Numbers:`, phoneNumbers);
+            // Remove duplicates but keep all values as-is
+            const uniqueNumbers = [...new Set(phoneNumbers)];
+            res.json({
+                success: true,
+                data: {
+                    valid_numbers: uniqueNumbers,
+                    invalid_numbers: [],
+                    total_processed: phoneNumbers.length,
+                    valid_count: uniqueNumbers.length,
+                    invalid_count: 0
+                }
+            });
+        }
+        catch (parseError) {
+            console.error('Error parsing Excel file:', parseError);
+            res.status(400).json({
+                success: false,
+                error: 'Failed to parse Excel file. Please ensure it\'s a valid Excel file.'
+            });
+        }
+        finally {
+            // Clean up uploaded file
+            fs_1.default.unlink(filePath, (err) => {
+                if (err)
+                    console.error('Error deleting temp file:', err);
+            });
+        }
+    }
+    catch (error) {
+        console.error('Error importing from Excel column:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to import from Excel column'
+        });
+    }
+});
 // POST /api/whatsapp/import-recipients - Handle Excel file upload
 router.post('/import-recipients', auth_1.requireAuth, upload.single('file'), async (req, res) => {
     try {
@@ -515,13 +702,23 @@ router.post('/import-recipients', auth_1.requireAuth, upload.single('file'), asy
             }
             else {
                 // Handle Excel files
+                console.log(`Processing Excel file: ${req.file.originalname}`);
                 const workbook = xlsx_1.default.readFile(filePath);
                 const sheetName = workbook.SheetNames[0];
+                console.log(`Using sheet: ${sheetName}`);
                 const worksheet = workbook.Sheets[sheetName];
                 const jsonData = xlsx_1.default.utils.sheet_to_json(worksheet, { header: 1 });
+                console.log(`Total rows in Excel: ${jsonData.length}`);
                 phoneNumbers = jsonData
-                    .map((row) => row[0]?.toString().trim())
+                    .map((row, index) => {
+                    const phone = row[0]?.toString().trim();
+                    if (phone) {
+                        console.log(`Row ${index + 1}: Found phone number: ${phone}`);
+                    }
+                    return phone;
+                })
                     .filter(phone => phone && phone !== '');
+                console.log(`Extracted ${phoneNumbers.length} phone numbers from Excel file`);
             }
             // Validate and format phone numbers
             const validNumbers = [];
@@ -590,22 +787,53 @@ router.post('/preview-campaign', auth_1.requireAuth, async (req, res) => {
             });
         }
         const components = templateResult.rows[0].components;
-        // Parse recipients
-        const phoneNumbers = recipients_text
+        // Parse recipients with CSV support (same logic as quick-send)
+        const lines = recipients_text
             .split('\n')
-            .map((num) => num.trim())
-            .filter((num) => num.length > 0);
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0);
+        // Process each line to extract phone numbers and variables
+        const recipientData = [];
+        lines.forEach((line, index) => {
+            // Check if line contains comma-separated values (Excel format)
+            if (line.includes(',')) {
+                const columns = line.split(',').map((col) => col.trim());
+                const phone = columns[0]; // First column is phone number
+                // Create variables from remaining columns (1, 2, 3, etc.)
+                const lineVariables = {};
+                for (let i = 1; i < columns.length; i++) {
+                    lineVariables[i.toString()] = columns[i];
+                }
+                recipientData.push({ phone, variables: lineVariables });
+                console.log(`📊 Preview row ${index + 1}: Phone=${phone}, Variables=`, lineVariables);
+            }
+            else {
+                // Simple phone number format
+                recipientData.push({ phone: line, variables: {} });
+            }
+        });
+        const phoneNumbers = recipientData.map(item => item.phone);
         const formattedNumbers = phoneNumbers.map((num) => formatPhoneNumber(num));
         const validRecipients = formattedNumbers.filter((num) => validatePhoneNumber(num));
         const invalidRecipients = formattedNumbers.filter((num) => !validatePhoneNumber(num));
-        // Generate preview
-        const preview = generateTemplatePreview(components, variables);
+        // Generate personalized previews for each recipient
+        const recipientPreviews = recipientData.slice(0, 3).map((recipient, index) => {
+            const recipientVariables = Object.keys(recipient.variables).length > 0
+                ? recipient.variables
+                : variables;
+            const personalizedPreview = generateTemplatePreview(components, recipientVariables);
+            return {
+                phone: recipient.phone,
+                variables: recipientVariables,
+                preview: personalizedPreview
+            };
+        });
         res.json({
             success: true,
             data: {
                 template_name,
                 language,
-                preview,
+                recipient_previews: recipientPreviews, // Array of personalized previews
                 components,
                 variables,
                 recipient_stats: {
@@ -632,7 +860,8 @@ router.post('/quick-send', auth_1.requireAuth, async (req, res) => {
         const userId = req.session.user.id;
         console.log(`🔍 DEBUG QUICK-SEND: userId from session = ${userId}`);
         const { phone_number_id, template_name, language = 'en_US', variables = {}, recipients_text = '', campaign_name } = req.body;
-        console.log(`🔍 DEBUG QUICK-SEND: Request body:`, { phone_number_id, template_name, language, recipients_text, campaign_name });
+        console.log(`🔍 DEBUG QUICK-SEND: Request body:`, { phone_number_id, template_name, language, campaign_name });
+        console.log(`🔍 DEBUG QUICK-SEND: Recipients text:`, recipients_text);
         // Validation
         if (!phone_number_id || !template_name || !recipients_text.trim()) {
             console.log(`❌ DEBUG QUICK-SEND: Validation failed - missing fields`);
@@ -642,12 +871,32 @@ router.post('/quick-send', auth_1.requireAuth, async (req, res) => {
             });
         }
         console.log(`✅ DEBUG QUICK-SEND: Validation passed`);
-        // Parse recipients from text input
-        const phoneNumbers = recipients_text
+        // Parse recipients with CSV support (supports both static and dynamic variables)
+        const lines = recipients_text
             .split('\n')
-            .map((num) => num.trim())
-            .filter((num) => num.length > 0);
-        // Format and validate recipients for Meta API
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0);
+        // Process each line to extract phone numbers and variables
+        const recipientData = [];
+        lines.forEach((line, index) => {
+            // Check if line contains comma-separated values (Excel format with dynamic variables)
+            if (line.includes(',')) {
+                const columns = line.split(',').map((col) => col.trim());
+                const phone = columns[0]; // First column is phone number
+                // Create variables from remaining columns (1, 2, 3, etc.)
+                const lineVariables = {};
+                for (let i = 1; i < columns.length; i++) {
+                    lineVariables[i.toString()] = columns[i];
+                }
+                recipientData.push({ phone, variables: lineVariables });
+                console.log(`📊 Quick-send row ${index + 1}: Phone=${phone}, Variables=`, lineVariables);
+            }
+            else {
+                // Simple phone number format (uses static variables)
+                recipientData.push({ phone: line, variables: {} });
+            }
+        });
+        const phoneNumbers = recipientData.map(item => item.phone);
         const formattedNumbers = phoneNumbers.map((num) => formatPhoneNumber(num));
         const validRecipients = formattedNumbers.filter((num) => validatePhoneNumber(num));
         console.log(`🔍 DEBUG QUICK-SEND: Phone validation - formatted: ${formattedNumbers}, valid: ${validRecipients}`);
@@ -806,12 +1055,22 @@ router.post('/quick-send', auth_1.requireAuth, async (req, res) => {
         // Send messages
         let successCount = 0;
         let failCount = 0;
-        const messagePromises = validRecipients.map((recipient) => sendTemplateMessage(phone_number_id, access_token, recipient, template_name, language, variables, templateResult.rows[0].components, campaignId, templateResult.rows[0].header_media_id, templateResult.rows[0].header_type, templateResult.rows[0].header_media_url, templateResult.rows[0].header_handle, templateResult.rows[0].media_id).then(() => {
-            successCount++;
-        }).catch((error) => {
-            failCount++;
-            console.error(`Failed to send to ${recipient}:`, error.message);
-        }));
+        const messagePromises = validRecipients.map((recipient, index) => {
+            // Get the recipient data for this phone number
+            const recipientInfo = recipientData.find(item => formatPhoneNumber(item.phone) === recipient);
+            // Use per-recipient variables if available, otherwise use global variables
+            const recipientVariables = recipientInfo?.variables && Object.keys(recipientInfo.variables).length > 0
+                ? recipientInfo.variables
+                : variables;
+            console.log(`📤 Sending to ${recipient} with variables:`, recipientVariables);
+            return sendTemplateMessage(phone_number_id, access_token, recipient, template_name, language, recipientVariables, // Dynamic or static variables per recipient
+            templateResult.rows[0].components, campaignId, templateResult.rows[0].header_media_id, templateResult.rows[0].header_type, templateResult.rows[0].header_media_url, templateResult.rows[0].header_handle, templateResult.rows[0].media_id).then(() => {
+                successCount++;
+            }).catch((error) => {
+                failCount++;
+                console.error(`Failed to send to ${recipient}:`, error.message);
+            });
+        });
         await Promise.allSettled(messagePromises);
         // Update campaign status
         await index_1.pool.query('UPDATE campaign_logs SET status = $1, successful_sends = $2, failed_sends = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4', ['completed', successCount, failCount, campaignId]);
@@ -1146,6 +1405,7 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
                     matches.forEach((match) => {
                         const variableIndex = parseInt(match.replace(/[{}]/g, ''));
                         const value = variables[variableIndex.toString()] || `[Variable ${variableIndex} not provided]`;
+                        console.log(`🔍 META API - Variable ${variableIndex}: "${value}" (from variables object:`, variables, `)`);
                         bodyParams.push({
                             type: "text",
                             text: value
@@ -1921,11 +2181,20 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
             });
         }
         const template = templateResult.rows[0];
-        // Create campaign log entry
+        // Create campaign log entry (matching quick-send structure)
         const campaignResult = await index_1.pool.query(`INSERT INTO campaign_logs 
-       (user_id, campaign_name, template_used, total_recipients, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
-       RETURNING id`, [userId, `Custom Campaign - ${templateName}`, templateName, data.length, 'IN_PROGRESS']);
+       (user_id, campaign_name, template_used, phone_number_id, language_code, total_recipients, status, campaign_data)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id`, [
+            userId,
+            `Custom Campaign - ${templateName}`,
+            templateName,
+            phoneNumberId,
+            language,
+            data.length,
+            'processing',
+            JSON.stringify({ template_components: template.components, custom_data: data })
+        ]);
         const campaignId = campaignResult.rows[0].id;
         // CREDIT SYSTEM: Deduct credits upfront for Custom Messages (deduct on push, not delivery)
         let creditDeductionSuccess = false;
@@ -1976,12 +2245,18 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
                 }
                 // Prepare variables for this recipient
                 const variables = {};
+                console.log(`🔍 Processing recipient: ${recipient}`);
+                console.log(`🔍 Variable mappings:`, variableMappings);
+                console.log(`🔍 Row data:`, row);
                 Object.keys(variableMappings).forEach(variable => {
                     const columnName = variableMappings[variable];
-                    if (row[columnName]) {
-                        variables[variable] = row[columnName];
+                    const value = row[columnName];
+                    console.log(`🔍 Variable ${variable} -> Column ${columnName} -> Value: ${value}`);
+                    if (value) {
+                        variables[variable] = value.toString();
                     }
                 });
+                console.log(`🔍 Final variables for ${recipient}:`, variables);
                 // Send the message
                 await sendTemplateMessage(businessInfo.whatsapp_number_id, businessInfo.access_token, recipient, templateName, language, variables, template.components, campaignId.toString());
                 successfulSends++;
@@ -1997,7 +2272,7 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
         // Update campaign log
         await index_1.pool.query(`UPDATE campaign_logs 
        SET successful_sends = $1, failed_sends = $2, status = $3, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $4`, [successfulSends, failedSends, 'COMPLETED', campaignId]);
+       WHERE id = $4`, [successfulSends, failedSends, 'completed', campaignId]);
         res.json({
             success: true,
             data: {
