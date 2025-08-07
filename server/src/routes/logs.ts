@@ -1,8 +1,59 @@
 import express from 'express';
+import { pool } from '../index';
 import { requireAuth, requireAdmin } from '../middleware/auth';
 import { logCleanupService } from '../services/logCleanup';
 
 const router = express.Router();
+
+// Get message logs (all logs for now - no user filtering)
+router.get('/', requireAuth, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const offset = (page - 1) * limit;
+
+    // Get total count
+    const countResult = await pool.query('SELECT COUNT(*) as total FROM message_logs');
+    const total = parseInt(countResult.rows[0].total);
+
+    // Get paginated message logs
+    const logsResult = await pool.query(
+      `SELECT 
+        id,
+        recipient_number,
+        status,
+        message_id,
+        created_at
+      FROM message_logs 
+      ORDER BY created_at DESC 
+      LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+
+    const logs = logsResult.rows.map(row => ({
+      id: row.id,
+      recipientNumber: row.recipient_number,
+      status: row.status,
+      messageId: row.message_id,
+      createdAt: row.created_at
+    }));
+
+    res.json({
+      logs,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(total / limit),
+        total,
+        hasNext: page < Math.ceil(total / limit),
+        hasPrev: page > 1
+      }
+    });
+
+  } catch (error) {
+    console.error('Get logs error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // Get statistics about old logs that would be deleted
 router.get('/cleanup/stats', requireAuth, requireAdmin, async (req, res) => {

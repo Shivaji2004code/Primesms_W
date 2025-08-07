@@ -4,10 +4,49 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
+const index_1 = require("../index");
 const auth_1 = require("../middleware/auth");
 const logCleanup_1 = require("../services/logCleanup");
 const router = express_1.default.Router();
-// Get statistics about old logs that would be deleted
+router.get('/', auth_1.requireAuth, async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const offset = (page - 1) * limit;
+        const countResult = await index_1.pool.query('SELECT COUNT(*) as total FROM message_logs');
+        const total = parseInt(countResult.rows[0].total);
+        const logsResult = await index_1.pool.query(`SELECT 
+        id,
+        recipient_number,
+        status,
+        message_id,
+        created_at
+      FROM message_logs 
+      ORDER BY created_at DESC 
+      LIMIT $1 OFFSET $2`, [limit, offset]);
+        const logs = logsResult.rows.map(row => ({
+            id: row.id,
+            recipientNumber: row.recipient_number,
+            status: row.status,
+            messageId: row.message_id,
+            createdAt: row.created_at
+        }));
+        res.json({
+            logs,
+            pagination: {
+                currentPage: page,
+                totalPages: Math.ceil(total / limit),
+                total,
+                hasNext: page < Math.ceil(total / limit),
+                hasPrev: page > 1
+            }
+        });
+    }
+    catch (error) {
+        console.error('Get logs error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 router.get('/cleanup/stats', auth_1.requireAuth, auth_1.requireAdmin, async (req, res) => {
     try {
         const stats = await logCleanup_1.logCleanupService.getOldLogsStats();
@@ -29,7 +68,6 @@ router.get('/cleanup/stats', auth_1.requireAuth, auth_1.requireAdmin, async (req
         });
     }
 });
-// Manual cleanup of old logs (admin only)
 router.post('/cleanup', auth_1.requireAuth, auth_1.requireAdmin, async (req, res) => {
     try {
         const result = await logCleanup_1.logCleanupService.cleanupOldLogs();
@@ -52,12 +90,11 @@ router.post('/cleanup', auth_1.requireAuth, auth_1.requireAdmin, async (req, res
         });
     }
 });
-// Get cleanup service status
 router.get('/cleanup/status', auth_1.requireAuth, auth_1.requireAdmin, (req, res) => {
     res.json({
         success: true,
         status: {
-            cronJobActive: true, // The service starts automatically
+            cronJobActive: true,
             cleanupThreshold: '90 days',
             scheduleTime: '02:00 UTC daily',
             timezone: 'UTC'

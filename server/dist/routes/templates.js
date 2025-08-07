@@ -10,7 +10,6 @@ const path_1 = __importDefault(require("path"));
 const axios_1 = __importDefault(require("axios"));
 const index_1 = require("../index");
 const auth_1 = require("../middleware/auth");
-// Configure multer for file uploads
 const storage = multer_1.default.diskStorage({
     destination: (req, file, cb) => {
         const uploadDir = path_1.default.join(__dirname, '../../uploads');
@@ -27,10 +26,9 @@ const storage = multer_1.default.diskStorage({
 const upload = (0, multer_1.default)({
     storage,
     limits: {
-        fileSize: 5 * 1024 * 1024 // 5MB limit
+        fileSize: 5 * 1024 * 1024
     },
     fileFilter: (req, file, cb) => {
-        // Only allow images for now
         if (file.mimetype.startsWith('image/')) {
             cb(null, true);
         }
@@ -40,9 +38,7 @@ const upload = (0, multer_1.default)({
     }
 });
 const router = express_1.default.Router();
-// All template routes require authentication
 router.use(auth_1.requireAuth);
-// NEW APPROACH: Try to get Business Manager ID and use for template media upload
 const uploadMediaForTemplate = async (phoneNumberId, filePath, accessToken, mimeType = 'image/jpeg') => {
     console.log('\n🚀 UPLOADING MEDIA FOR TEMPLATE CREATION (BUSINESS MANAGER APPROACH)');
     console.log('=================================================================');
@@ -51,7 +47,6 @@ const uploadMediaForTemplate = async (phoneNumberId, filePath, accessToken, mime
     console.log(`🔑 Token: ${accessToken.substring(0, 20)}...`);
     console.log(`📎 MIME Type: ${mimeType}`);
     try {
-        // First, try to get Business Manager ID from debug token
         console.log('🔍 Step 1: Getting Business Manager ID from access token...');
         const debugResponse = await axios_1.default.get(`https://graph.facebook.com/v21.0/debug_token?input_token=${accessToken}`, {
             headers: {
@@ -62,7 +57,6 @@ const uploadMediaForTemplate = async (phoneNumberId, filePath, accessToken, mime
         const appId = debugResponse.data?.data?.app_id;
         console.log('📱 App ID found:', appId);
         if (appId) {
-            // Try using the app ID for uploads endpoint
             console.log('📤 Step 2: Trying Business Manager upload approach...');
             const fileStats = fs_1.default.statSync(filePath);
             const fileName = path_1.default.basename(filePath);
@@ -79,7 +73,6 @@ const uploadMediaForTemplate = async (phoneNumberId, filePath, accessToken, mime
             });
             const sessionId = sessionResponse.data.id;
             console.log('✅ Upload session created:', sessionId);
-            // Upload file content
             console.log('📤 Uploading file content...');
             const fileContent = fs_1.default.readFileSync(filePath);
             const uploadResponse = await axios_1.default.post(`https://graph.facebook.com/v21.0/${sessionId}`, fileContent, {
@@ -91,20 +84,17 @@ const uploadMediaForTemplate = async (phoneNumberId, filePath, accessToken, mime
             });
             console.log('✅ Business Manager upload successful!');
             console.log('📋 Upload Response:', JSON.stringify(uploadResponse.data, null, 2));
-            // Check for file handle in response
             const fileHandle = uploadResponse.data.h;
             if (fileHandle) {
                 console.log('🎯 Got file handle:', fileHandle);
                 return fileHandle;
             }
         }
-        // Fallback: use regular media upload
         console.log('⚠️ Falling back to regular media upload...');
     }
     catch (debugError) {
         console.log('⚠️ Business Manager approach failed, trying regular upload:', debugError.message);
     }
-    // Fallback to regular media upload
     const FormData = require('form-data');
     const form = new FormData();
     form.append('file', fs_1.default.createReadStream(filePath));
@@ -128,13 +118,11 @@ const uploadMediaForTemplate = async (phoneNumberId, filePath, accessToken, mime
         throw error;
     }
 };
-// WhatsApp Media Upload API helper function (for messaging)
 const uploadMediaToWhatsApp = async (filePath, fileName, mimeType, businessInfo) => {
     const { accessToken } = businessInfo;
     if (!accessToken) {
         throw new Error('WhatsApp Business API access token not configured');
     }
-    // Get phone number ID from business info
     const phoneNumberId = businessInfo.phoneNumberId || businessInfo.whatsapp_number_id;
     if (!phoneNumberId) {
         throw new Error('WhatsApp phone number ID not configured');
@@ -142,19 +130,15 @@ const uploadMediaToWhatsApp = async (filePath, fileName, mimeType, businessInfo)
     console.log(`📤 Uploading media to WhatsApp:`);
     console.log(`   - Phone Number ID: ${phoneNumberId}`);
     console.log(`   - File: ${fileName} (${mimeType})`);
-    // Create FormData for the upload using the EXACT working pattern
     const FormData = require('form-data');
     const formData = new FormData();
-    // Read file as stream (not buffer) - this is key!
     const fileStream = fs_1.default.createReadStream(filePath);
-    // Append fields in the exact order from working example
     formData.append('file', fileStream);
     formData.append('type', mimeType);
     formData.append('messaging_product', 'whatsapp');
     console.log(`   - FormData prepared with file stream`);
     console.log(`   - Sending to: https://graph.facebook.com/v21.0/${phoneNumberId}/media`);
     try {
-        // Upload to WhatsApp Media API using axios with exact pattern
         const uploadResponse = await axios_1.default.post(`https://graph.facebook.com/v21.0/${phoneNumberId}/media`, formData, {
             headers: {
                 ...formData.getHeaders(),
@@ -164,7 +148,6 @@ const uploadMediaToWhatsApp = async (filePath, fileName, mimeType, businessInfo)
         console.log(`📥 WhatsApp Media API response status: ${uploadResponse.status}`);
         console.log(`📥 WhatsApp Media API response:`, JSON.stringify(uploadResponse.data, null, 2));
         console.log(`✅ Media uploaded successfully, ID: ${uploadResponse.data.id}`);
-        // Return the media ID for template creation
         return uploadResponse.data.id;
     }
     catch (error) {
@@ -172,23 +155,17 @@ const uploadMediaToWhatsApp = async (filePath, fileName, mimeType, businessInfo)
         throw new Error(`Media upload error: ${error.response?.data?.error?.message || error.message}`);
     }
 };
-// Create WhatsApp Template - Main function
 const createWhatsAppTemplate = async (templateData, businessInfo, customExamples = {}) => {
     console.log('\n🚀 CREATING WHATSAPP TEMPLATE');
     console.log('==============================');
     console.log(`📋 Template Name: ${templateData.name}`);
     console.log(`📂 Category: ${templateData.category}`);
     console.log(`🌐 Language: ${templateData.language || 'en_US'}`);
-    // META WHATSAPP RULES: Process components according to category-specific rules
     let processedComponents = [];
-    // AUTHENTICATION: Use new components structure with BODY, FOOTER, and BUTTONS
     if (templateData.category === 'AUTHENTICATION') {
         console.log('🔐 Processing AUTHENTICATION template with new 2025 format...');
-        // Extract authentication-specific data from templateData
         const authData = templateData;
-        // Build components array for new authentication template format
         const components = [];
-        // 1. BODY component with optional security recommendation
         const bodyComponent = {
             type: 'BODY'
         };
@@ -196,14 +173,12 @@ const createWhatsAppTemplate = async (templateData, businessInfo, customExamples
             bodyComponent.add_security_recommendation = authData.add_security_recommendation;
         }
         components.push(bodyComponent);
-        // 2. FOOTER component with optional code expiration
         if (authData.code_expiration_minutes !== undefined) {
             components.push({
                 type: 'FOOTER',
                 code_expiration_minutes: authData.code_expiration_minutes
             });
         }
-        // 3. BUTTONS component with OTP button
         const buttonsComponent = {
             type: 'BUTTONS',
             buttons: [
@@ -213,11 +188,9 @@ const createWhatsAppTemplate = async (templateData, businessInfo, customExamples
                 }
             ]
         };
-        // Add button text if provided (for display purposes)
         if (authData.otp_button_text) {
             buttonsComponent.buttons[0].text = authData.otp_button_text;
         }
-        // Add supported apps for ONE_TAP if provided
         if (authData.otp_type === 'ONE_TAP' && authData.supported_apps) {
             buttonsComponent.buttons[0].supported_apps = authData.supported_apps;
         }
@@ -225,10 +198,8 @@ const createWhatsAppTemplate = async (templateData, businessInfo, customExamples
         processedComponents = components;
         console.log('🔐 AUTHENTICATION template components:', JSON.stringify(processedComponents, null, 2));
     }
-    // MARKETING: Allow all components like UTILITY
     else if (templateData.category === 'MARKETING') {
         processedComponents = templateData.components.map(component => {
-            // CORRECT: Handle IMAGE headers with header_handle
             if (component.type === 'HEADER' && component.format === 'IMAGE') {
                 let mediaHandle = '';
                 if (component.example?.header_handle) {
@@ -245,7 +216,6 @@ const createWhatsAppTemplate = async (templateData, businessInfo, customExamples
                 console.log(`🔍 IMAGE HEADER DEBUG: mediaHandle = "${mediaHandle}"`);
                 console.log(`🔍 IMAGE HEADER type: ${typeof mediaHandle}`);
                 console.log(`🔍 IMAGE HEADER length: ${mediaHandle.length}`);
-                // Validate media handle before using it
                 if (!mediaHandle || typeof mediaHandle !== 'string' || mediaHandle.trim().length === 0) {
                     throw new Error(`Invalid media handle for IMAGE template: "${mediaHandle}"`);
                 }
@@ -253,26 +223,22 @@ const createWhatsAppTemplate = async (templateData, businessInfo, customExamples
                     type: 'HEADER',
                     format: 'IMAGE',
                     example: {
-                        header_handle: [mediaHandle] // CORRECT: Use header_handle as per Meta API
+                        header_handle: [mediaHandle]
                     }
                 };
             }
-            // Handle TEXT headers with variables
             if (component.type === 'HEADER' && component.format === 'TEXT' && component.text) {
                 return processVariablesInComponent(component, customExamples);
             }
-            // Handle BODY components with variables
             if (component.type === 'BODY' && component.text) {
                 return processVariablesInComponent(component, customExamples);
             }
-            // Handle FOOTER components
             if (component.type === 'FOOTER') {
                 return {
                     type: 'FOOTER',
                     text: component.text
                 };
             }
-            // Handle BUTTONS components
             if (component.type === 'BUTTONS') {
                 return component;
             }
@@ -280,10 +246,8 @@ const createWhatsAppTemplate = async (templateData, businessInfo, customExamples
         });
         console.log('📢 MARKETING template: All components allowed');
     }
-    // UTILITY: All components allowed
     else if (templateData.category === 'UTILITY') {
         processedComponents = templateData.components.map(component => {
-            // CORRECT: Handle IMAGE headers with header_handle
             if (component.type === 'HEADER' && component.format === 'IMAGE') {
                 let mediaHandle = '';
                 if (component.example?.header_handle) {
@@ -295,13 +259,11 @@ const createWhatsAppTemplate = async (templateData, businessInfo, customExamples
                     }
                 }
                 else if (component.media?.id) {
-                    // Fallback to media.id if header_handle not available
                     mediaHandle = component.media.id;
                 }
                 console.log(`🔍 UTILITY IMAGE HEADER DEBUG: mediaHandle = "${mediaHandle}"`);
                 console.log(`🔍 UTILITY IMAGE HEADER type: ${typeof mediaHandle}`);
                 console.log(`🔍 UTILITY IMAGE HEADER length: ${mediaHandle.length}`);
-                // Validate media handle before using it
                 if (!mediaHandle || typeof mediaHandle !== 'string' || mediaHandle.trim().length === 0) {
                     throw new Error(`Invalid media handle for IMAGE template: "${mediaHandle}"`);
                 }
@@ -309,26 +271,22 @@ const createWhatsAppTemplate = async (templateData, businessInfo, customExamples
                     type: 'HEADER',
                     format: 'IMAGE',
                     example: {
-                        header_handle: [mediaHandle] // CORRECT: Use header_handle as per Meta API
+                        header_handle: [mediaHandle]
                     }
                 };
             }
-            // Handle TEXT headers with variables
             if (component.type === 'HEADER' && component.format === 'TEXT' && component.text) {
                 return processVariablesInComponent(component, customExamples);
             }
-            // Handle BODY components with variables
             if (component.type === 'BODY' && component.text) {
                 return processVariablesInComponent(component, customExamples);
             }
-            // Handle FOOTER components
             if (component.type === 'FOOTER') {
                 return {
                     type: 'FOOTER',
                     text: component.text
                 };
             }
-            // Handle BUTTONS components
             if (component.type === 'BUTTONS') {
                 return component;
             }
@@ -336,7 +294,6 @@ const createWhatsAppTemplate = async (templateData, businessInfo, customExamples
         });
         console.log('📎 UTILITY template: All components allowed');
     }
-    // FIXED: Build payload without namespace (not required for Cloud API)
     const payload = {
         name: templateData.name,
         language: templateData.language || 'en_US',
@@ -344,7 +301,6 @@ const createWhatsAppTemplate = async (templateData, businessInfo, customExamples
         components: processedComponents,
         allow_category_change: templateData.allow_category_change ?? true
     };
-    // Add authentication-specific fields
     if (templateData.category === 'AUTHENTICATION') {
         if (templateData.add_security_recommendation !== undefined) {
             payload.add_security_recommendation = templateData.add_security_recommendation;
@@ -358,7 +314,6 @@ const createWhatsAppTemplate = async (templateData, businessInfo, customExamples
     }
     console.log('📤 Template creation payload (FIXED):');
     console.log(JSON.stringify(payload, null, 2));
-    // EXTRA DEBUG: Check header_handle in payload
     const headerComponent = payload.components.find((c) => c.type === 'HEADER' && c.format === 'IMAGE');
     if (headerComponent) {
         console.log('🔍 FINAL PAYLOAD DEBUG - Header component:', JSON.stringify(headerComponent, null, 2));
@@ -378,7 +333,6 @@ const createWhatsAppTemplate = async (templateData, businessInfo, customExamples
     catch (error) {
         console.error('❌ Template creation failed!');
         console.error('❌ Error:', error.response?.data || error.message);
-        // Check for specific media handle error
         if (error.response?.data?.error?.error_subcode === 2494102) {
             console.error('🚨 SPECIFIC ERROR: Invalid header_handle detected!');
             console.error('💡 This means the media handle used in header_handle is invalid or expired');
@@ -387,14 +341,11 @@ const createWhatsAppTemplate = async (templateData, businessInfo, customExamples
         throw error;
     }
 };
-// FIXED: Process variables in components - now expects {{1}}, {{2}} format from frontend
 const processVariablesInComponent = (component, customExamples = {}) => {
     if (!component.text)
         return component;
-    // Find numerical variables like {{1}}, {{2}}, etc.
     const variableMatches = component.text.match(/\{\{\d+\}\}/g) || [];
     if (variableMatches.length === 0) {
-        // No variables, return with simple text format (this works for all component types)
         return {
             ...component,
             text: component.text
@@ -403,7 +354,6 @@ const processVariablesInComponent = (component, customExamples = {}) => {
     console.log(`🔍 Processing ${component.type} component with ${variableMatches.length} variables`);
     console.log(`📝 Text with variables: ${component.text}`);
     console.log(`🏷️ Found variables: ${variableMatches.join(', ')}`);
-    // Generate example values for each variable using custom examples or fallback
     const exampleValues = [];
     variableMatches.forEach((variable) => {
         const variableNumber = variable.replace(/[{}]/g, '');
@@ -411,30 +361,26 @@ const processVariablesInComponent = (component, customExamples = {}) => {
         exampleValues.push(exampleValue);
         console.log(`📋 Variable ${variableNumber} -> Example: "${exampleValue}"`);
     });
-    // Build the processed component - use simple text format for all (Meta API accepts both)
     const processedComponent = {
         ...component,
-        text: component.text // Keep {{1}}, {{2}} format for all component types
+        text: component.text
     };
-    // Add the mandatory example block per Meta API requirements - EXACT FORMAT
     if (component.type === 'BODY') {
         processedComponent.example = {
-            body_text: [exampleValues] // Double array: [["value1", "value2"]]
+            body_text: [exampleValues]
         };
         console.log(`📋 Added body_text example: ${JSON.stringify([exampleValues])}`);
     }
     else if (component.type === 'HEADER' && component.format === 'TEXT') {
         processedComponent.example = {
-            header_text: exampleValues // Single array: ["value1"]
+            header_text: exampleValues
         };
         console.log(`📋 Added header_text example: ${JSON.stringify(exampleValues)}`);
     }
     return processedComponent;
 };
-// Helper function to generate example values based on variable names
 const generateExampleValue = (variableName) => {
     const lowerName = variableName.toLowerCase();
-    // Generate contextual examples based on variable name
     if (lowerName.includes('otp') || lowerName.includes('code'))
         return '123456';
     if (lowerName.includes('name') || lowerName.includes('user'))
@@ -459,10 +405,8 @@ const generateExampleValue = (variableName) => {
         return 'Service Name';
     if (lowerName.includes('discount') || lowerName.includes('percent'))
         return '25';
-    // Default generic example
     return `Sample${variableName.charAt(0).toUpperCase() + variableName.slice(1)}`;
 };
-// Get template status from Meta API
 const getTemplateStatus = async (templateId, accessToken) => {
     console.log(`🔍 Querying template status for ID: ${templateId}`);
     try {
@@ -478,11 +422,9 @@ const getTemplateStatus = async (templateId, accessToken) => {
     }
     catch (error) {
         console.error('❌ Failed to get template status:', error.response?.data || error.message);
-        // Don't throw error - this is optional status checking
         return null;
     }
 };
-// Get namespace helper
 const getNamespace = async (wabaId, accessToken) => {
     console.log(`🔍 Getting namespace for WABA: ${wabaId}`);
     try {
@@ -500,7 +442,6 @@ const getNamespace = async (wabaId, accessToken) => {
         throw new Error(`Failed to get namespace: ${error.response?.data?.error?.message || error.message}`);
     }
 };
-// Get all templates for the authenticated user
 router.get('/', async (req, res) => {
     try {
         const userId = req.session.user.id;
@@ -510,7 +451,6 @@ router.get('/', async (req, res) => {
         const status = req.query.status;
         const category = req.query.category;
         const language = req.query.language;
-        // Build the WHERE clause
         let whereClause = 'WHERE user_id = $1';
         const params = [userId];
         let paramCount = 1;
@@ -529,11 +469,9 @@ router.get('/', async (req, res) => {
             whereClause += ` AND language = $${paramCount}`;
             params.push(language);
         }
-        // Get total count
         const countQuery = `SELECT COUNT(*) FROM templates ${whereClause}`;
         const countResult = await index_1.pool.query(countQuery, params);
         const totalTemplates = parseInt(countResult.rows[0].count);
-        // Get templates
         const templatesQuery = `
       SELECT id, user_id, name, category, language, status, components, 
              template_id, message_send_ttl_seconds, allow_category_change, 
@@ -576,7 +514,6 @@ router.get('/', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Get specific template by ID
 router.get('/:id', async (req, res) => {
     try {
         const userId = req.session.user.id;
@@ -614,18 +551,15 @@ router.get('/:id', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Create new template - WITH IMAGE UPLOAD SUPPORT
 router.post('/', upload.single('headerMedia'), async (req, res) => {
     try {
         const userId = req.session.user.id;
         const templateData = req.body;
-        // Manually construct components from form data
         const components = [];
         if (req.body.headerText) {
             components.push({ type: 'HEADER', format: 'TEXT', text: req.body.headerText });
         }
         else if (req.file) {
-            // The file upload logic will handle adding the header component later
             components.push({ type: 'HEADER', format: 'IMAGE' });
         }
         if (req.body.bodyText) {
@@ -643,11 +577,9 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
             }
             catch (e) {
                 console.error("Error parsing buttons JSON:", e);
-                // Optionally, you could return a 400 error here
             }
         }
         templateData.components = components;
-        // Parse variable examples if provided
         let variableExamples = {};
         if (req.body.variableExamples) {
             try {
@@ -658,44 +590,36 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
                 console.error("Error parsing variableExamples JSON:", e);
             }
         }
-        // Validation
         if (!templateData.name || !templateData.category || !templateData.components) {
             return res.status(400).json({
                 error: 'Name, category, and components are required'
             });
         }
-        // Validate template name format
         if (!/^[a-z0-9_]{1,512}$/.test(templateData.name)) {
             return res.status(400).json({
                 error: 'Template name must be 1-512 lowercase characters (a-z), numbers, or underscores'
             });
         }
-        // Check for duplicate template name for this user
         const existingTemplate = await index_1.pool.query('SELECT id FROM templates WHERE user_id = $1 AND name = $2', [userId, templateData.name]);
         if (existingTemplate.rows.length > 0) {
             return res.status(409).json({
                 error: 'A template with this name already exists'
             });
         }
-        // Validate components
         const hasBody = templateData.components.some(c => c.type === 'BODY');
         if (!hasBody) {
             return res.status(400).json({
                 error: 'Template must have at least one BODY component'
             });
         }
-        // MARKETING templates no longer require footer (all components are optional except BODY)
         let template_id = null;
         let whatsapp_response = null;
         let status = 'DRAFT';
         let rejection_reason = null;
-        // Handle image upload for header if present
         if (req.file) {
             console.log('📄 Processing uploaded header media...');
-            // Get user's business info for upload
             const businessResult = await index_1.pool.query('SELECT waba_id, access_token, whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
             if (businessResult.rows.length === 0) {
-                // Clean up uploaded file
                 fs_1.default.unlinkSync(req.file.path);
                 return res.status(400).json({
                     error: 'WhatsApp Business API credentials not configured. Please set up your business information first.'
@@ -711,35 +635,30 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
             console.log(`  - Phone Number ID: ${businessInfo.phoneNumberId}`);
             console.log(`  - Access Token: ${businessInfo.accessToken.substring(0, 20)}...`);
             try {
-                // SIMPLE: Upload media for template creation using regular media upload
                 const mediaId = await uploadMediaForTemplate(businessInfo.phoneNumberId, req.file.path, businessInfo.accessToken, req.file.mimetype);
                 console.log('✅ Template media uploaded successfully, ID:', mediaId);
                 console.log('🔍 MEDIA ID DEBUG: type:', typeof mediaId);
                 console.log('🔍 MEDIA ID DEBUG: length:', mediaId?.length);
                 console.log('🔍 MEDIA ID DEBUG: value:', JSON.stringify(mediaId));
-                // Validate media ID format
                 if (!mediaId || typeof mediaId !== 'string' || mediaId.length < 10) {
                     throw new Error(`Invalid media ID format received: "${mediaId}". Expected a valid WhatsApp media ID.`);
                 }
-                // FIXED: Update image header component with media ID
                 templateData.components = templateData.components.map(component => {
                     if (component.type === 'HEADER' && component.format === 'IMAGE') {
                         return {
                             ...component,
-                            media: undefined, // Remove media property
+                            media: undefined,
                             example: {
-                                header_handle: [mediaId] // Use the media ID from regular upload
+                                header_handle: [mediaId]
                             }
                         };
                     }
                     return component;
                 });
-                // Clean up uploaded file
                 fs_1.default.unlinkSync(req.file.path);
             }
             catch (uploadError) {
                 console.error('❌ Media upload failed:', uploadError);
-                // Clean up uploaded file
                 if (fs_1.default.existsSync(req.file.path)) {
                     fs_1.default.unlinkSync(req.file.path);
                 }
@@ -749,10 +668,8 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
                 });
             }
         }
-        // If submit_to_whatsapp flag is true, try to create template in WhatsApp
         if (req.body.submit_to_whatsapp || req.body.submit_to_whatsapp) {
             try {
-                // Get user's business info
                 const businessResult = await index_1.pool.query('SELECT waba_id, access_token FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
                 if (businessResult.rows.length === 0) {
                     return res.status(400).json({
@@ -770,12 +687,10 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
             }
             catch (whatsappError) {
                 console.error('WhatsApp API error:', whatsappError);
-                // Save as draft with rejection reason if WhatsApp submission fails
                 rejection_reason = whatsappError.message;
                 status = 'REJECTED';
             }
         }
-        // Extract media information from components if present
         let header_media_id = null;
         let header_type = 'NONE';
         let header_handle = null;
@@ -784,10 +699,8 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
             if (component.type === 'HEADER') {
                 if (component.format === 'IMAGE' && component.example?.header_handle) {
                     header_type = 'STATIC_IMAGE';
-                    // CORRECT: Store the header_handle for future reference
                     if (Array.isArray(component.example.header_handle) && component.example.header_handle.length > 0) {
                         header_handle = component.example.header_handle[0];
-                        // Media handle is used for both template creation and messaging
                         header_media_id = header_handle;
                         media_id = header_handle;
                     }
@@ -809,7 +722,6 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
                 break;
             }
         }
-        // Save template to database
         const result = await index_1.pool.query(`INSERT INTO templates 
        (user_id, name, category, language, status, components, template_id, 
         message_send_ttl_seconds, allow_category_change, whatsapp_response, rejection_reason, 
@@ -860,53 +772,44 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Create Authentication Template - Specific route for authentication templates
 router.post('/authentication', async (req, res) => {
     try {
         const userId = req.session.user.id;
-        const { name, language = 'en_US', otp_type = 'COPY_CODE', otp_button_text = 'Copy Code', code_expiration_minutes, add_security_recommendation = false, allow_category_change = false, supported_apps // For ONE_TAP authentication
-         } = req.body;
+        const { name, language = 'en_US', otp_type = 'COPY_CODE', otp_button_text = 'Copy Code', code_expiration_minutes, add_security_recommendation = false, allow_category_change = false, supported_apps } = req.body;
         console.log('🔐 Creating AUTHENTICATION template with new 2025 format:', JSON.stringify(req.body, null, 2));
-        // Validation
         if (!name) {
             return res.status(400).json({
                 error: 'Template name is required for authentication templates'
             });
         }
-        // Validate template name format
         if (!/^[a-z0-9_]{1,60}$/.test(name)) {
             return res.status(400).json({
                 error: 'Template name must be 1-60 lowercase characters (a-z), numbers, or underscores'
             });
         }
-        // Validate OTP type
         if (!['COPY_CODE', 'ONE_TAP'].includes(otp_type)) {
             return res.status(400).json({
                 error: 'otp_type must be either COPY_CODE or ONE_TAP'
             });
         }
-        // Validate expiration minutes if provided
         if (code_expiration_minutes !== undefined &&
             (code_expiration_minutes < 1 || code_expiration_minutes > 90)) {
             return res.status(400).json({
                 error: 'code_expiration_minutes must be between 1 and 90'
             });
         }
-        // Check for duplicate template name for this user
         const existingTemplate = await index_1.pool.query('SELECT id FROM templates WHERE user_id = $1 AND name = $2', [userId, name]);
         if (existingTemplate.rows.length > 0) {
             return res.status(409).json({
                 error: 'A template with this name already exists'
             });
         }
-        // Create the template data structure with new authentication format
         const templateData = {
             name,
             language,
             category: 'AUTHENTICATION',
-            components: [], // Will be processed by the authentication logic
+            components: [],
             allow_category_change,
-            // Authentication-specific fields
             otp_type,
             otp_button_text,
             add_security_recommendation,
@@ -917,7 +820,6 @@ router.post('/authentication', async (req, res) => {
         let whatsapp_response = null;
         let status = 'DRAFT';
         let rejection_reason = null;
-        // Get user's business info for WhatsApp submission
         const businessResult = await index_1.pool.query('SELECT waba_id, access_token FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
         if (businessResult.rows.length === 0) {
             return res.status(400).json({
@@ -928,20 +830,16 @@ router.post('/authentication', async (req, res) => {
             wabaId: businessResult.rows[0].waba_id,
             accessToken: businessResult.rows[0].access_token
         };
-        // Try to create template in WhatsApp
         try {
             const whatsappResult = await createWhatsAppTemplate(templateData, businessInfo, {});
             template_id = whatsappResult.id;
             whatsapp_response = whatsappResult;
-            // Meta API might return status immediately or not
-            // If status is provided, use it; otherwise try to query it
             if (whatsappResult.status) {
                 status = whatsappResult.status.toUpperCase();
                 console.log(`✅ Authentication template created with status: ${status}`);
             }
             else {
                 console.log('🔍 Status not returned immediately, attempting to query...');
-                // Try to get status by querying the template
                 const queriedStatus = await getTemplateStatus(whatsappResult.id, businessInfo.accessToken);
                 if (queriedStatus) {
                     status = queriedStatus.toUpperCase();
@@ -961,7 +859,6 @@ router.post('/authentication', async (req, res) => {
             rejection_reason = whatsappError.response?.data?.error?.message || whatsappError.message;
             status = 'REJECTED';
         }
-        // Save template to database
         const result = await index_1.pool.query(`INSERT INTO templates 
        (user_id, name, category, language, status, components, template_id, 
         allow_category_change, whatsapp_response, rejection_reason, header_type)
@@ -975,10 +872,10 @@ router.post('/authentication', async (req, res) => {
             status,
             JSON.stringify(templateData.components),
             template_id,
-            false, // allow_category_change always false for authentication
+            false,
             whatsapp_response ? JSON.stringify(whatsapp_response) : null,
             rejection_reason,
-            'NONE' // header_type for authentication templates
+            'NONE'
         ]);
         const newTemplate = result.rows[0];
         res.status(201).json({
@@ -1004,36 +901,30 @@ router.post('/authentication', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Update template
 router.put('/:id', async (req, res) => {
     try {
         const userId = req.session.user.id;
         const { id } = req.params;
         const updateData = req.body;
-        // Check if template exists and belongs to user
         const existingTemplate = await index_1.pool.query('SELECT * FROM templates WHERE id = $1 AND user_id = $2', [id, userId]);
         if (existingTemplate.rows.length === 0) {
             return res.status(404).json({ error: 'Template not found' });
         }
         const template = existingTemplate.rows[0];
-        // Can only update DRAFT or REJECTED templates
         if (!['DRAFT', 'REJECTED'].includes(template.status)) {
             return res.status(400).json({
                 error: 'Can only edit draft or rejected templates'
             });
         }
-        // Build dynamic update query
         const updateFields = [];
         const values = [];
         let paramCount = 0;
         if (updateData.name !== undefined) {
-            // Validate template name
             if (!/^[a-z0-9_]{1,512}$/.test(updateData.name)) {
                 return res.status(400).json({
                     error: 'Template name must be 1-512 lowercase characters (a-z), numbers, or underscores'
                 });
             }
-            // Check for duplicate name (excluding current template)
             const duplicateCheck = await index_1.pool.query('SELECT id FROM templates WHERE user_id = $1 AND name = $2 AND id != $3', [userId, updateData.name, id]);
             if (duplicateCheck.rows.length > 0) {
                 return res.status(409).json({
@@ -1055,18 +946,15 @@ router.put('/:id', async (req, res) => {
             values.push(updateData.language);
         }
         if (updateData.components !== undefined) {
-            // Validate components
             const hasBody = updateData.components.some(c => c.type === 'BODY');
             if (!hasBody) {
                 return res.status(400).json({
                     error: 'Template must have at least one BODY component'
                 });
             }
-            // MARKETING templates no longer require footer (all components are optional except BODY)
             paramCount++;
             updateFields.push(`components = $${paramCount}`);
             values.push(JSON.stringify(updateData.components));
-            // Extract and update media information from components
             let header_media_id = null;
             let header_type = 'NONE';
             let header_handle = null;
@@ -1075,7 +963,6 @@ router.put('/:id', async (req, res) => {
                 if (component.type === 'HEADER') {
                     if (component.format === 'IMAGE' && component.example?.header_handle) {
                         header_type = 'STATIC_IMAGE';
-                        // CORRECT: Use header_handle as per Meta API
                         if (Array.isArray(component.example.header_handle) && component.example.header_handle.length > 0) {
                             header_handle = component.example.header_handle[0];
                             header_media_id = header_handle;
@@ -1088,7 +975,6 @@ router.put('/:id', async (req, res) => {
                     break;
                 }
             }
-            // Update media-related fields
             paramCount++;
             updateFields.push(`header_media_id = $${paramCount}`);
             values.push(header_media_id);
@@ -1115,7 +1001,6 @@ router.put('/:id', async (req, res) => {
         if (updateFields.length === 0) {
             return res.status(400).json({ error: 'No fields to update' });
         }
-        // Reset status to DRAFT and clear WhatsApp-related fields when editing
         updateFields.push(`status = $${paramCount + 1}`);
         updateFields.push(`template_id = $${paramCount + 2}`);
         updateFields.push(`whatsapp_response = $${paramCount + 3}`);
@@ -1158,24 +1043,20 @@ router.put('/:id', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Submit template to WhatsApp for approval
 router.post('/:id/submit', async (req, res) => {
     try {
         const userId = req.session.user.id;
         const { id } = req.params;
-        // Get template
         const templateResult = await index_1.pool.query('SELECT * FROM templates WHERE id = $1 AND user_id = $2', [id, userId]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({ error: 'Template not found' });
         }
         const template = templateResult.rows[0];
-        // Can only submit DRAFT or REJECTED templates
         if (!['DRAFT', 'REJECTED'].includes(template.status)) {
             return res.status(400).json({
                 error: 'Can only submit draft or rejected templates'
             });
         }
-        // Get user's business info
         const businessResult = await index_1.pool.query('SELECT waba_id, access_token FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
         if (businessResult.rows.length === 0) {
             return res.status(400).json({
@@ -1196,7 +1077,6 @@ router.post('/:id/submit', async (req, res) => {
                 allow_category_change: template.allow_category_change
             };
             const whatsappResult = await createWhatsAppTemplate(templateData, businessInfo, {});
-            // Update template with WhatsApp response
             await index_1.pool.query(`UPDATE templates 
          SET status = 'PENDING', template_id = $1, whatsapp_response = $2, 
              rejection_reason = NULL, updated_at = CURRENT_TIMESTAMP
@@ -1209,7 +1089,6 @@ router.post('/:id/submit', async (req, res) => {
         }
         catch (whatsappError) {
             console.error('WhatsApp submission error:', whatsappError);
-            // Update template with rejection reason
             await index_1.pool.query(`UPDATE templates 
          SET status = 'REJECTED', rejection_reason = $1, updated_at = CURRENT_TIMESTAMP
          WHERE id = $2`, [whatsappError.message, id]);
@@ -1224,7 +1103,6 @@ router.post('/:id/submit', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Delete template
 router.delete('/:id', async (req, res) => {
     try {
         const userId = req.session.user.id;
@@ -1247,14 +1125,12 @@ router.delete('/:id', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Get template variables from text content
 router.post('/variables', (req, res) => {
     try {
         const { text } = req.body;
         if (!text || typeof text !== 'string') {
             return res.status(400).json({ error: 'Text content is required' });
         }
-        // Extract variables in {{variable_name}} format
         const variableRegex = /\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g;
         const variables = [];
         let match;
@@ -1271,17 +1147,14 @@ router.post('/variables', (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Upload media for template creation (using resumable upload)
 router.post('/upload-template-media', upload.single('media'), async (req, res) => {
     try {
         const userId = req.session.user.id;
         if (!req.file) {
             return res.status(400).json({ error: 'No file uploaded' });
         }
-        // Get user's business info
         const businessResult = await index_1.pool.query('SELECT waba_id, access_token, whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
         if (businessResult.rows.length === 0) {
-            // Clean up uploaded file
             fs_1.default.unlinkSync(req.file.path);
             return res.status(400).json({
                 error: 'WhatsApp Business API credentials not configured. Please set up your business information first.'
@@ -1294,15 +1167,13 @@ router.post('/upload-template-media', upload.single('media'), async (req, res) =
             phoneNumberId: businessResult.rows[0].whatsapp_number_id
         };
         try {
-            // SIMPLE: Upload to WhatsApp for template creation using regular media upload
             const mediaId = await uploadMediaForTemplate(businessInfo.phoneNumberId, req.file.path, businessInfo.accessToken, req.file.mimetype);
-            // Clean up temporary file
             fs_1.default.unlinkSync(req.file.path);
             res.json({
                 message: 'Template media uploaded successfully',
-                mediaId: mediaId, // Return media ID from regular upload
-                mediaHandle: mediaId, // Keep for backward compatibility
-                templateHandle: mediaId, // Keep for backward compatibility
+                mediaId: mediaId,
+                mediaHandle: mediaId,
+                templateHandle: mediaId,
                 fileName: req.file.originalname,
                 mimeType: req.file.mimetype,
                 size: req.file.size
@@ -1310,7 +1181,6 @@ router.post('/upload-template-media', upload.single('media'), async (req, res) =
         }
         catch (uploadError) {
             console.error('WhatsApp template media upload error:', uploadError);
-            // Clean up temporary file
             if (fs_1.default.existsSync(req.file.path)) {
                 fs_1.default.unlinkSync(req.file.path);
             }
@@ -1322,24 +1192,20 @@ router.post('/upload-template-media', upload.single('media'), async (req, res) =
     }
     catch (error) {
         console.error('Upload template media error:', error);
-        // Clean up temporary file if it exists
         if (req.file && fs_1.default.existsSync(req.file.path)) {
             fs_1.default.unlinkSync(req.file.path);
         }
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Upload media for template header (legacy - for messaging)
 router.post('/upload-media', upload.single('media'), async (req, res) => {
     try {
         const userId = req.session.user.id;
         if (!req.file) {
             return res.status(400).json({ error: 'No file uploaded' });
         }
-        // Get user's business info
         const businessResult = await index_1.pool.query('SELECT waba_id, access_token, whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
         if (businessResult.rows.length === 0) {
-            // Clean up uploaded file
             fs_1.default.unlinkSync(req.file.path);
             return res.status(400).json({
                 error: 'WhatsApp Business API credentials not configured. Please set up your business information first.'
@@ -1351,13 +1217,11 @@ router.post('/upload-media', upload.single('media'), async (req, res) => {
             whatsapp_number_id: businessResult.rows[0].whatsapp_number_id
         };
         try {
-            // Upload to WhatsApp and get media ID
             const mediaId = await uploadMediaToWhatsApp(req.file.path, req.file.originalname, req.file.mimetype, businessInfo);
-            // Clean up temporary file
             fs_1.default.unlinkSync(req.file.path);
             res.json({
                 message: 'Media uploaded successfully',
-                headerHandle: mediaId, // Keep headerHandle for backward compatibility
+                headerHandle: mediaId,
                 mediaId: mediaId,
                 fileName: req.file.originalname,
                 mimeType: req.file.mimetype,
@@ -1366,7 +1230,6 @@ router.post('/upload-media', upload.single('media'), async (req, res) => {
         }
         catch (uploadError) {
             console.error('WhatsApp media upload error:', uploadError);
-            // Clean up temporary file
             if (fs_1.default.existsSync(req.file.path)) {
                 fs_1.default.unlinkSync(req.file.path);
             }
@@ -1378,19 +1241,16 @@ router.post('/upload-media', upload.single('media'), async (req, res) => {
     }
     catch (error) {
         console.error('Upload media error:', error);
-        // Clean up temporary file if it exists
         if (req.file && fs_1.default.existsSync(req.file.path)) {
             fs_1.default.unlinkSync(req.file.path);
         }
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Refresh template status from Meta API
 router.post('/:id/refresh-status', async (req, res) => {
     try {
         const userId = req.session.user.id;
         const { id } = req.params;
-        // Get template from database
         const templateResult = await index_1.pool.query('SELECT * FROM templates WHERE id = $1 AND user_id = $2', [id, userId]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({ error: 'Template not found' });
@@ -1401,7 +1261,6 @@ router.post('/:id/refresh-status', async (req, res) => {
                 error: 'Template does not have a WhatsApp template ID - cannot refresh status'
             });
         }
-        // Get user's business info
         const businessResult = await index_1.pool.query('SELECT access_token FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
         if (businessResult.rows.length === 0) {
             return res.status(400).json({
@@ -1410,11 +1269,9 @@ router.post('/:id/refresh-status', async (req, res) => {
         }
         const accessToken = businessResult.rows[0].access_token;
         console.log(`🔄 Refreshing status for template ${template.name} (ID: ${template.template_id})`);
-        // Query current status from Meta
         const currentStatus = await getTemplateStatus(template.template_id, accessToken);
         if (currentStatus) {
             const normalizedStatus = currentStatus.toUpperCase();
-            // Update database if status changed
             if (normalizedStatus !== template.status) {
                 await index_1.pool.query('UPDATE templates SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [normalizedStatus, id]);
                 console.log(`✅ Template status updated: ${template.status} → ${normalizedStatus}`);

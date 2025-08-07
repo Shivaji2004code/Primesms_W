@@ -7,18 +7,14 @@ const express_1 = __importDefault(require("express"));
 const index_1 = require("../index");
 const auth_1 = require("../middleware/auth");
 const router = express_1.default.Router();
-// All admin routes require admin authentication
 router.use(auth_1.requireAdmin);
-// Get all users with pagination
 router.get('/users', async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const offset = (page - 1) * limit;
-        // Get total count
         const countResult = await index_1.pool.query('SELECT COUNT(*) FROM users');
         const totalUsers = parseInt(countResult.rows[0].count);
-        // Get users
         const result = await index_1.pool.query('SELECT id, name, email, username, phone_number, role, credit_balance, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2', [limit, offset]);
         const users = result.rows.map(user => ({
             id: user.id,
@@ -47,7 +43,6 @@ router.get('/users', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Get specific user by ID
 router.get('/users/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -75,32 +70,26 @@ router.get('/users/:id', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Create new user manually (admin only)
 router.post('/users', async (req, res) => {
     try {
         const { name, email, username, password, phoneNumber, role, creditBalance } = req.body;
-        // Validation
         if (!name || !email || !username || !password) {
             return res.status(400).json({ error: 'Name, email, username, and password are required' });
         }
         if (password.length < 6) {
             return res.status(400).json({ error: 'Password must be at least 6 characters long' });
         }
-        // Email validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
             return res.status(400).json({ error: 'Invalid email format' });
         }
-        // Role validation
         if (role && !['user', 'admin'].includes(role)) {
             return res.status(400).json({ error: 'Role must be either "user" or "admin"' });
         }
-        // Check if user already exists
         const existingUser = await index_1.pool.query('SELECT id FROM users WHERE email = $1 OR username = $2', [email, username]);
         if (existingUser.rows.length > 0) {
             return res.status(409).json({ error: 'User with this email or username already exists' });
         }
-        // Create user
         const result = await index_1.pool.query('INSERT INTO users (name, email, username, password, phone_number, role, credit_balance) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, email, username, phone_number, role, credit_balance, created_at', [name, email, username, password, phoneNumber, role || 'user', creditBalance || 1000]);
         const newUser = result.rows[0];
         res.status(201).json({
@@ -122,17 +111,14 @@ router.post('/users', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Update user
 router.put('/users/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { name, email, username, password, phoneNumber, role, creditBalance } = req.body;
-        // Check if user exists
         const existingUser = await index_1.pool.query('SELECT id FROM users WHERE id = $1', [id]);
         if (existingUser.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
-        // Build dynamic query based on provided fields
         const updateFields = [];
         const values = [];
         let paramCount = 1;
@@ -141,12 +127,10 @@ router.put('/users/:id', async (req, res) => {
             values.push(name);
         }
         if (email !== undefined) {
-            // Email validation
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(email)) {
                 return res.status(400).json({ error: 'Invalid email format' });
             }
-            // Check if email is already taken by another user
             const emailCheck = await index_1.pool.query('SELECT id FROM users WHERE email = $1 AND id != $2', [email, id]);
             if (emailCheck.rows.length > 0) {
                 return res.status(409).json({ error: 'Email is already taken by another user' });
@@ -155,7 +139,6 @@ router.put('/users/:id', async (req, res) => {
             values.push(email);
         }
         if (username !== undefined) {
-            // Check if username is already taken by another user
             const usernameCheck = await index_1.pool.query('SELECT id FROM users WHERE username = $1 AND id != $2', [username, id]);
             if (usernameCheck.rows.length > 0) {
                 return res.status(409).json({ error: 'Username is already taken by another user' });
@@ -191,7 +174,6 @@ router.put('/users/:id', async (req, res) => {
         if (updateFields.length === 0) {
             return res.status(400).json({ error: 'No fields to update' });
         }
-        // Add updated_at
         updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
         values.push(id);
         const query = `
@@ -222,11 +204,9 @@ router.put('/users/:id', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Delete user
 router.delete('/users/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        // Prevent deleting the current admin user
         if (req.session.user.id === id) {
             return res.status(400).json({ error: 'Cannot delete your own account' });
         }
@@ -249,7 +229,6 @@ router.delete('/users/:id', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Get admin dashboard statistics
 router.get('/stats', async (req, res) => {
     try {
         const queries = await Promise.all([
@@ -273,17 +252,14 @@ router.get('/stats', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Get user details with business info
 router.get('/users/:id/details', async (req, res) => {
     try {
         const { id } = req.params;
-        // Get user basic info
         const userResult = await index_1.pool.query('SELECT id, name, email, username, phone_number, role, credit_balance, created_at, updated_at FROM users WHERE id = $1', [id]);
         if (userResult.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
         const user = userResult.rows[0];
-        // Get business info
         const businessResult = await index_1.pool.query(`SELECT id, user_id, business_name, whatsapp_number, whatsapp_number_id, 
        waba_id, access_token, webhook_url, webhook_verify_token, is_active, 
        created_at, updated_at 
@@ -317,7 +293,6 @@ router.get('/users/:id/details', async (req, res) => {
                 updatedAt: business.updated_at,
             };
         }
-        // Convert to frontend-friendly format
         const responseUser = {
             id: userWithBusiness.id,
             name: userWithBusiness.name,
@@ -350,11 +325,9 @@ router.get('/users/:id/details', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Get user's business info
 router.get('/users/:id/business-info', async (req, res) => {
     try {
         const { id } = req.params;
-        // Verify user exists
         const userCheck = await index_1.pool.query('SELECT id FROM users WHERE id = $1', [id]);
         if (userCheck.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
@@ -388,28 +361,23 @@ router.get('/users/:id/business-info', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Update/Create user's business info
 router.put('/users/:id/business-info', async (req, res) => {
     try {
         const { id } = req.params;
         const { businessName, whatsappNumber, whatsappNumberId, wabaId, accessToken, webhookUrl, webhookVerifyToken, isActive } = req.body;
-        // Verify user exists
         const userCheck = await index_1.pool.query('SELECT id FROM users WHERE id = $1', [id]);
         if (userCheck.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
-        // Validation
         if (whatsappNumber && !/^\+?[\d\s-()]+$/.test(whatsappNumber)) {
             return res.status(400).json({ error: 'Invalid WhatsApp number format' });
         }
         if (webhookUrl && !/^https?:\/\/.+/.test(webhookUrl)) {
             return res.status(400).json({ error: 'Webhook URL must be a valid HTTP/HTTPS URL' });
         }
-        // Check if business info already exists
         const existingResult = await index_1.pool.query('SELECT id FROM user_business_info WHERE user_id = $1', [id]);
         let result;
         if (existingResult.rows.length > 0) {
-            // Update existing record
             result = await index_1.pool.query(`UPDATE user_business_info 
          SET business_name = $2, whatsapp_number = $3, whatsapp_number_id = $4,
              waba_id = $5, access_token = $6, webhook_url = $7, 
@@ -421,7 +389,6 @@ router.put('/users/:id/business-info', async (req, res) => {
                 webhookUrl, webhookVerifyToken, isActive ?? true]);
         }
         else {
-            // Create new record
             result = await index_1.pool.query(`INSERT INTO user_business_info 
          (user_id, business_name, whatsapp_number, whatsapp_number_id, waba_id, 
           access_token, webhook_url, webhook_verify_token, is_active)
@@ -456,19 +423,15 @@ router.put('/users/:id/business-info', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Get user's templates for admin management
 router.get('/users/:id/templates', async (req, res) => {
     try {
         const { id } = req.params;
-        // Verify user exists
         const userCheck = await index_1.pool.query('SELECT id FROM users WHERE id = $1', [id]);
         if (userCheck.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
-        // Get templates with stats
         const templatesResult = await index_1.pool.query(`SELECT id, name, category, language, status, components, created_at, updated_at 
        FROM templates WHERE user_id = $1 ORDER BY created_at DESC`, [id]);
-        // Get template stats
         const statsResult = await index_1.pool.query(`SELECT 
          COUNT(*) as total,
          COUNT(CASE WHEN status = 'PENDING' THEN 1 END) as pending,
@@ -498,27 +461,22 @@ router.get('/users/:id/templates', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Update template status (approve/reject)
 router.put('/templates/:templateId/status', async (req, res) => {
     try {
         const { templateId } = req.params;
         const { status } = req.body;
-        // Validate status
         if (!['APPROVED', 'REJECTED', 'PENDING'].includes(status)) {
             return res.status(400).json({ error: 'Invalid status. Must be APPROVED, REJECTED, or PENDING' });
         }
-        // Check if template exists
         const templateCheck = await index_1.pool.query('SELECT id, name, user_id FROM templates WHERE id = $1', [templateId]);
         if (templateCheck.rows.length === 0) {
             return res.status(404).json({ error: 'Template not found' });
         }
         const template = templateCheck.rows[0];
-        // Update template status
         const updateResult = await index_1.pool.query('UPDATE templates SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *', [status, templateId]);
         if (updateResult.rows.length === 0) {
             return res.status(500).json({ error: 'Failed to update template status' });
         }
-        // Log the admin action (optional - for audit trail)
         const adminUserId = req.user?.id;
         if (adminUserId) {
             try {
@@ -537,7 +495,6 @@ router.put('/templates/:templateId/status', async (req, res) => {
                 ]);
             }
             catch (logError) {
-                // Log error but don't fail the main operation
                 console.error('Failed to log admin action:', logError);
             }
         }
@@ -557,7 +514,6 @@ router.put('/templates/:templateId/status', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Get all pending templates across all users (for admin overview)
 router.get('/templates/pending', async (req, res) => {
     try {
         const result = await index_1.pool.query(`SELECT t.id, t.name, t.category, t.language, t.status, t.created_at,

@@ -7,7 +7,6 @@ const express_1 = __importDefault(require("express"));
 const index_1 = require("../index");
 const auth_1 = require("../middleware/auth");
 const otpStore = new Map();
-// Clean expired OTPs every 5 minutes
 setInterval(() => {
     const now = Date.now();
     for (const [username, record] of otpStore.entries()) {
@@ -16,19 +15,16 @@ setInterval(() => {
         }
     }
 }, 5 * 60 * 1000);
-// Helper function to send OTP via WhatsApp using authentication template
 async function sendOtpToUser(phone, otp) {
     try {
         console.log(`🔐 Sending OTP ${otp} to phone: ${phone}`);
-        // Use the authentication template "edi_mp" with user "harsha" for testing
         const sendRequest = {
             username: 'harsha',
-            templatename: 'edi_mp', // Authentication template
+            templatename: 'edi_mp',
             recipient_number: phone,
-            var1: otp // OTP code as first variable
+            var1: otp
         };
         console.log(`📤 Making WhatsApp API call with:`, JSON.stringify(sendRequest, null, 2));
-        // Make internal API call to send the OTP
         const response = await fetch('http://localhost:5050/api/send', {
             method: 'POST',
             headers: {
@@ -53,11 +49,9 @@ async function sendOtpToUser(phone, otp) {
     }
 }
 const router = express_1.default.Router();
-// Signup route
 router.post('/signup', async (req, res) => {
     try {
         const { name, email, username, password, confirmPassword, phoneNumber } = req.body;
-        // Validation
         if (!name || !email || !username || !password) {
             return res.status(400).json({ error: 'All required fields must be provided' });
         }
@@ -67,26 +61,21 @@ router.post('/signup', async (req, res) => {
         if (password.length < 6) {
             return res.status(400).json({ error: 'Password must be at least 6 characters long' });
         }
-        // Email validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
             return res.status(400).json({ error: 'Invalid email format' });
         }
-        // Phone number validation (optional)
         if (phoneNumber) {
             const phoneRegex = /^\+?[\d\s-()]+$/;
             if (!phoneRegex.test(phoneNumber)) {
                 return res.status(400).json({ error: 'Invalid phone number format' });
             }
         }
-        // Check if user already exists
         const existingUser = await index_1.pool.query('SELECT id FROM users WHERE email = $1 OR username = $2', [email, username]);
         if (existingUser.rows.length > 0) {
             return res.status(409).json({ error: 'User with this email or username already exists' });
         }
-        // Create user (storing password as plain text for simplicity as per requirements)
-        const result = await index_1.pool.query('INSERT INTO users (name, email, username, password, phone_number, credit_balance) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, username, role, credit_balance, created_at', [name, email, username, password, phoneNumber, 1000] // Default 1000 credits for new users
-        );
+        const result = await index_1.pool.query('INSERT INTO users (name, email, username, password, phone_number, credit_balance) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, username, role, credit_balance, created_at', [name, email, username, password, phoneNumber, 1000]);
         const newUser = result.rows[0];
         res.status(201).json({
             message: 'User created successfully',
@@ -106,24 +95,20 @@ router.post('/signup', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Login route
 router.post('/login', async (req, res) => {
     try {
         const { username, password } = req.body;
         if (!username || !password) {
             return res.status(400).json({ error: 'Username and password are required' });
         }
-        // Find user by username
         const result = await index_1.pool.query('SELECT id, name, email, username, password, role, credit_balance FROM users WHERE username = $1', [username]);
         if (result.rows.length === 0) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
         const user = result.rows[0];
-        // Check password (plain text comparison as per requirements)
         if (user.password !== password) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
-        // Create session
         const sessionUser = {
             id: user.id,
             name: user.name,
@@ -149,7 +134,6 @@ router.post('/login', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Get current user (protected route)
 router.get('/me', auth_1.requireAuth, async (req, res) => {
     try {
         const userId = req.session.user.id;
@@ -175,7 +159,6 @@ router.get('/me', auth_1.requireAuth, async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Logout route
 router.post('/logout', auth_1.requireAuth, (req, res) => {
     req.session.destroy((err) => {
         if (err) {
@@ -186,7 +169,6 @@ router.post('/logout', auth_1.requireAuth, (req, res) => {
         res.json({ message: 'Logged out successfully' });
     });
 });
-// Forgot password - send OTP
 router.post('/forgot-password', async (req, res) => {
     try {
         const { username, phone } = req.body;
@@ -196,7 +178,6 @@ router.post('/forgot-password', async (req, res) => {
                 error: 'Username and phone number are required'
             });
         }
-        // Validate phone format (basic E.164 check)
         const phoneRegex = /^\+[1-9]\d{1,14}$/;
         if (!phoneRegex.test(phone)) {
             return res.status(400).json({
@@ -204,7 +185,6 @@ router.post('/forgot-password', async (req, res) => {
                 error: 'Invalid phone number format. Use international format (e.g., +911234567890)'
             });
         }
-        // Find user by username and verify phone number
         const result = await index_1.pool.query('SELECT id, username, phone_number FROM users WHERE username = $1', [username]);
         if (result.rows.length === 0) {
             return res.status(404).json({
@@ -213,7 +193,6 @@ router.post('/forgot-password', async (req, res) => {
             });
         }
         const user = result.rows[0];
-        // Check if phone number matches (handle both with and without country code)
         const userPhone = user.phone_number;
         const phoneMatch = userPhone === phone ||
             userPhone === phone.replace(/^\+91/, '') ||
@@ -224,7 +203,6 @@ router.post('/forgot-password', async (req, res) => {
                 error: 'Phone number does not match our records'
             });
         }
-        // Check rate limiting (prevent resend within 60 seconds)
         const existingRecord = otpStore.get(username);
         const now = Date.now();
         if (existingRecord && (now - existingRecord.lastSent) < 60000) {
@@ -234,20 +212,16 @@ router.post('/forgot-password', async (req, res) => {
                 error: `Please wait ${remainingTime} seconds before requesting a new OTP`
             });
         }
-        // Generate 6-digit OTP
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        const expires = now + 5 * 60 * 1000; // 5 minutes
-        // Store OTP
+        const expires = now + 5 * 60 * 1000;
         otpStore.set(username, {
             otp,
             phone: phone,
             expires,
             lastSent: now
         });
-        // Send OTP via WhatsApp
         const otpSent = await sendOtpToUser(phone, otp);
         if (!otpSent) {
-            // Remove OTP from store if sending failed
             otpStore.delete(username);
             return res.status(500).json({
                 success: false,
@@ -269,7 +243,6 @@ router.post('/forgot-password', async (req, res) => {
         });
     }
 });
-// Verify OTP
 router.post('/verify-otp', (req, res) => {
     try {
         const { username, otp } = req.body;
@@ -288,7 +261,6 @@ router.post('/verify-otp', (req, res) => {
             });
         }
         if (record.expires < now) {
-            // Clean up expired OTP
             otpStore.delete(username);
             return res.status(400).json({
                 success: false,
@@ -301,7 +273,6 @@ router.post('/verify-otp', (req, res) => {
                 error: 'Invalid OTP. Please try again.'
             });
         }
-        // OTP is valid - extend expiry for password reset (10 minutes)
         record.expires = now + 10 * 60 * 1000;
         console.log(`✅ OTP verified successfully for user: ${username}`);
         return res.json({
@@ -318,7 +289,6 @@ router.post('/verify-otp', (req, res) => {
         });
     }
 });
-// Update profile route (name and email only)
 router.put('/update-profile', auth_1.requireAuth, async (req, res) => {
     try {
         const { name, email } = req.body;
@@ -329,7 +299,6 @@ router.put('/update-profile', auth_1.requireAuth, async (req, res) => {
                 error: 'Name and email are required'
             });
         }
-        // Email validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
             return res.status(400).json({
@@ -337,7 +306,6 @@ router.put('/update-profile', auth_1.requireAuth, async (req, res) => {
                 error: 'Invalid email format'
             });
         }
-        // Check if email is already taken by another user
         const existingUser = await index_1.pool.query('SELECT id FROM users WHERE email = $1 AND id != $2', [email, userId]);
         if (existingUser.rows.length > 0) {
             return res.status(409).json({
@@ -345,7 +313,6 @@ router.put('/update-profile', auth_1.requireAuth, async (req, res) => {
                 error: 'Email is already in use'
             });
         }
-        // Update user profile
         const result = await index_1.pool.query('UPDATE users SET name = $1, email = $2 WHERE id = $3 RETURNING id, name, email, username, role, credit_balance, created_at', [name, email, userId]);
         if (result.rows.length === 0) {
             return res.status(404).json({
@@ -376,7 +343,6 @@ router.put('/update-profile', auth_1.requireAuth, async (req, res) => {
         });
     }
 });
-// Reset password after OTP verification
 router.post('/reset-password', async (req, res) => {
     try {
         const { username, newPassword } = req.body;
@@ -392,7 +358,6 @@ router.post('/reset-password', async (req, res) => {
                 error: 'Password must be at least 6 characters long'
             });
         }
-        // Check if user has verified OTP
         const record = otpStore.get(username);
         const now = Date.now();
         if (!record || record.expires < now) {
@@ -401,7 +366,6 @@ router.post('/reset-password', async (req, res) => {
                 error: 'OTP verification required or expired. Please start the process again.'
             });
         }
-        // Update password in database (storing as plain text as per requirements)
         const result = await index_1.pool.query('UPDATE users SET password = $1 WHERE username = $2 RETURNING id, username', [newPassword, username]);
         if (result.rows.length === 0) {
             return res.status(404).json({
@@ -409,7 +373,6 @@ router.post('/reset-password', async (req, res) => {
                 error: 'User not found'
             });
         }
-        // Clean up OTP record
         otpStore.delete(username);
         console.log(`🔐 Password reset successfully for user: ${username}`);
         return res.json({
