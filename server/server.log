@@ -2,33 +2,102 @@
 > server@1.0.0 start
 > node dist/index.js
 
-[dotenv@17.2.1] injecting env (8) from .env -- tip: 📡 version env with Radar: https://dotenvx.com/radar
-Server running on port 5050
-Environment: development
-Connected to PostgreSQL database
-Meta API Error: {
-  message: 'Request failed with status code 400',
-  response: {
-    error: {
-      message: '(#132000) Number of parameters does not match the expected number of params',
-      type: 'OAuthException',
-      code: 132000,
-      error_data: [Object],
-      fbtrace_id: 'Ae4Tl6HQUEAtbI2uTyz1pez'
-    }
-  },
-  status: 400
+[dotenv@17.2.1] injecting env (9) from .env -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+2025-08-07 21:57:45 [[32MINFO[39M]: 🚀 Database connected successfully
+Meta: {
+  "service": "prime-sms",
+  "host": "localhost",
+  "port": 5431,
+  "database": "PrimeSMS_W"
 }
-Meta API Error: {
-  message: 'Request failed with status code 400',
-  response: {
-    error: {
-      message: '(#132000) Number of parameters does not match the expected number of params',
-      type: 'OAuthException',
-      code: 132000,
-      error_data: [Object],
-      fbtrace_id: 'AtaNohpEczonwP3ObqU8fGC'
-    }
+2025-08-07 21:57:45 [[32MINFO[39M]: 🚀 Log cleanup service started
+Meta: {
+  "service": "prime-sms"
+}
+2025-08-07 21:57:45 [[32MINFO[39M]: 🚀 Server started successfully
+Meta: {
+  "service": "prime-sms",
+  "port": 5050,
+  "environment": "development",
+  "processId": 36738,
+  "nodeVersion": "v24.3.0",
+  "memory": {
+    "rss": 105889792,
+    "heapTotal": 48611328,
+    "heapUsed": 33415632,
+    "external": 6591232,
+    "arrayBuffers": 3073338
   },
-  status: 400
+  "corsOrigins": [
+    "https://primesms.app",
+    "https://www.primesms.app"
+  ],
+  "rateLimit": {
+    "windowMs": 900000,
+    "maxRequests": 100
+  }
+}
+2025-08-07 21:58:35 [[32MINFO[39M]: HTTP Request
+Meta: {
+  "service": "prime-sms",
+  "method": "POST",
+  "url": "/api/auth/login",
+  "status": 200,
+  "duration": "9ms",
+  "ip": "::1",
+  "userAgent": "curl/8.7.1"
+}
+2025-08-07 21:58:35 [[32MINFO[39M]: HTTP Request
+Meta: {
+  "service": "prime-sms",
+  "method": "GET",
+  "url": "/api/health",
+  "status": 200,
+  "duration": "0ms",
+  "ip": "::1",
+  "userAgent": "curl/8.7.1"
+}
+2025-08-07 21:58:35 [[32MINFO[39M]: HTTP Request
+Meta: {
+  "service": "prime-sms",
+  "method": "GET",
+  "url": "/api/auth/me",
+  "status": 200,
+  "duration": "2ms",
+  "ip": "::1",
+  "userAgent": "curl/8.7.1"
+}
+2025-08-07 21:58:35 [[32MINFO[39M]: HTTP Request
+Meta: {
+  "service": "prime-sms",
+  "method": "GET",
+  "url": "/api/credits/balance",
+  "status": 200,
+  "duration": "1ms",
+  "ip": "::1",
+  "userAgent": "curl/8.7.1"
+}
+2025-08-07 21:58:35 [[32MINFO[39M]: HTTP Request
+Meta: {
+  "service": "prime-sms",
+  "method": "GET",
+  "url": "/api/logs",
+  "status": 200,
+  "duration": "6ms",
+  "ip": "::1",
+  "userAgent": "curl/8.7.1"
+}
+2025-08-07 21:58:35 [[32MINFO[39M]: HTTP Request
+Meta: {
+  "service": "prime-sms",
+  "method": "GET",
+  "url": "/api/templates",
+  "status": 200,
+  "duration": "5ms",
+  "ip": "::1",
+  "userAgent": "curl/8.7.1"
+}
+2025-08-07 21:59:48 [[31MERROR[39M]: SIGTERM received - Server shutting down gracefully
+Meta: {
+  "service": "prime-sms"
 }

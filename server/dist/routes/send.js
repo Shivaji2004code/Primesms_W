@@ -3,7 +3,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-// [Claude AI] Credit System Enhancement — Aug 2025
 const express_1 = __importDefault(require("express"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const axios_1 = __importDefault(require("axios"));
@@ -12,10 +11,9 @@ const sendApiHelpers_1 = require("../utils/sendApiHelpers");
 const creditSystem_1 = require("../utils/creditSystem");
 const duplicateDetection_1 = require("../middleware/duplicateDetection");
 const router = express_1.default.Router();
-// Rate limiting middleware - 100 requests per 15 minutes per IP
 const sendRateLimit = (0, express_rate_limit_1.default)({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
+    windowMs: 15 * 60 * 1000,
+    max: 100,
     message: {
         error: 'Too many requests',
         message: 'Rate limit exceeded. Please try again later.'
@@ -23,32 +21,10 @@ const sendRateLimit = (0, express_rate_limit_1.default)({
     standardHeaders: true,
     legacyHeaders: false,
 });
-// Apply rate limiting to all routes in this router
 router.use(sendRateLimit);
-/**
- * Client-facing WhatsApp Template Message API
- * Supports both GET and POST requests
- *
- * Required parameters:
- * - username: Client username for authentication
- * - templatename: Name of the template to use
- * - recipient_number: WhatsApp number to send to
- *
- * Optional parameters:
- * - header_text: Text content for TEXT headers (auto-detected from template)
- * - var1, var2, var3, etc.: Template body variables
- * - button_payload: Payload for quick reply buttons (only when template has quick reply buttons)
- * - button_text: Dynamic text for URL buttons (when template has dynamic URL buttons)
- * - button_url: Dynamic URL for URL buttons (when template has dynamic URL buttons)
- */
-/**
- * Template Analysis Endpoint
- * Analyzes a template and returns what parameters are needed for the send API
- */
 router.get('/template-info/:username/:templatename', async (req, res) => {
     try {
         const { username, templatename } = req.params;
-        // Authenticate user and fetch credentials
         const authResult = await authenticateAndFetchCredentials(username);
         if (!authResult.success) {
             return res.status(authResult.statusCode || 500).json({
@@ -57,7 +33,6 @@ router.get('/template-info/:username/:templatename', async (req, res) => {
             });
         }
         const { userId } = authResult.data;
-        // Fetch template
         const templateResult = await fetchTemplate(userId, templatename);
         if (!templateResult.success) {
             return res.status(templateResult.statusCode || 500).json({
@@ -87,9 +62,7 @@ router.get('/template-info/:username/:templatename', async (req, res) => {
 });
 router.all('/send', async (req, res) => {
     try {
-        // Extract parameters from both GET and POST requests
         const params = extractParameters(req);
-        // Validate required parameters
         const validation = validateRequiredParams(params);
         if (!validation.isValid) {
             return res.status(400).json({
@@ -98,7 +71,6 @@ router.all('/send', async (req, res) => {
                 details: validation.details
             });
         }
-        // Step 1: Authenticate user and fetch credentials
         const authResult = await authenticateAndFetchCredentials(params.username);
         if (!authResult.success) {
             return res.status(authResult.statusCode || 500).json({
@@ -107,7 +79,6 @@ router.all('/send', async (req, res) => {
             });
         }
         const { userId, businessInfo } = authResult.data;
-        // Step 2: Fetch message template
         const templateResult = await fetchTemplate(userId, params.templatename);
         if (!templateResult.success) {
             return res.status(templateResult.statusCode || 500).json({
@@ -116,7 +87,6 @@ router.all('/send', async (req, res) => {
             });
         }
         const template = templateResult.data;
-        // Step 3: Validate recipient number
         if (!(0, sendApiHelpers_1.validatePhoneNumber)(params.recipient_number)) {
             return res.status(400).json({
                 error: 'Bad Request',
@@ -124,14 +94,11 @@ router.all('/send', async (req, res) => {
                 details: 'Phone number must be in Meta WhatsApp API format (country code + number, no + prefix, e.g., 919398424270 for India, 14155552345 for US)'
             });
         }
-        // Step 4: Construct Meta API payload
         const payload = constructMetaAPIPayload(params, template, businessInfo);
-        // Step 4.5: DUPLICATE DETECTION - Check if this exact message was sent recently
         const variables = extractVariablesFromParams(params);
         const duplicateCheck = await (0, duplicateDetection_1.checkAndHandleDuplicate)(userId, template.name, params.recipient_number, variables);
         if (duplicateCheck.isDuplicate) {
             console.log(`❌ DUPLICATE DETECTED: API call blocked for template ${template.name} to ${params.recipient_number}`);
-            // Still deduct credits for duplicates as per requirement
             try {
                 const templateCategory = template.category;
                 const { cost } = await (0, creditSystem_1.calculateCreditCost)(userId, template.name, 1);
@@ -158,7 +125,6 @@ router.all('/send', async (req, res) => {
                 hash: duplicateCheck.hash
             });
         }
-        // Step 5: Send message via Meta WhatsApp Cloud API
         const sendResult = await sendWhatsAppMessage(payload, businessInfo);
         if (!sendResult.success) {
             return res.status(sendResult.statusCode || 500).json({
@@ -166,7 +132,6 @@ router.all('/send', async (req, res) => {
                 message: sendResult.message
             });
         }
-        // Step 6: CREDIT DEDUCTION - For API calls, deduct credits on successful delivery
         try {
             const templateCategory = template.category;
             const { cost } = await (0, creditSystem_1.calculateCreditCost)(userId, template.name, 1);
@@ -181,7 +146,6 @@ router.all('/send', async (req, res) => {
             });
             if (!creditResult.success) {
                 console.warn(`[CREDIT SYSTEM] Failed to deduct credits for API delivery: insufficient balance`);
-                // Note: Message was already sent, so we continue but log the issue
             }
             else {
                 console.log(`[CREDIT SYSTEM] Deducted ${cost} credits for API delivery. New balance: ${creditResult.newBalance}`);
@@ -189,9 +153,7 @@ router.all('/send', async (req, res) => {
         }
         catch (creditError) {
             console.error('Credit deduction error for API delivery:', creditError);
-            // Continue with successful response even if credit deduction fails
         }
-        // Step 7: Log successful send and return response
         await logMessageSend(userId, template.id, params.recipient_number, sendResult.data.message_id, template.name);
         return res.status(200).json({
             success: true,
@@ -209,12 +171,8 @@ router.all('/send', async (req, res) => {
         });
     }
 });
-/**
- * Extract variables from parameters for duplicate detection
- */
 function extractVariablesFromParams(params) {
     const variables = {};
-    // Extract all variable parameters (var1, var2, var3, etc.)
     Object.keys(params).forEach(key => {
         if (key.startsWith('var') && params[key]) {
             variables[key] = params[key].toString();
@@ -222,13 +180,9 @@ function extractVariablesFromParams(params) {
     });
     return variables;
 }
-/**
- * Extract parameters from both GET (query) and POST (body) requests
- */
 function extractParameters(req) {
     const isPost = req.method === 'POST';
     const source = isPost ? req.body : req.query;
-    // Extract all parameters
     const params = {
         username: (0, sendApiHelpers_1.sanitizeInput)(source.username),
         templatename: (0, sendApiHelpers_1.sanitizeInput)(source.templatename),
@@ -238,14 +192,10 @@ function extractParameters(req) {
         button_text: source.button_text ? (0, sendApiHelpers_1.sanitizeInput)(source.button_text) : undefined,
         button_url: source.button_url ? (0, sendApiHelpers_1.sanitizeInput)(source.button_url) : undefined
     };
-    // Extract all variable parameters (var1, var2, var3, etc.)
     const variables = (0, sendApiHelpers_1.extractVariables)(source);
     Object.assign(params, variables);
     return params;
 }
-/**
- * Validate required parameters
- */
 function validateRequiredParams(params) {
     const required = ['username', 'templatename', 'recipient_number'];
     const missing = [];
@@ -263,9 +213,6 @@ function validateRequiredParams(params) {
     }
     return { isValid: true };
 }
-/**
- * Authenticate user and fetch business credentials
- */
 async function authenticateAndFetchCredentials(username) {
     try {
         const query = `
@@ -290,7 +237,6 @@ async function authenticateAndFetchCredentials(username) {
             };
         }
         const row = result.rows[0];
-        // Validate required business info
         if (!row.whatsapp_number_id || !row.access_token) {
             return {
                 success: false,
@@ -321,9 +267,6 @@ async function authenticateAndFetchCredentials(username) {
         };
     }
 }
-/**
- * Fetch template by name for specific user
- */
 async function fetchTemplate(userId, templateName) {
     try {
         const query = `
@@ -365,9 +308,6 @@ async function fetchTemplate(userId, templateName) {
         };
     }
 }
-/**
- * Construct Meta WhatsApp Cloud API payload with intelligent template detection
- */
 function constructMetaAPIPayload(params, template, businessInfo) {
     const payload = {
         messaging_product: "whatsapp",
@@ -384,11 +324,9 @@ function constructMetaAPIPayload(params, template, businessInfo) {
     };
     const components = [];
     const templateComponents = template.components || [];
-    // 1. Auto-detect and Handle Headers
     const headerComponent = templateComponents.find((c) => c.type === 'HEADER');
     if (headerComponent) {
         if (headerComponent.format === 'TEXT' && params.header_text) {
-            // TEXT header with dynamic content
             components.push({
                 type: "header",
                 parameters: [{
@@ -398,10 +336,8 @@ function constructMetaAPIPayload(params, template, businessInfo) {
             });
         }
         else if (headerComponent.format === 'IMAGE') {
-            // Static IMAGE header - use stored media_id from template
             const mediaId = template.media_id || template.header_media_id;
             if (mediaId) {
-                // For IMAGE templates, we need to include the media_id in the header component
                 components.push({
                     type: "header",
                     parameters: [{
@@ -414,19 +350,12 @@ function constructMetaAPIPayload(params, template, businessInfo) {
             }
         }
         else if (headerComponent.format === 'VIDEO' && headerComponent.example?.header_handle) {
-            // Static VIDEO header - no parameters needed
         }
         else if (headerComponent.format === 'DOCUMENT' && headerComponent.example?.header_handle) {
-            // Static DOCUMENT header - no parameters needed
         }
-        // Note: Dynamic media headers would require media_id parameter, but most templates use static media
     }
-    // 2. Handle Body Variables
     const bodyComponent = templateComponents.find((c) => c.type === 'BODY');
-    // Special handling for AUTHENTICATION templates - they use 2025 format
-    // even if their components array is empty (Meta manages the structure)
     if (template.category === 'AUTHENTICATION') {
-        // Extract all 'varX' parameters for authentication template
         const vars = Object.keys(params)
             .filter(k => k.startsWith('var'))
             .sort((a, b) => {
@@ -437,16 +366,13 @@ function constructMetaAPIPayload(params, template, businessInfo) {
             .map(k => params[k])
             .filter(v => v !== undefined && v !== null && v.toString().trim() !== '');
         console.log(`🔍 DEBUG: Authentication template detected. Template: ${template.name}, Variables: ${vars.length}`);
-        // For authentication templates, try the standard format first
         if (vars.length > 0) {
-            const otpCode = vars[0]; // First variable is the OTP code
+            const otpCode = vars[0];
             console.log(`🔍 DEBUG: Adding authentication template components with OTP: ${otpCode}`);
-            // Standard 2025 authentication template format
             components.push({
                 type: "body",
                 parameters: [{ type: "text", text: otpCode.toString() }]
             });
-            // Authentication templates may also need button component
             components.push({
                 type: "button",
                 sub_type: "url",
@@ -456,12 +382,9 @@ function constructMetaAPIPayload(params, template, businessInfo) {
         }
         else {
             console.log('🔍 DEBUG: No variables provided for authentication template - sending as static');
-            // Some authentication templates may be static - let WhatsApp handle it
         }
     }
     else if (bodyComponent) {
-        // Standard processing for non-authentication templates
-        // Extract all 'varX' parameters from the request and sort them numerically
         const vars = Object.keys(params)
             .filter(k => k.startsWith('var'))
             .sort((a, b) => {
@@ -478,14 +401,11 @@ function constructMetaAPIPayload(params, template, businessInfo) {
             });
         }
     }
-    // 3. Intelligent Button Handling
     const buttonComponent = templateComponents.find((c) => c.type === 'BUTTONS');
     if (buttonComponent && buttonComponent.buttons) {
         const buttons = buttonComponent.buttons;
-        // Handle different button types
         buttons.forEach((button, index) => {
             if (button.type === 'QUICK_REPLY' && params.button_payload) {
-                // Quick reply button - needs payload from user
                 components.push({
                     type: "button",
                     sub_type: "quick_reply",
@@ -497,9 +417,7 @@ function constructMetaAPIPayload(params, template, businessInfo) {
                 });
             }
             else if (button.type === 'URL') {
-                // URL button handling
                 if (button.url && button.url.includes('{{1}}') && params.button_url) {
-                    // Dynamic URL button - user provides the URL parameter
                     components.push({
                         type: "button",
                         sub_type: "url",
@@ -510,35 +428,26 @@ function constructMetaAPIPayload(params, template, businessInfo) {
                             }]
                     });
                 }
-                // Static URL buttons don't need parameters - Meta uses the URL from template
             }
             else if (button.type === 'PHONE_NUMBER') {
-                // Phone number buttons don't typically need dynamic parameters
-                // The phone number is usually static in the template
             }
         });
     }
     payload.template.components = components;
-    // DEBUG: Log template info and payload for all templates
     console.log(`🔍 DEBUG: Template category: ${template.category}, name: ${template.name}`);
     if (template.category === 'AUTHENTICATION') {
         console.log('🔍 DEBUG: Authentication template payload:', JSON.stringify(payload, null, 2));
     }
     return payload;
 }
-/**
- * Send message via Meta WhatsApp Cloud API
- */
 async function sendWhatsAppMessage(payload, businessInfo) {
     try {
-        // Check if we're in test mode or have invalid credentials
         const isTestToken = !businessInfo.access_token ||
             businessInfo.access_token.startsWith('test_') ||
             businessInfo.access_token === 'test' ||
             businessInfo.access_token === 'mock_token';
         const isTestMode = process.env.NODE_ENV === 'test' || isTestToken;
         if (isTestMode) {
-            // In test mode, return a mock success response
             console.log('🧪 TEST MODE: Mock sending message:', {
                 to: payload.to,
                 template: payload.template.name,
@@ -560,7 +469,7 @@ async function sendWhatsAppMessage(payload, businessInfo) {
                 'Authorization': `Bearer ${businessInfo.access_token}`,
                 'Content-Type': 'application/json'
             },
-            timeout: 30000 // 30 second timeout
+            timeout: 30000
         });
         if (response.status === 200 && response.data.messages && response.data.messages[0]) {
             return {
@@ -580,7 +489,6 @@ async function sendWhatsAppMessage(payload, businessInfo) {
             response: error.response?.data,
             status: error.response?.status
         });
-        // Handle specific Meta API errors
         if (error.response?.status === 400) {
             return {
                 success: false,
@@ -623,22 +531,16 @@ async function sendWhatsAppMessage(payload, businessInfo) {
         }
     }
 }
-/**
- * Log successful message send using existing campaign_logs and message_logs structure
- */
 async function logMessageSend(userId, templateId, recipient, messageId, templateName) {
     try {
-        // First, create or get a campaign log entry for this API send
         const campaignName = `API_SEND_${templateName}_${new Date().toISOString().split('T')[0]}`;
         let campaignId;
-        // Check if campaign exists for today
         const existingCampaign = await index_1.pool.query(`
       SELECT id FROM campaign_logs 
       WHERE user_id = $1 AND campaign_name = $2 AND DATE(created_at) = CURRENT_DATE
     `, [userId, campaignName]);
         if (existingCampaign.rows.length > 0) {
             campaignId = existingCampaign.rows[0].id;
-            // Update campaign stats
             await index_1.pool.query(`
         UPDATE campaign_logs 
         SET successful_sends = successful_sends + 1,
@@ -648,7 +550,6 @@ async function logMessageSend(userId, templateId, recipient, messageId, template
       `, [campaignId]);
         }
         else {
-            // Create new campaign log entry
             const campaignResult = await index_1.pool.query(`
         INSERT INTO campaign_logs (
           user_id, campaign_name, template_used, total_recipients, 
@@ -659,7 +560,6 @@ async function logMessageSend(userId, templateId, recipient, messageId, template
       `, [userId, campaignName, templateName]);
             campaignId = campaignResult.rows[0].id;
         }
-        // Log the individual message
         await index_1.pool.query(`
       INSERT INTO message_logs (
         campaign_id, recipient_number, message_id, status, sent_at
@@ -672,13 +572,9 @@ async function logMessageSend(userId, templateId, recipient, messageId, template
     `, [campaignId, recipient, messageId]);
     }
     catch (error) {
-        // Log error but don't fail the request
         console.error('Failed to log message send:', error);
     }
 }
-/**
- * Analyze template structure and return required parameters
- */
 function analyzeTemplate(template) {
     const components = template.components || [];
     const analysis = {
@@ -699,7 +595,6 @@ function analyzeTemplate(template) {
             }
         }
     };
-    // Analyze header
     const headerComponent = components.find((c) => c.type === 'HEADER');
     if (headerComponent) {
         analysis.has_header = true;
@@ -714,7 +609,6 @@ function analyzeTemplate(template) {
             analysis.example_request.body.header_text = 'Your header text here';
         }
     }
-    // Analyze body variables
     const bodyComponent = components.find((c) => c.type === 'BODY');
     if (bodyComponent && bodyComponent.text) {
         const variableMatches = bodyComponent.text.match(/\{\{\d+\}\}/g);
@@ -731,7 +625,6 @@ function analyzeTemplate(template) {
             }
         }
     }
-    // Analyze buttons
     const buttonComponent = components.find((c) => c.type === 'BUTTONS');
     if (buttonComponent && buttonComponent.buttons) {
         analysis.has_buttons = true;

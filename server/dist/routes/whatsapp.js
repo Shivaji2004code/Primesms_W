@@ -3,7 +3,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-// [Claude AI] Credit System Enhancement — Aug 2025
 const express_1 = __importDefault(require("express"));
 const multer_1 = __importDefault(require("multer"));
 const XLSX = require('xlsx');
@@ -15,7 +14,6 @@ const index_1 = require("../index");
 const auth_1 = require("../middleware/auth");
 const creditSystem_1 = require("../utils/creditSystem");
 const duplicateDetection_1 = require("../middleware/duplicateDetection");
-// Configure multer for file uploads
 const storage = multer_1.default.diskStorage({
     destination: (req, file, cb) => {
         const uploadDir = path_1.default.join(__dirname, '../../uploads');
@@ -32,18 +30,17 @@ const storage = multer_1.default.diskStorage({
 const upload = (0, multer_1.default)({
     storage,
     limits: {
-        fileSize: 10 * 1024 * 1024 // 10MB limit for Excel files
+        fileSize: 10 * 1024 * 1024
     },
     fileFilter: (req, file, cb) => {
-        // Allow Excel and CSV files for recipient import, and images for template headers
         const allowedMimes = [
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-            'application/vnd.ms-excel', // .xls
-            'text/csv', // .csv
-            'text/plain', // .txt
-            'image/jpeg', // .jpg, .jpeg
-            'image/png', // .png
-            'image/gif' // .gif
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-excel',
+            'text/csv',
+            'text/plain',
+            'image/jpeg',
+            'image/png',
+            'image/gif'
         ];
         if (allowedMimes.includes(file.mimetype) ||
             file.originalname.match(/\.(xlsx|xls|csv|txt|jpg|jpeg|png|gif)$/i)) {
@@ -54,23 +51,14 @@ const upload = (0, multer_1.default)({
         }
     }
 });
-/**
- * Uploads a media file to the WhatsApp Cloud API to get a media ID.
- * @param imageUrl The URL to the image file to download and upload.
- * @param phoneNumberId The WhatsApp phone number ID.
- * @param accessToken The WhatsApp access token.
- * @returns The media ID string on success, or null on failure.
- */
 async function uploadWhatsappMedia(imageUrl, phoneNumberId, accessToken) {
     const url = `https://graph.facebook.com/v20.0/${phoneNumberId}/media`;
     try {
         console.log(`🔄 Downloading image from: ${imageUrl}`);
-        // Step 1: Download the image from the URL
         const imageResponse = await axios_1.default.get(imageUrl, { responseType: 'arraybuffer' });
         const imageBuffer = Buffer.from(imageResponse.data);
         const mimeType = imageResponse.headers['content-type'] || 'image/png';
         console.log(`📁 Downloaded image: ${imageBuffer.length} bytes, type: ${mimeType}`);
-        // Step 2: Create FormData and upload to WhatsApp
         const formData = new form_data_1.default();
         formData.append('messaging_product', 'whatsapp');
         formData.append('file', imageBuffer, {
@@ -98,43 +86,27 @@ async function uploadWhatsappMedia(imageUrl, phoneNumberId, accessToken) {
     }
 }
 const router = express_1.default.Router();
-// Upload configuration is defined above with multer.diskStorage
-// Utility function to validate phone numbers (Meta WhatsApp API format)
 const validatePhoneNumber = (phone) => {
-    // Remove all non-digit characters including +, spaces, dashes, etc.
     const cleaned = phone.replace(/[^\d]/g, '');
     console.log(`🔍 Phone validation: Original="${phone}", Cleaned="${cleaned}", Length=${cleaned.length}`);
-    // More flexible validation for international phone numbers
-    // Allow 8-15 digits (some countries have shorter numbers)
-    // Must start with a digit 1-9 (not 0)
     const isValid = /^[1-9]\d{7,14}$/.test(cleaned);
     console.log(`🔍 Phone validation result: ${isValid} for "${cleaned}"`);
     return isValid;
 };
-// Utility function to format phone number for Meta WhatsApp API
 const formatPhoneNumber = (phone) => {
-    // Remove all non-digits, spaces, dashes, + symbols, etc.
     let cleaned = phone.replace(/[^\d]/g, '');
     console.log(`🔧 Formatting phone: Original="${phone}", Cleaned="${cleaned}"`);
-    // Remove leading zeros if present
     cleaned = cleaned.replace(/^0+/, '');
-    // Ensure it starts with country code (not 0)
     if (cleaned.length > 0 && cleaned[0] === '0') {
         cleaned = cleaned.substring(1);
     }
-    // Handle common country codes without + prefix
-    // If number starts with 91 (India), 1 (US/Canada), etc., keep as is
-    // If number is 10 digits and starts with 6-9, assume it's Indian number and add 91
     if (cleaned.length === 10 && /^[6-9]/.test(cleaned)) {
-        cleaned = '91' + cleaned; // Add India country code
+        cleaned = '91' + cleaned;
         console.log(`🔧 Added India country code: "${cleaned}"`);
     }
     console.log(`🔧 Final formatted phone: "${cleaned}"`);
-    // Return the cleaned number without any + prefix
-    // Format: 919394567890, 1234567890, etc.
     return cleaned;
 };
-// GET /api/whatsapp/numbers - Fetch all WhatsApp numbers for authenticated user
 router.get('/numbers', auth_1.requireAuth, async (req, res) => {
     try {
         const userId = req.session.user.id;
@@ -167,7 +139,6 @@ router.get('/numbers', auth_1.requireAuth, async (req, res) => {
         });
     }
 });
-// GET /api/whatsapp/templates - Fetch templates for authenticated user
 router.get('/templates', auth_1.requireAuth, async (req, res) => {
     try {
         const userId = req.session.user.id;
@@ -218,10 +189,8 @@ router.get('/templates', auth_1.requireAuth, async (req, res) => {
         });
     }
 });
-// GET /api/whatsapp/languages - Return supported languages
 router.get('/languages', auth_1.requireAuth, async (req, res) => {
     try {
-        // Common WhatsApp Business API supported languages
         const languages = [
             { code: 'af', name: 'Afrikaans' },
             { code: 'sq', name: 'Albanian' },
@@ -303,7 +272,6 @@ router.get('/languages', auth_1.requireAuth, async (req, res) => {
         });
     }
 });
-// POST /api/whatsapp/template-details - Get complete template structure
 router.post('/template-details', auth_1.requireAuth, async (req, res) => {
     try {
         const userId = req.session.user.id;
@@ -330,7 +298,6 @@ router.post('/template-details', auth_1.requireAuth, async (req, res) => {
             });
         }
         const template = result.rows[0];
-        // Parse template components to extract variables and buttons
         const components = template.components;
         const variables = [];
         const buttons = [];
@@ -342,9 +309,7 @@ router.post('/template-details', auth_1.requireAuth, async (req, res) => {
             imageRequired: false,
             description: ''
         };
-        // Special handling for AUTHENTICATION templates
         if (template.category === 'AUTHENTICATION') {
-            // Authentication templates always need an OTP code parameter
             variables.push({
                 index: 1,
                 component: 'BODY',
@@ -355,18 +320,15 @@ router.post('/template-details', auth_1.requireAuth, async (req, res) => {
             templateTypeInfo.description = 'Authentication template (requires OTP code parameter)';
         }
         else {
-            // Standard processing for other template categories
             for (const component of components) {
                 if (component.type === 'HEADER') {
                     if (component.format === 'IMAGE') {
                         const hasHeaderHandle = component.example && component.example.header_handle;
                         const hasVariableInText = component.text && component.text.includes('{{');
                         if (hasVariableInText) {
-                            // DYNAMIC IMAGE: Template has explicit {{1}} variable in header text
                             templateTypeInfo.hasDynamicImage = true;
                             templateTypeInfo.imageRequired = true;
                             templateTypeInfo.description = 'Dynamic image template (requires image URL at runtime)';
-                            // Extract header variable
                             const matches = component.text.match(/\{\{(\d+)\}\}/g);
                             if (matches) {
                                 matches.forEach((match) => {
@@ -382,13 +344,11 @@ router.post('/template-details', auth_1.requireAuth, async (req, res) => {
                             }
                         }
                         else if (hasHeaderHandle) {
-                            // STATIC IMAGE: Template has pre-uploaded media with header_handle
                             templateTypeInfo.hasStaticImage = true;
                             templateTypeInfo.imageRequired = false;
                             templateTypeInfo.description = 'Static image template (uses pre-uploaded image - no URL needed)';
                         }
                         else {
-                            // UNKNOWN: Image template without header_handle or variables - treat as dynamic
                             templateTypeInfo.hasDynamicImage = true;
                             templateTypeInfo.imageRequired = true;
                             templateTypeInfo.description = 'Dynamic image template (requires image URL)';
@@ -437,7 +397,6 @@ router.post('/template-details', auth_1.requireAuth, async (req, res) => {
                 }
             }
         }
-        // Process buttons for all template types
         for (const component of components) {
             if (component.type === 'BUTTONS') {
                 hasButtons = true;
@@ -450,7 +409,6 @@ router.post('/template-details', auth_1.requireAuth, async (req, res) => {
                         phone_number: button.phone_number,
                         copy_code: button.copy_code
                     });
-                    // Check for dynamic URL buttons
                     if (button.type === 'URL' && button.url && button.url.includes('{{')) {
                         const matches = button.url.match(/\{\{(\d+)\}\}/g);
                         if (matches) {
@@ -469,7 +427,6 @@ router.post('/template-details', auth_1.requireAuth, async (req, res) => {
                 });
             }
         }
-        // Remove duplicates and sort variables
         const uniqueVariables = variables.filter((v, i, arr) => arr.findIndex(item => item.index === v.index && item.component === v.component) === i).sort((a, b) => a.index - b.index);
         res.json({
             success: true,
@@ -496,7 +453,6 @@ router.post('/template-details', auth_1.requireAuth, async (req, res) => {
         });
     }
 });
-// Helper function to generate template preview
 function generateTemplatePreview(components, variables) {
     let preview = '';
     components.forEach(component => {
@@ -533,7 +489,6 @@ function replaceVariables(text, variables) {
         return variables[index] || `{{${index}}}`;
     });
 }
-// POST /api/whatsapp/preview-excel - Preview Excel file columns
 router.post('/preview-excel', auth_1.requireAuth, upload.single('file'), async (req, res) => {
     try {
         if (!req.file) {
@@ -564,17 +519,15 @@ router.post('/preview-excel', auth_1.requireAuth, upload.single('file'), async (
                     error: 'Excel file is empty or has no data'
                 });
             }
-            // Get column headers (first row)
             const headers = (jsonData[0] || []);
             const columns = headers.map((header, index) => header?.toString().trim() || `Column ${String.fromCharCode(65 + index)}`);
-            // Get sample data (first 5 rows after header)
             const sampleData = jsonData.slice(1, 6);
             res.json({
                 success: true,
                 data: {
                     columns: columns,
                     sample_data: sampleData,
-                    total_rows: jsonData.length - 1 // Exclude header row
+                    total_rows: jsonData.length - 1
                 }
             });
         }
@@ -586,7 +539,6 @@ router.post('/preview-excel', auth_1.requireAuth, upload.single('file'), async (
             });
         }
         finally {
-            // Clean up uploaded file
             fs_1.default.unlink(filePath, (err) => {
                 if (err)
                     console.error('Error deleting temp file:', err);
@@ -601,7 +553,6 @@ router.post('/preview-excel', auth_1.requireAuth, upload.single('file'), async (
         });
     }
 });
-// POST /api/whatsapp/import-excel-column - Import from specific Excel column
 router.post('/import-excel-column', auth_1.requireAuth, upload.single('file'), async (req, res) => {
     try {
         console.log('🔍 DEBUG IMPORT-EXCEL-COLUMN: Request received');
@@ -643,7 +594,6 @@ router.post('/import-excel-column', auth_1.requireAuth, upload.single('file'), a
                     error: 'Excel file is empty or has no data'
                 });
             }
-            // Get column headers
             const headers = (jsonData[0] || []);
             const columnIndex = headers.findIndex((header) => header?.toString().trim() === column);
             if (columnIndex === -1) {
@@ -653,8 +603,7 @@ router.post('/import-excel-column', auth_1.requireAuth, upload.single('file'), a
                 });
             }
             console.log(`Found column "${column}" at index ${columnIndex}`);
-            // Extract phone numbers from the selected column
-            const phoneNumbers = jsonData.slice(1) // Skip header row
+            const phoneNumbers = jsonData.slice(1)
                 .map((row, index) => {
                 const phone = row[columnIndex]?.toString().trim();
                 if (phone) {
@@ -665,12 +614,9 @@ router.post('/import-excel-column', auth_1.requireAuth, upload.single('file'), a
                 .filter((phone) => phone && phone !== '');
             console.log(`Extracted ${phoneNumbers.length} phone numbers from column "${column}"`);
             console.log(`Raw phone numbers:`, phoneNumbers);
-            // For Excel import, accept all values from the selected column as-is
-            // User can review and edit them in the manual entry field
             console.log(`\n📊 Excel Import - Accepting all values from column "${column}"`);
             console.log(`- Total numbers found: ${phoneNumbers.length}`);
             console.log(`- Numbers:`, phoneNumbers);
-            // Remove duplicates but keep all values as-is
             const uniqueNumbers = [...new Set(phoneNumbers)];
             res.json({
                 success: true,
@@ -691,7 +637,6 @@ router.post('/import-excel-column', auth_1.requireAuth, upload.single('file'), a
             });
         }
         finally {
-            // Clean up uploaded file
             fs_1.default.unlink(filePath, (err) => {
                 if (err)
                     console.error('Error deleting temp file:', err);
@@ -706,7 +651,6 @@ router.post('/import-excel-column', auth_1.requireAuth, upload.single('file'), a
         });
     }
 });
-// POST /api/whatsapp/import-recipients - Handle Excel file upload
 router.post('/import-recipients', auth_1.requireAuth, upload.single('file'), async (req, res) => {
     try {
         if (!req.file) {
@@ -720,7 +664,6 @@ router.post('/import-recipients', auth_1.requireAuth, upload.single('file'), asy
         let phoneNumbers = [];
         try {
             if (fileExtension === '.csv') {
-                // Handle CSV files
                 const fileContent = fs_1.default.readFileSync(filePath, 'utf8');
                 const lines = fileContent.split('\n');
                 phoneNumbers = lines
@@ -728,7 +671,6 @@ router.post('/import-recipients', auth_1.requireAuth, upload.single('file'), asy
                     .filter((phone) => phone && phone !== '');
             }
             else {
-                // Handle Excel files
                 console.log(`Processing Excel file: ${req.file.originalname}`);
                 const workbook = XLSX.readFile(filePath);
                 const sheetName = workbook.SheetNames[0];
@@ -747,7 +689,6 @@ router.post('/import-recipients', auth_1.requireAuth, upload.single('file'), asy
                     .filter((phone) => phone && phone !== '');
                 console.log(`Extracted ${phoneNumbers.length} phone numbers from Excel file`);
             }
-            // Validate and format phone numbers
             const validNumbers = [];
             const invalidNumbers = [];
             phoneNumbers.forEach(phone => {
@@ -758,7 +699,6 @@ router.post('/import-recipients', auth_1.requireAuth, upload.single('file'), asy
                     invalidNumbers.push(phone);
                 }
             });
-            // Remove duplicates
             const uniqueValidNumbers = [...new Set(validNumbers)];
             res.json({
                 success: true,
@@ -779,7 +719,6 @@ router.post('/import-recipients', auth_1.requireAuth, upload.single('file'), asy
             });
         }
         finally {
-            // Clean up uploaded file
             fs_1.default.unlink(filePath, (err) => {
                 if (err)
                     console.error('Error deleting temp file:', err);
@@ -794,7 +733,6 @@ router.post('/import-recipients', auth_1.requireAuth, upload.single('file'), asy
         });
     }
 });
-// POST /api/whatsapp/import-bulk-recipients - Handle Excel file upload for WhatsApp Bulk (Quick Send)
 router.post('/import-bulk-recipients', auth_1.requireAuth, upload.single('file'), async (req, res) => {
     try {
         if (!req.file) {
@@ -808,7 +746,6 @@ router.post('/import-bulk-recipients', auth_1.requireAuth, upload.single('file')
         let phoneNumbers = [];
         try {
             if (fileExtension === '.csv') {
-                // Handle CSV files
                 const fileContent = fs_1.default.readFileSync(filePath, 'utf8');
                 const lines = fileContent.split('\n');
                 phoneNumbers = lines
@@ -816,7 +753,6 @@ router.post('/import-bulk-recipients', auth_1.requireAuth, upload.single('file')
                     .filter((phone) => phone && phone !== '');
             }
             else {
-                // Handle Excel files
                 console.log(`Processing Excel file for WhatsApp Bulk: ${req.file.originalname}`);
                 const workbook = XLSX.readFile(filePath);
                 const sheetName = workbook.SheetNames[0];
@@ -835,7 +771,6 @@ router.post('/import-bulk-recipients', auth_1.requireAuth, upload.single('file')
                     .filter((phone) => phone && phone !== '');
                 console.log(`Extracted ${phoneNumbers.length} phone numbers from Excel file`);
             }
-            // Validate and format phone numbers
             const validNumbers = [];
             const invalidNumbers = [];
             phoneNumbers.forEach(phone => {
@@ -846,7 +781,6 @@ router.post('/import-bulk-recipients', auth_1.requireAuth, upload.single('file')
                     invalidNumbers.push(phone);
                 }
             });
-            // Remove duplicates
             const uniqueValidNumbers = [...new Set(validNumbers)];
             res.json({
                 success: true,
@@ -867,7 +801,6 @@ router.post('/import-bulk-recipients', auth_1.requireAuth, upload.single('file')
             });
         }
         finally {
-            // Clean up uploaded file
             fs_1.default.unlink(filePath, (err) => {
                 if (err)
                     console.error('Error deleting temp file:', err);
@@ -882,7 +815,6 @@ router.post('/import-bulk-recipients', auth_1.requireAuth, upload.single('file')
         });
     }
 });
-// POST /api/whatsapp/preview-campaign - Generate campaign preview
 router.post('/preview-campaign', auth_1.requireAuth, async (req, res) => {
     try {
         const userId = req.session.user.id;
@@ -893,7 +825,6 @@ router.post('/preview-campaign', auth_1.requireAuth, async (req, res) => {
                 error: 'template_name is required'
             });
         }
-        // Get template details including media ID, header type, and media URL
         const templateResult = await index_1.pool.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, template_name, language]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({
@@ -902,19 +833,15 @@ router.post('/preview-campaign', auth_1.requireAuth, async (req, res) => {
             });
         }
         const components = templateResult.rows[0].components;
-        // Parse recipients with CSV support (same logic as quick-send)
         const lines = recipients_text
             .split('\n')
             .map((line) => line.trim())
             .filter((line) => line.length > 0);
-        // Process each line to extract phone numbers and variables
         const recipientData = [];
         lines.forEach((line, index) => {
-            // Check if line contains comma-separated values (Excel format)
             if (line.includes(',')) {
                 const columns = line.split(',').map((col) => col.trim());
-                const phone = columns[0]; // First column is phone number
-                // Create variables from remaining columns (1, 2, 3, etc.)
+                const phone = columns[0];
                 const lineVariables = {};
                 for (let i = 1; i < columns.length; i++) {
                     lineVariables[i.toString()] = columns[i];
@@ -923,7 +850,6 @@ router.post('/preview-campaign', auth_1.requireAuth, async (req, res) => {
                 console.log(`📊 Preview row ${index + 1}: Phone=${phone}, Variables=`, lineVariables);
             }
             else {
-                // Simple phone number format
                 recipientData.push({ phone: line, variables: {} });
             }
         });
@@ -931,7 +857,6 @@ router.post('/preview-campaign', auth_1.requireAuth, async (req, res) => {
         const formattedNumbers = phoneNumbers.map((num) => formatPhoneNumber(num));
         const validRecipients = formattedNumbers.filter((num) => validatePhoneNumber(num));
         const invalidRecipients = formattedNumbers.filter((num) => !validatePhoneNumber(num));
-        // Generate personalized previews for each recipient
         const recipientPreviews = recipientData.slice(0, 3).map((recipient, index) => {
             const recipientVariables = Object.keys(recipient.variables).length > 0
                 ? recipient.variables
@@ -948,14 +873,14 @@ router.post('/preview-campaign', auth_1.requireAuth, async (req, res) => {
             data: {
                 template_name,
                 language,
-                recipient_previews: recipientPreviews, // Array of personalized previews
+                recipient_previews: recipientPreviews,
                 components,
                 variables,
                 recipient_stats: {
                     total_provided: phoneNumbers.length,
                     valid_recipients: validRecipients.length,
                     invalid_recipients: invalidRecipients.length,
-                    valid_numbers: validRecipients.slice(0, 5), // Show first 5 for preview
+                    valid_numbers: validRecipients.slice(0, 5),
                     invalid_numbers: invalidRecipients
                 }
             }
@@ -969,13 +894,11 @@ router.post('/preview-campaign', auth_1.requireAuth, async (req, res) => {
         });
     }
 });
-// POST /api/whatsapp/quick-send - Handle quick message sending (with optional image upload)
 router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), async (req, res) => {
     try {
         const userId = req.session.user.id;
         console.log(`🔍 DEBUG QUICK-SEND: userId from session = ${userId}`);
         let { phone_number_id, template_name, language = 'en_US', variables = {}, recipients_text = '', campaign_name } = req.body;
-        // Parse variables if it's a JSON string (when sent via FormData)
         if (typeof variables === 'string') {
             try {
                 variables = JSON.parse(variables);
@@ -988,7 +911,6 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
         console.log(`🔍 DEBUG QUICK-SEND: Request body:`, { phone_number_id, template_name, language, campaign_name });
         console.log(`🔍 DEBUG QUICK-SEND: Recipients text:`, recipients_text);
         console.log(`🔍 DEBUG QUICK-SEND: Variables:`, variables);
-        // Validation
         if (!phone_number_id || !template_name || !recipients_text.trim()) {
             console.log(`❌ DEBUG QUICK-SEND: Validation failed - missing fields`);
             return res.status(400).json({
@@ -997,12 +919,10 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
             });
         }
         console.log(`✅ DEBUG QUICK-SEND: Validation passed`);
-        // Parse recipients (quick-send only supports phone numbers, no CSV/dynamic variables)
         const lines = recipients_text
             .split('\n')
             .map((line) => line.trim())
             .filter((line) => line.length > 0);
-        // Check if any line contains CSV format (commas) and reject it
         const csvLines = lines.filter((line) => line.includes(','));
         if (csvLines.length > 0) {
             return res.status(400).json({
@@ -1014,10 +934,8 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
                 }
             });
         }
-        // Process each line as a simple phone number (all use same static variables)
         const recipientData = [];
         lines.forEach((line) => {
-            // Quick-send: all recipients use the same static variables from form
             recipientData.push({ phone: line, variables: variables || {} });
         });
         const phoneNumbers = recipientData.map(item => item.phone);
@@ -1032,7 +950,6 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
             });
         }
         console.log(`✅ DEBUG QUICK-SEND: Phone validation passed`);
-        // CREDIT SYSTEM: Pre-check credits before sending
         try {
             const creditCheck = await (0, creditSystem_1.preCheckCreditsForBulk)(userId, template_name, validRecipients.length);
             if (!creditCheck.sufficient) {
@@ -1055,7 +972,6 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
                 error: 'Failed to check credit balance'
             });
         }
-        // Get WhatsApp number details and verify ownership
         const numberResult = await index_1.pool.query('SELECT access_token, business_name FROM user_business_info WHERE user_id = $1 AND whatsapp_number_id = $2 AND is_active = true', [userId, phone_number_id]);
         if (numberResult.rows.length === 0) {
             return res.status(403).json({
@@ -1064,7 +980,6 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
             });
         }
         const { access_token } = numberResult.rows[0];
-        // Get template details including media ID, header type, and media URL
         const templateResult = await index_1.pool.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, template_name, language]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({
@@ -1073,14 +988,12 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
             });
         }
         const templateDetails = templateResult.rows[0];
-        // Check if template has image header and handle image upload
         let uploadedImageMediaId = null;
         if (templateDetails.header_type === 'STATIC_IMAGE') {
             console.log('🖼️ Template has image header - checking for uploaded image');
             if (req.file) {
                 console.log('📤 Image uploaded for template message, uploading to WhatsApp...');
                 try {
-                    // Upload the image to WhatsApp media endpoint
                     const FormData = require('form-data');
                     const form = new FormData();
                     form.append('file', fs_1.default.createReadStream(req.file.path));
@@ -1094,12 +1007,10 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
                     });
                     uploadedImageMediaId = mediaResponse.data.id;
                     console.log('✅ Image uploaded successfully, media_id:', uploadedImageMediaId);
-                    // Clean up temporary file
                     fs_1.default.unlinkSync(req.file.path);
                 }
                 catch (uploadError) {
                     console.error('❌ Image upload failed:', uploadError.response?.data || uploadError.message);
-                    // Clean up temporary file
                     if (req.file && fs_1.default.existsSync(req.file.path)) {
                         fs_1.default.unlinkSync(req.file.path);
                     }
@@ -1117,23 +1028,15 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
                 });
             }
         }
-        // CRITICAL FIX: Validate template variables match requirements
         const components = templateDetails.components;
         const requiredVariables = new Set();
-        // Special handling for AUTHENTICATION templates
         if (templateDetails.category === 'AUTHENTICATION') {
             console.log(`🔍 Authentication template detected: ${template_name}`);
-            // Authentication templates typically require at least one variable (the OTP code)
-            // even if their components array doesn't show explicit placeholders
             if (Object.keys(variables).length > 0) {
-                // If variables are provided, accept them (usually variable 1 for OTP)
                 requiredVariables.add('1');
             }
-            // If no variables provided, assume it's a static authentication template
         }
         else {
-            // Standard processing for non-authentication templates
-            // Extract all required variables from template components
             for (const component of components) {
                 if (component.text) {
                     const matches = component.text.match(/\{\{(\d+)\}\}/g) || [];
@@ -1142,7 +1045,6 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
                         requiredVariables.add(variableIndex);
                     });
                 }
-                // Check button URLs for variables
                 if (component.type === 'BUTTONS' && component.buttons) {
                     component.buttons.forEach((button) => {
                         if (button.url && button.url.includes('{{')) {
@@ -1158,19 +1060,16 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
         }
         const requiredVariablesList = Array.from(requiredVariables).sort((a, b) => parseInt(a) - parseInt(b));
         const providedVariablesList = Object.keys(variables).sort((a, b) => parseInt(a) - parseInt(b));
-        // Log template analysis for debugging
         console.log(`🔍 Template "${template_name}" Analysis:`);
         console.log(`   Required variables: [${requiredVariablesList.join(', ')}]`);
         console.log(`   Provided variables: [${providedVariablesList.join(', ')}]`);
         console.log(`   Variables object:`, variables);
-        // Check if variables count matches
         if (requiredVariablesList.length !== providedVariablesList.length) {
             return res.status(400).json({
                 success: false,
                 error: `Template "${template_name}" requires ${requiredVariablesList.length} variables (${requiredVariablesList.join(', ')}), but ${providedVariablesList.length} were provided (${providedVariablesList.join(', ')})`
             });
         }
-        // Ensure all required variables are provided with correct indices
         const missingVariables = requiredVariablesList.filter(reqVar => !variables[reqVar]);
         const unexpectedVariables = providedVariablesList.filter(provVar => !requiredVariablesList.includes(provVar));
         if (missingVariables.length > 0) {
@@ -1185,7 +1084,6 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
                 error: `Template "${template_name}" requires variables [${requiredVariablesList.join(', ')}], but unexpected variables were provided: [${unexpectedVariables.join(', ')}]`
             });
         }
-        // Create campaign log
         const campaignResult = await index_1.pool.query(`INSERT INTO campaign_logs 
        (user_id, campaign_name, template_used, phone_number_id, language_code, total_recipients, status, campaign_data)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -1200,11 +1098,9 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
             JSON.stringify({ variables, template_components: templateResult.rows[0].components })
         ]);
         const campaignId = campaignResult.rows[0].id;
-        // CREDIT SYSTEM: Deduct credits upfront for Quicksend (deduct on push, not delivery)
         let creditDeductionSuccess = false;
         let creditBalance = 0;
         try {
-            // Get the credit check result from the earlier pre-check
             const { cost, category } = await (0, creditSystem_1.calculateCreditCost)(userId, template_name, validRecipients.length);
             const creditResult = await (0, creditSystem_1.deductCredits)({
                 userId,
@@ -1221,13 +1117,11 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
                 console.log(`[CREDIT SYSTEM] Deducted ${cost} credits for Quicksend. New balance: ${creditBalance}`);
             }
             else {
-                // This shouldn't happen since we pre-checked, but handle it
                 throw new Error('Insufficient credits after pre-check');
             }
         }
         catch (creditError) {
             console.error('Credit deduction error for Quicksend:', creditError);
-            // Update campaign status to failed
             await index_1.pool.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3', ['failed', 'Credit deduction failed', campaignId]);
             return res.status(400).json({
                 success: false,
@@ -1235,21 +1129,15 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
                 details: creditError instanceof Error ? creditError.message : 'Unknown error'
             });
         }
-        // Send messages
         let successCount = 0;
         let failCount = 0;
         const messagePromises = validRecipients.map((recipient, index) => {
-            // Get the recipient data for this phone number
             const recipientInfo = recipientData.find(item => formatPhoneNumber(item.phone) === recipient);
-            // Use per-recipient variables if available, otherwise use global variables
             const recipientVariables = recipientInfo?.variables && Object.keys(recipientInfo.variables).length > 0
                 ? recipientInfo.variables
                 : variables;
             console.log(`📤 Sending to ${recipient} with variables:`, recipientVariables);
-            return sendTemplateMessage(phone_number_id, access_token, recipient, template_name, language, recipientVariables, // Dynamic or static variables per recipient
-            templateDetails.components, campaignId, userId, templateDetails.header_media_id, templateDetails.header_type, templateDetails.header_media_url, templateDetails.header_handle, uploadedImageMediaId || templateDetails.media_id, // Use fresh uploaded media_id if available
-            templateDetails.category // Template category for authentication template handling
-            ).then(() => {
+            return sendTemplateMessage(phone_number_id, access_token, recipient, template_name, language, recipientVariables, templateDetails.components, campaignId, userId, templateDetails.header_media_id, templateDetails.header_type, templateDetails.header_media_url, templateDetails.header_handle, uploadedImageMediaId || templateDetails.media_id, templateDetails.category).then(() => {
                 successCount++;
             }).catch((error) => {
                 failCount++;
@@ -1257,7 +1145,6 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
             });
         });
         await Promise.allSettled(messagePromises);
-        // Update campaign status
         await index_1.pool.query('UPDATE campaign_logs SET status = $1, successful_sends = $2, failed_sends = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4', ['completed', successCount, failCount, campaignId]);
         res.json({
             success: true,
@@ -1283,19 +1170,16 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
         });
     }
 });
-// POST /api/whatsapp/send-bulk - Handle bulk message sending
 router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
     try {
         const userId = req.session.user.id;
         const { phone_number_id, template_name, language = 'en_US', variables = {}, recipients = [], buttons = {}, campaign_name } = req.body;
-        // Validation
         if (!phone_number_id || !template_name || !recipients || recipients.length === 0) {
             return res.status(400).json({
                 success: false,
                 error: 'Missing required fields: phone_number_id, template_name, recipients'
             });
         }
-        // Validate recipients are phone numbers
         const validRecipients = recipients.filter((phone) => validatePhoneNumber(phone));
         if (validRecipients.length === 0) {
             return res.status(400).json({
@@ -1303,7 +1187,6 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
                 error: 'No valid phone numbers provided'
             });
         }
-        // CREDIT SYSTEM: Pre-check credits before sending
         try {
             const creditCheck = await (0, creditSystem_1.preCheckCreditsForBulk)(userId, template_name, validRecipients.length);
             if (!creditCheck.sufficient) {
@@ -1326,7 +1209,6 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
                 error: 'Failed to check credit balance'
             });
         }
-        // Get WhatsApp number details and verify ownership
         const numberResult = await index_1.pool.query('SELECT access_token, business_name FROM user_business_info WHERE user_id = $1 AND whatsapp_number_id = $2 AND is_active = true', [userId, phone_number_id]);
         if (numberResult.rows.length === 0) {
             return res.status(403).json({
@@ -1335,7 +1217,6 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
             });
         }
         const { access_token } = numberResult.rows[0];
-        // Get template details including media ID, header type, and media URL
         const templateResult = await index_1.pool.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, template_name, language]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({
@@ -1343,24 +1224,16 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
                 error: 'Template not found'
             });
         }
-        // CRITICAL FIX: Validate template variables match requirements (same as quick-send)
         const components = templateResult.rows[0].components;
         const templateCategory = templateResult.rows[0].category;
         const requiredVariables = new Set();
-        // Special handling for AUTHENTICATION templates
         if (templateCategory === 'AUTHENTICATION') {
             console.log(`🔍 Authentication template detected in bulk send: ${template_name}`);
-            // Authentication templates typically require at least one variable (the OTP code)
-            // even if their components array doesn't show explicit placeholders
             if (Object.keys(variables).length > 0) {
-                // If variables are provided, accept them (usually variable 1 for OTP)
                 requiredVariables.add('1');
             }
-            // If no variables provided, assume it's a static authentication template
         }
         else {
-            // Standard processing for non-authentication templates
-            // Extract all required variables from template components
             for (const component of components) {
                 if (component.text) {
                     const matches = component.text.match(/\{\{(\d+)\}\}/g) || [];
@@ -1369,7 +1242,6 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
                         requiredVariables.add(variableIndex);
                     });
                 }
-                // Check button URLs for variables
                 if (component.type === 'BUTTONS' && component.buttons) {
                     component.buttons.forEach((button) => {
                         if (button.url && button.url.includes('{{')) {
@@ -1385,19 +1257,16 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
         }
         const requiredVariablesList = Array.from(requiredVariables).sort((a, b) => parseInt(a) - parseInt(b));
         const providedVariablesList = Object.keys(variables).sort((a, b) => parseInt(a) - parseInt(b));
-        // Log template analysis for debugging
         console.log(`🔍 Bulk Template "${template_name}" Analysis:`);
         console.log(`   Required variables: [${requiredVariablesList.join(', ')}]`);
         console.log(`   Provided variables: [${providedVariablesList.join(', ')}]`);
         console.log(`   Variables object:`, variables);
-        // Check if variables count matches
         if (requiredVariablesList.length !== providedVariablesList.length) {
             return res.status(400).json({
                 success: false,
                 error: `Template "${template_name}" requires ${requiredVariablesList.length} variables (${requiredVariablesList.join(', ')}), but ${providedVariablesList.length} were provided (${providedVariablesList.join(', ')})`
             });
         }
-        // Ensure all required variables are provided with correct indices
         const missingVariables = requiredVariablesList.filter(reqVar => !variables[reqVar]);
         const unexpectedVariables = providedVariablesList.filter(provVar => !requiredVariablesList.includes(provVar));
         if (missingVariables.length > 0) {
@@ -1412,7 +1281,6 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
                 error: `Template "${template_name}" requires variables [${requiredVariablesList.join(', ')}], but unexpected variables were provided: [${unexpectedVariables.join(', ')}]`
             });
         }
-        // Create campaign log
         const campaignResult = await index_1.pool.query(`INSERT INTO campaign_logs 
        (user_id, campaign_name, template_used, phone_number_id, language_code, total_recipients, status, campaign_data)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -1427,11 +1295,9 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
             JSON.stringify({ variables, buttons, template_components: templateResult.rows[0].components })
         ]);
         const campaignId = campaignResult.rows[0].id;
-        // CREDIT SYSTEM: Deduct credits upfront for Customise SMS (deduct on push, not delivery)
         let creditDeductionSuccess = false;
         let creditBalance = 0;
         try {
-            // Get the credit check result from the earlier pre-check
             const { cost, category } = await (0, creditSystem_1.calculateCreditCost)(userId, template_name, validRecipients.length);
             const creditResult = await (0, creditSystem_1.deductCredits)({
                 userId,
@@ -1448,13 +1314,11 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
                 console.log(`[CREDIT SYSTEM] Deducted ${cost} credits for Customise SMS. New balance: ${creditBalance}`);
             }
             else {
-                // This shouldn't happen since we pre-checked, but handle it
                 throw new Error('Insufficient credits after pre-check');
             }
         }
         catch (creditError) {
             console.error('Credit deduction error for Customise SMS:', creditError);
-            // Update campaign status to failed
             await index_1.pool.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3', ['failed', 'Credit deduction failed', campaignId]);
             return res.status(400).json({
                 success: false,
@@ -1462,11 +1326,8 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
                 details: creditError instanceof Error ? creditError.message : 'Unknown error'
             });
         }
-        // Start sending messages (in a real app, this would be a background job)
-        // For demo purposes, we'll simulate the sending process
         let successCount = 0;
         let failCount = 0;
-        // Process messages in batches to respect rate limits
         const batchSize = 10;
         const batches = [];
         for (let i = 0; i < validRecipients.length; i += batchSize) {
@@ -1478,12 +1339,10 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
                 const messagePromise = sendTemplateMessage(phone_number_id, access_token, recipient, template_name, language, variables, templateResult.rows[0].components, campaignId, userId, templateResult.rows[0].header_media_id, templateResult.rows[0].header_type, templateResult.rows[0].header_media_url, templateResult.rows[0].header_handle, templateResult.rows[0].media_id, templateResult.rows[0].category);
                 messagePromises.push(messagePromise);
             }
-            // Wait between batches to respect rate limits
             if (batches.indexOf(batch) < batches.length - 1) {
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
-        // Execute all message sending promises
         const results = await Promise.allSettled(messagePromises);
         results.forEach(result => {
             if (result.status === 'fulfilled') {
@@ -1493,7 +1352,6 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
                 failCount++;
             }
         });
-        // Update campaign status
         await index_1.pool.query('UPDATE campaign_logs SET status = $1, successful_sends = $2, failed_sends = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4', ['completed', successCount, failCount, campaignId]);
         res.json({
             success: true,
@@ -1518,10 +1376,8 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
         });
     }
 });
-// Function to send individual template message
 async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templateName, language, variables, components, campaignId, userId, headerMediaId, headerType, headerMediaUrl, headerHandle, mediaId, templateCategory) {
     try {
-        // DUPLICATE DETECTION: Check if this exact message was sent recently
         const duplicateCheck = await (0, duplicateDetection_1.checkAndHandleDuplicate)(userId, templateName, recipient, variables, campaignId);
         if (duplicateCheck.isDuplicate) {
             console.log(`❌ DUPLICATE DETECTED: Skipping message to ${recipient} with template ${templateName}`);
@@ -1535,19 +1391,15 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
         }
         const templateComponents = [];
         console.log(`🚀 Processing template "${templateName}" with category: ${templateCategory || 'UNKNOWN'}, header_type: ${headerType || 'UNKNOWN'}`);
-        // Special handling for AUTHENTICATION templates (2025 format)
         if (templateCategory === 'AUTHENTICATION') {
             console.log(`🔐 Authentication template detected - using 2025 format`);
-            // Get OTP code from variables (usually var1)
             const otpCode = variables['1'] || variables['var1'] || Object.values(variables)[0];
             if (otpCode) {
                 console.log(`🔐 Adding authentication template components with OTP: ${otpCode}`);
-                // Add body component with OTP code
                 templateComponents.push({
                     type: "body",
                     parameters: [{ type: "text", text: otpCode.toString() }]
                 });
-                // Add button component with OTP code (required for authentication templates)
                 templateComponents.push({
                     type: "button",
                     sub_type: "url",
@@ -1561,15 +1413,12 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
             }
         }
         else {
-            // SIMPLIFIED LOGIC: Only handle STATIC_IMAGE, TEXT, and NONE for non-auth templates
             for (const component of components) {
                 if (component.type === 'HEADER') {
-                    // Handle IMAGE templates - Use fresh uploaded media_id
                     if (component.format === 'IMAGE' || headerType === 'STATIC_IMAGE') {
                         console.log(`📸 IMAGE template detected - using fresh uploaded media_id for sending`);
                         console.log(`🔍 Available data:`);
                         console.log(`   media_id (fresh upload): ${mediaId || 'Not set'}`);
-                        // Use the fresh uploaded media_id from quick-send
                         if (mediaId) {
                             console.log(`✅ Using fresh uploaded media_id for message sending: ${mediaId}`);
                             const headerComponent = {
@@ -1577,7 +1426,7 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
                                 parameters: [{
                                         type: "image",
                                         image: {
-                                            id: mediaId // Use fresh media_id from upload
+                                            id: mediaId
                                         }
                                     }]
                             };
@@ -1588,13 +1437,11 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
                             throw new Error(`Template '${templateName}' requires image but no fresh media_id provided. Upload image in quick-send.`);
                         }
                     }
-                    // Handle TEXT headers with variables
                     else if (headerType === 'TEXT' && component.text && component.text.includes('{{')) {
                         console.log(`📝 TEXT header with variables detected`);
                         const headerParams = [];
                         const matches = component.text.match(/\{\{(\d+)\}\}/g);
                         if (matches) {
-                            // CRITICAL FIX: Always send ALL required parameters, even if empty
                             matches.forEach((match) => {
                                 const variableIndex = parseInt(match.replace(/[{}]/g, ''));
                                 const value = variables[variableIndex.toString()] || `[Header Variable ${variableIndex} not provided]`;
@@ -1603,7 +1450,6 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
                                     text: value
                                 });
                             });
-                            // Always add header component if template has variables (Meta requirement)
                             templateComponents.push({
                                 type: "header",
                                 parameters: headerParams
@@ -1613,11 +1459,9 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
                     }
                 }
                 else if (component.type === 'BODY' && component.text) {
-                    // Handle body variables
                     const matches = component.text.match(/\{\{(\d+)\}\}/g);
                     if (matches) {
                         const bodyParams = [];
-                        // CRITICAL FIX: Always send ALL required parameters, even if empty
                         matches.forEach((match) => {
                             const variableIndex = parseInt(match.replace(/[{}]/g, ''));
                             const value = variables[variableIndex.toString()] || `[Variable ${variableIndex} not provided]`;
@@ -1627,7 +1471,6 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
                                 text: value
                             });
                         });
-                        // Always add body component if template has variables (Meta requirement)
                         templateComponents.push({
                             type: "body",
                             parameters: bodyParams
@@ -1636,7 +1479,6 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
                     }
                 }
                 else if (component.type === 'BUTTONS' && component.buttons) {
-                    // Handle button variables (dynamic URLs)
                     component.buttons.forEach((button, buttonIndex) => {
                         if (button.type === 'URL' && button.url && button.url.includes('{{')) {
                             const matches = button.url.match(/\{\{(\d+)\}\}/g);
@@ -1665,9 +1507,8 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
                         }
                     });
                 }
-            } // End of component processing loop for non-auth templates
-        } // End of else block for non-auth templates
-        // Build the template payload
+            }
+        }
         const templatePayload = {
             name: templateName,
             language: {
@@ -1675,11 +1516,9 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
                 policy: "deterministic"
             }
         };
-        // Only add components if we have variables to populate
         if (templateComponents.length > 0) {
             templatePayload.components = templateComponents;
         }
-        // Prepare WhatsApp API request payload
         const payload = {
             messaging_product: "whatsapp",
             recipient_type: "individual",
@@ -1688,7 +1527,6 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
             template: templatePayload
         };
         console.log('📤 Sending WhatsApp message payload:', JSON.stringify(payload, null, 2));
-        // Make actual WhatsApp API call
         const response = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
             method: 'POST',
             headers: {
@@ -1699,7 +1537,6 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
         });
         const responseData = await response.json();
         console.log('📥 WhatsApp API response:', JSON.stringify(responseData, null, 2));
-        // Enhanced error handling for common WhatsApp API errors
         if (!response.ok) {
             const errorCode = responseData.error?.code;
             const errorMessage = responseData.error?.message || 'Unknown error';
@@ -1710,7 +1547,6 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
                 template: templateName,
                 recipient: recipient
             });
-            // Handle specific error codes
             switch (errorCode) {
                 case 132012:
                     throw new Error(`Template parameter mismatch: ${errorMessage}`);
@@ -1727,7 +1563,6 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
         if (responseData.messages && responseData.messages[0]) {
             const messageId = responseData.messages[0].id;
             console.log(`✅ Message sent successfully to ${recipient}, ID: ${messageId}`);
-            // Log successful message
             await index_1.pool.query(`INSERT INTO message_logs (campaign_id, recipient_number, message_id, status, api_response, sent_at)
          VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`, [campaignId, recipient, messageId, 'sent', JSON.stringify(responseData)]);
             return { success: true, messageId, recipient };
@@ -1735,7 +1570,6 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
         else {
             const errorMessage = responseData.error?.message || responseData.error?.error_data?.details || JSON.stringify(responseData);
             console.error(`❌ Message failed to ${recipient}:`, errorMessage);
-            // Log failed message
             await index_1.pool.query(`INSERT INTO message_logs (campaign_id, recipient_number, status, error_message, api_response)
          VALUES ($1, $2, $3, $4, $5)`, [campaignId, recipient, 'failed', errorMessage, JSON.stringify(responseData)]);
             throw new Error(errorMessage);
@@ -1743,14 +1577,12 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        // Log failed message if not already logged
         await index_1.pool.query(`INSERT INTO message_logs (campaign_id, recipient_number, status, error_message)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (campaign_id, recipient_number) DO NOTHING`, [campaignId, recipient, 'failed', errorMessage]);
         throw error;
     }
 }
-// POST /api/whatsapp/parse-excel - Parse Excel file and return columns and sample data
 router.post('/parse-excel', auth_1.requireAuth, upload.single('file'), async (req, res) => {
     try {
         if (!req.file) {
@@ -1765,7 +1597,6 @@ router.post('/parse-excel', auth_1.requireAuth, upload.single('file'), async (re
         let columns = [];
         try {
             if (fileExtension === '.csv') {
-                // Handle CSV files
                 const fileContent = fs_1.default.readFileSync(filePath, 'utf8');
                 const lines = fileContent.split('\n').filter(line => line.trim());
                 if (lines.length > 0) {
@@ -1781,7 +1612,6 @@ router.post('/parse-excel', auth_1.requireAuth, upload.single('file'), async (re
                 }
             }
             else {
-                // Handle Excel files
                 const workbook = XLSX.readFile(filePath);
                 const sheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[sheetName];
@@ -1808,7 +1638,6 @@ router.post('/parse-excel', auth_1.requireAuth, upload.single('file'), async (re
             });
         }
         finally {
-            // Clean up uploaded file
             fs_1.default.unlink(filePath, (err) => {
                 if (err)
                     console.error('Error deleting temp file:', err);
@@ -1823,7 +1652,6 @@ router.post('/parse-excel', auth_1.requireAuth, upload.single('file'), async (re
         });
     }
 });
-// POST /api/whatsapp/preview-custom - Generate preview for custom campaign
 router.post('/preview-custom', auth_1.requireAuth, async (req, res) => {
     try {
         const userId = req.session.user.id;
@@ -1834,7 +1662,6 @@ router.post('/preview-custom', auth_1.requireAuth, async (req, res) => {
                 error: 'Missing required fields: templateName, recipientColumn, sampleData'
             });
         }
-        // Get template details
         const templateResult = await index_1.pool.query('SELECT components, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, templateName, language]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({
@@ -1843,7 +1670,6 @@ router.post('/preview-custom', auth_1.requireAuth, async (req, res) => {
             });
         }
         const components = templateResult.rows[0].components;
-        // Generate previews for sample data
         const previews = sampleData.slice(0, 2).map((row, index) => {
             const recipient = row[recipientColumn];
             if (!recipient) {
@@ -1852,7 +1678,6 @@ router.post('/preview-custom', auth_1.requireAuth, async (req, res) => {
                     message: 'No recipient phone number found in this row'
                 };
             }
-            // Replace variables in template
             let message = generateCustomTemplatePreview(components, variableMappings, row);
             return {
                 recipient: recipient,
@@ -1878,19 +1703,16 @@ router.post('/preview-custom', auth_1.requireAuth, async (req, res) => {
         });
     }
 });
-// POST /api/whatsapp/custom-send - Handle custom campaign submission
 router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (req, res) => {
     try {
         const userId = req.session.user.id;
         const { wabaId, templateName, language = 'en_US', recipientColName, variableMappings = '{}', campaignName } = req.body;
-        // Validation
         if (!req.file || !recipientColName || !wabaId || !templateName) {
             return res.status(400).json({
                 success: false,
                 error: 'File, recipient column name, WhatsApp number, and template are required.'
             });
         }
-        // Parse the uploaded file
         const filePath = req.file.path;
         const fileExtension = path_1.default.extname(req.file.originalname).toLowerCase();
         let data = [];
@@ -1922,9 +1744,7 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
                     error: 'The uploaded file contains no data.'
                 });
             }
-            // Parse variable mappings
             const parsedVariableMappings = JSON.parse(variableMappings);
-            // CREDIT SYSTEM: Pre-check credits before sending
             try {
                 const creditCheck = await (0, creditSystem_1.preCheckCreditsForBulk)(userId, templateName, data.length);
                 if (!creditCheck.sufficient) {
@@ -1947,7 +1767,6 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
                     error: 'Failed to check credit balance'
                 });
             }
-            // Get WhatsApp number details and verify ownership
             const numberResult = await index_1.pool.query('SELECT access_token, business_name FROM user_business_info WHERE user_id = $1 AND whatsapp_number_id = $2 AND is_active = true', [userId, wabaId]);
             if (numberResult.rows.length === 0) {
                 return res.status(403).json({
@@ -1955,7 +1774,6 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
                     error: 'WhatsApp number not found or access denied'
                 });
             }
-            // Get template details
             const templateResult = await index_1.pool.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, templateName, language]);
             if (templateResult.rows.length === 0) {
                 return res.status(404).json({
@@ -1963,7 +1781,6 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
                     error: 'Template not found'
                 });
             }
-            // Create campaign record
             const campaignResult = await index_1.pool.query(`INSERT INTO campaign_logs 
          (user_id, campaign_name, template_used, phone_number_id, language_code, total_recipients, status, campaign_data)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -1982,11 +1799,9 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
                 })
             ]);
             const campaignId = campaignResult.rows[0].id;
-            // CREDIT SYSTEM: Deduct credits upfront for Custom Send (deduct on push, not delivery)
             let creditDeductionSuccess = false;
             let creditBalance = 0;
             try {
-                // Get the credit check result from the earlier pre-check
                 const { cost, category } = await (0, creditSystem_1.calculateCreditCost)(userId, templateName, data.length);
                 const creditResult = await (0, creditSystem_1.deductCredits)({
                     userId,
@@ -2003,13 +1818,11 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
                     console.log(`[CREDIT SYSTEM] Deducted ${cost} credits for Custom Send. New balance: ${creditBalance}`);
                 }
                 else {
-                    // This shouldn't happen since we pre-checked, but handle it
                     throw new Error('Insufficient credits after pre-check');
                 }
             }
             catch (creditError) {
                 console.error('Credit deduction error for Custom Send:', creditError);
-                // Update campaign status to failed
                 await index_1.pool.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3', ['failed', 'Credit deduction failed', campaignId]);
                 return res.status(400).json({
                     success: false,
@@ -2017,7 +1830,6 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
                     details: creditError instanceof Error ? creditError.message : 'Unknown error'
                 });
             }
-            // Send messages to each recipient
             let successCount = 0;
             let failCount = 0;
             const messagePromises = data.map((row) => {
@@ -2026,12 +1838,10 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
                     failCount++;
                     return Promise.resolve();
                 }
-                // Build variables object for this row
                 const rowVariables = {};
                 Object.keys(parsedVariableMappings).forEach(templateVar => {
                     const columnName = parsedVariableMappings[templateVar];
                     if (columnName && row[columnName]) {
-                        // Extract the number from the template variable (e.g., "{{1}}" -> "1")
                         const variableIndex = templateVar.replace(/[{}]/g, '');
                         rowVariables[variableIndex] = row[columnName].toString();
                     }
@@ -2044,7 +1854,6 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
                 });
             });
             await Promise.allSettled(messagePromises);
-            // Update campaign status
             await index_1.pool.query('UPDATE campaign_logs SET status = $1, successful_sends = $2, failed_sends = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4', ['completed', successCount, failCount, campaignId]);
             res.status(202).json({
                 success: true,
@@ -2069,7 +1878,6 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
             });
         }
         finally {
-            // Clean up uploaded file
             fs_1.default.unlink(filePath, (err) => {
                 if (err)
                     console.error('Error deleting temp file:', err);
@@ -2084,7 +1892,6 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
         });
     }
 });
-// Helper function to generate custom template preview
 function generateCustomTemplatePreview(components, variableMappings, rowData) {
     let preview = '';
     components.forEach(component => {
@@ -2118,20 +1925,17 @@ function replaceCustomVariables(text, variableMappings, rowData) {
         if (columnName && rowData[columnName]) {
             return rowData[columnName].toString();
         }
-        return match; // Keep original if no mapping found
+        return match;
     });
 }
-// GET /api/whatsapp/reports - Get detailed message reports
 router.get('/reports', auth_1.requireAuth, async (req, res) => {
     try {
         const userId = req.session.user.id;
         const { page = 1, limit = 50, dateFrom = '', dateTo = '', recipientNumber = '', template = '', status = 'all', export: exportFormat = 'false' } = req.query;
         const offset = (Number(page) - 1) * Number(limit);
-        // Build WHERE conditions
         let whereConditions = 'WHERE cl.user_id = $1';
         const params = [userId];
         let paramCount = 1;
-        // Date range filter
         if (dateFrom && dateFrom.toString().trim()) {
             paramCount++;
             whereConditions += ` AND ml.created_at >= $${paramCount}`;
@@ -2142,25 +1946,21 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
             whereConditions += ` AND ml.created_at <= $${paramCount}::date + interval '1 day'`;
             params.push(dateTo.toString());
         }
-        // Recipient number filter
         if (recipientNumber && recipientNumber.toString().trim()) {
             paramCount++;
             whereConditions += ` AND ml.recipient_number ILIKE $${paramCount}`;
             params.push(`%${recipientNumber.toString().trim()}%`);
         }
-        // Template filter
         if (template && template.toString().trim()) {
             paramCount++;
             whereConditions += ` AND cl.template_used = $${paramCount}`;
             params.push(template.toString());
         }
-        // Status filter
         if (status && status !== 'all') {
             paramCount++;
             whereConditions += ` AND ml.status = $${paramCount}`;
             params.push(status.toString());
         }
-        // Main query for reports
         const reportsQuery = `
       SELECT 
         ml.id,
@@ -2185,7 +1985,6 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
             params.push(Number(limit), offset);
         }
         const reportsResult = await index_1.pool.query(reportsQuery, params);
-        // If exporting data
         if (exportFormat && exportFormat !== 'false') {
             const headers = [
                 'Campaign Name',
@@ -2221,17 +2020,16 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
                     console.log('📊 Creating Excel file with', rows.length, 'rows');
                     const workbook = XLSX.utils.book_new();
                     const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-                    // Set column widths
                     const columnWidths = [
-                        { wch: 25 }, // Campaign Name
-                        { wch: 15 }, // Template
-                        { wch: 15 }, // From Number
-                        { wch: 15 }, // Recipient Number
-                        { wch: 10 }, // Status
-                        { wch: 18 }, // Sent At
-                        { wch: 18 }, // Delivered At
-                        { wch: 18 }, // Read At
-                        { wch: 30 } // Failure Reason
+                        { wch: 25 },
+                        { wch: 15 },
+                        { wch: 15 },
+                        { wch: 15 },
+                        { wch: 10 },
+                        { wch: 18 },
+                        { wch: 18 },
+                        { wch: 18 },
+                        { wch: 30 }
                     ];
                     worksheet['!cols'] = columnWidths;
                     XLSX.utils.book_append_sheet(workbook, worksheet, 'WhatsApp Reports');
@@ -2252,7 +2050,6 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
                 }
             }
         }
-        // Get total count for pagination
         const countQuery = `
       SELECT COUNT(*) as total
       FROM campaign_logs cl
@@ -2281,7 +2078,6 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
         });
     }
 });
-// GET /api/whatsapp/reports/summary - Get campaign summary statistics
 router.get('/reports/summary', auth_1.requireAuth, async (req, res) => {
     try {
         const userId = req.session.user.id;
@@ -2321,7 +2117,6 @@ router.get('/reports/summary', auth_1.requireAuth, async (req, res) => {
         });
     }
 });
-// GET /api/whatsapp/campaigns - Get user's campaigns
 router.get('/campaigns', auth_1.requireAuth, async (req, res) => {
     try {
         const userId = req.session.user.id;
@@ -2359,7 +2154,6 @@ router.get('/campaigns', auth_1.requireAuth, async (req, res) => {
         });
     }
 });
-// GET /api/whatsapp/reports/templates - Get available templates for filter dropdown
 router.get('/reports/templates', auth_1.requireAuth, async (req, res) => {
     try {
         const userId = req.session.user.id;
@@ -2384,7 +2178,6 @@ router.get('/reports/templates', auth_1.requireAuth, async (req, res) => {
         });
     }
 });
-// POST /api/whatsapp/send-custom-messages - Send personalized messages using Excel data
 router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
     try {
         const userId = req.session.user.id;
@@ -2395,7 +2188,6 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
                 error: 'Missing required fields: templateName, phoneNumberId, recipientColumn, data'
             });
         }
-        // CREDIT SYSTEM: Pre-check credits before sending
         try {
             const creditCheck = await (0, creditSystem_1.preCheckCreditsForBulk)(userId, templateName, data.length);
             if (!creditCheck.sufficient) {
@@ -2418,7 +2210,6 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
                 error: 'Failed to check credit balance'
             });
         }
-        // Get user's business info
         const businessResult = await index_1.pool.query('SELECT access_token, whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND whatsapp_number_id = $2 AND is_active = true', [userId, phoneNumberId]);
         if (businessResult.rows.length === 0) {
             return res.status(400).json({
@@ -2427,7 +2218,6 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
             });
         }
         const businessInfo = businessResult.rows[0];
-        // Get template details
         const templateResult = await index_1.pool.query('SELECT components, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, templateName, language]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({
@@ -2436,7 +2226,6 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
             });
         }
         const template = templateResult.rows[0];
-        // Create campaign log entry (matching quick-send structure)
         const campaignResult = await index_1.pool.query(`INSERT INTO campaign_logs 
        (user_id, campaign_name, template_used, phone_number_id, language_code, total_recipients, status, campaign_data)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -2451,11 +2240,9 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
             JSON.stringify({ template_components: template.components, custom_data: data })
         ]);
         const campaignId = campaignResult.rows[0].id;
-        // CREDIT SYSTEM: Deduct credits upfront for Custom Messages (deduct on push, not delivery)
         let creditDeductionSuccess = false;
         let creditBalance = 0;
         try {
-            // Get the credit check result from the earlier pre-check
             const { cost, category } = await (0, creditSystem_1.calculateCreditCost)(userId, templateName, data.length);
             const creditResult = await (0, creditSystem_1.deductCredits)({
                 userId,
@@ -2472,13 +2259,11 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
                 console.log(`[CREDIT SYSTEM] Deducted ${cost} credits for Custom Messages. New balance: ${creditBalance}`);
             }
             else {
-                // This shouldn't happen since we pre-checked, but handle it
                 throw new Error('Insufficient credits after pre-check');
             }
         }
         catch (creditError) {
             console.error('Credit deduction error for Custom Messages:', creditError);
-            // Update campaign status to failed
             await index_1.pool.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3', ['failed', 'Credit deduction failed', campaignId]);
             return res.status(400).json({
                 success: false,
@@ -2489,7 +2274,6 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
         let successfulSends = 0;
         let failedSends = 0;
         const errors = [];
-        // Process each recipient
         for (const row of data) {
             try {
                 const recipient = row[recipientColumn];
@@ -2498,7 +2282,6 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
                     errors.push(`Missing recipient for row: ${JSON.stringify(row)}`);
                     continue;
                 }
-                // Prepare variables for this recipient
                 const variables = {};
                 console.log(`🔍 Processing recipient: ${recipient}`);
                 console.log(`🔍 Variable mappings:`, variableMappings);
@@ -2512,15 +2295,8 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
                     }
                 });
                 console.log(`🔍 Final variables for ${recipient}:`, variables);
-                // Send the message
-                await sendTemplateMessage(businessInfo.whatsapp_number_id, businessInfo.access_token, recipient, templateName, language, variables, template.components, campaignId.toString(), userId, undefined, // headerMediaId
-                undefined, // headerType
-                undefined, // headerMediaUrl
-                undefined, // headerHandle
-                undefined, // mediaId
-                template.category);
+                await sendTemplateMessage(businessInfo.whatsapp_number_id, businessInfo.access_token, recipient, templateName, language, variables, template.components, campaignId.toString(), userId, undefined, undefined, undefined, undefined, undefined, template.category);
                 successfulSends++;
-                // Add small delay to avoid rate limiting
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
             catch (error) {
@@ -2529,7 +2305,6 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
                 errors.push(`Failed to send to ${row[recipientColumn]}: ${errorMsg}`);
             }
         }
-        // Update campaign log
         await index_1.pool.query(`UPDATE campaign_logs 
        SET successful_sends = $1, failed_sends = $2, status = $3, updated_at = CURRENT_TIMESTAMP
        WHERE id = $4`, [successfulSends, failedSends, 'completed', campaignId]);
@@ -2540,7 +2315,7 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
                 sent_count: successfulSends,
                 failed_count: failedSends,
                 total_count: data.length,
-                errors: errors.slice(0, 10), // Return first 10 errors
+                errors: errors.slice(0, 10),
                 creditInfo: {
                     deducted: creditDeductionSuccess,
                     newBalance: creditBalance

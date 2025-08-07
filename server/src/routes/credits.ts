@@ -4,6 +4,36 @@ import { requireAuth } from '../middleware/auth';
 
 const router = express.Router();
 
+// Get current credit balance for user
+router.get('/balance', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.user!.id;
+
+    const result = await pool.query(
+      'SELECT credit_balance FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const balance = parseFloat(result.rows[0].credit_balance);
+
+    res.json({
+      balance,
+      user: {
+        id: userId,
+        creditBalance: balance
+      }
+    });
+
+  } catch (error) {
+    console.error('Get balance error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get credits history for current user
 router.get('/history', requireAuth, async (req, res) => {
   try {

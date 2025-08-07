@@ -35,6 +35,7 @@ import { Alert, AlertDescription } from '../components/ui/alert';
 import { Progress } from '../components/ui/progress';
 import { useNotifier } from '../contexts/NotificationContext';
 import { apiRequest } from '../lib/api';
+import { useToast } from '../components/ui/use-toast';
 
 interface WhatsAppNumber {
   id: string;
@@ -63,6 +64,7 @@ interface Language {
 export default function CustomizeMessage() {
   const navigate = useNavigate();
   const notifier = useNotifier();
+  const { toast } = useToast();
 
   // Form state
   const [selectedWabaId, setSelectedWabaId] = useState('');
@@ -622,14 +624,7 @@ export default function CustomizeMessage() {
                     <Label htmlFor="whatsapp-number" className="text-sm font-semibold text-gray-700">WhatsApp Business Number *</Label>
                     <Select value={selectedWabaId} onValueChange={setSelectedWabaId}>
                       <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors">
-                        <SelectValue placeholder="Select WhatsApp number">
-                          {selectedWabaId ? (
-                            <div className="flex items-center">
-                              <Phone className="h-4 w-4 mr-2 text-green-600" />
-                              {whatsappNumbers.find(n => n.phone_number_id === selectedWabaId)?.label || 'WhatsApp Business'}
-                            </div>
-                          ) : 'Select WhatsApp number'}
-                        </SelectValue>
+                        <SelectValue placeholder="Select WhatsApp number" />
                       </SelectTrigger>
                       <SelectContent>
                         {whatsappNumbers.length === 0 ? (
