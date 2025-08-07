@@ -1,5 +1,6 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { MessageSquare, LogOut, Home, ChevronRight } from 'lucide-react';
+import { apiUrl } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import type { User } from '@/types';
 
@@ -19,7 +20,7 @@ export default function AdminLayout({ children, currentUser }: AdminLayoutProps)
 
   const handleLogout = async () => {
     try {
-      await fetch(`${import.meta.env.VITE_API_URL}/api/auth/logout`, {
+      await fetch(apiUrl('/api/auth/logout'), {
         method: 'POST',
         credentials: 'include'
       });

@@ -13,6 +13,8 @@ const pg_1 = require("pg");
 const pino_1 = __importDefault(require("pino"));
 const pino_http_1 = __importDefault(require("pino-http"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
+const compression_1 = __importDefault(require("compression"));
+const path_1 = __importDefault(require("path"));
 // Load environment variables only in development
 if (process.env.NODE_ENV !== 'production') {
     dotenv_1.default.config();
@@ -25,8 +27,6 @@ const whatsapp_1 = __importDefault(require("./routes/whatsapp"));
 const send_1 = __importDefault(require("./routes/send"));
 const credits_1 = __importDefault(require("./routes/credits"));
 const logs_1 = __importDefault(require("./routes/logs"));
-// Import middleware
-const auth_2 = require("./middleware/auth");
 // Import services
 const logCleanup_1 = require("./services/logCleanup");
 // Setup logger
@@ -49,6 +49,8 @@ const app = (0, express_1.default)();
 const PORT = Number(process.env.PORT) || 5050;
 // Setup pino HTTP logging
 app.use((0, pino_http_1.default)({ logger }));
+// Compression middleware
+app.use((0, compression_1.default)());
 // Database connection
 exports.pool = new pg_1.Pool({
     host: process.env.DB_HOST,
@@ -79,12 +81,13 @@ app.use((0, express_rate_limit_1.default)({
     max: 300, // 300 requests per minute per IP
     message: { error: 'Too many requests, please try again later' }
 }));
-app.use((0, cors_1.default)({
-    origin: process.env.NODE_ENV === 'production'
-        ? ['https://yourdomain.com']
-        : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174'],
-    credentials: true
-}));
+// CORS - only needed for development
+if (process.env.NODE_ENV !== 'production') {
+    app.use((0, cors_1.default)({
+        origin: ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174'],
+        credentials: true
+    }));
+}
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
 // Session configuration
@@ -98,20 +101,9 @@ app.use((0, express_session_1.default)({
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
 }));
-// Page routes (with redirect middleware for expired sessions)
-app.get('/dashboard', auth_2.requireAuthWithRedirect, (req, res) => {
-    res.send('<h1>User Dashboard</h1><p>Welcome to your dashboard!</p>');
-});
-app.get('/campaigns', auth_2.requireAuthWithRedirect, (req, res) => {
-    res.send('<h1>Campaigns</h1><p>Manage your campaigns here.</p>');
-});
-app.get('/templates', auth_2.requireAuthWithRedirect, (req, res) => {
-    res.send('<h1>Templates</h1><p>Manage your templates here.</p>');
-});
-// Login page (no auth required)
-app.get('/login', (req, res) => {
-    res.send('<h1>Login</h1><form><p>Please log in to continue.</p></form>');
-});
+// Serve static files from client build
+const clientDist = path_1.default.join(__dirname, '../../client/dist');
+app.use(express_1.default.static(clientDist, { maxAge: '7d', etag: true }));
 // API routes (use regular auth middleware, return JSON)
 app.use('/api/auth', auth_1.default);
 app.use('/api/admin', admin_1.default);
@@ -140,9 +132,15 @@ app.use((err, req, res, next) => {
     const message = status === 500 ? 'Internal Server Error' : err.message;
     res.status(status).json({ error: message });
 });
-// 404 handler
-app.use('*', (req, res) => {
-    res.status(404).json({ error: 'Route not found' });
+// SPA fallback - serve React app for all non-API routes
+app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api'))
+        return next();
+    res.sendFile(path_1.default.join(clientDist, 'index.html'));
+});
+// 404 handler for API routes only
+app.use('/api/*', (req, res) => {
+    res.status(404).json({ error: 'API route not found' });
 });
 // Graceful shutdown handler
 const shutdown = async (signal) => {

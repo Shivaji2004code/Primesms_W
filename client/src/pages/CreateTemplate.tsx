@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { apiUrl } from '@/lib/api';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -372,7 +373,7 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
           allow_category_change: false
         };
 
-        response = await fetch(`${import.meta.env.VITE_API_URL}/api/templates/authentication`, {
+        response = await fetch(apiUrl('/api/templates/authentication'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -416,7 +417,7 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
           formData.append('submit_to_whatsapp', 'true');
         }
 
-        response = await fetch(`${import.meta.env.VITE_API_URL}/api/templates`, {
+        response = await fetch(apiUrl('/api/templates'), {
           method: 'POST',
           body: formData,
           credentials: 'include'

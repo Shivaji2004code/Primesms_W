@@ -5,3 +5,5 @@ dist/
 logs/
 *.log
 uploads/
+../client/dist
+../client/node_modules

@@ -7,6 +7,8 @@ import { Pool } from 'pg';
 import pino from 'pino';
 import pinoHttp from 'pino-http';
 import rateLimit from 'express-rate-limit';
+import compression from 'compression';
+import path from 'path';
 
 // Load environment variables only in development
 if (process.env.NODE_ENV !== 'production') {
@@ -51,6 +53,9 @@ const PORT = Number(process.env.PORT) || 5050;
 // Setup pino HTTP logging
 app.use(pinoHttp({ logger }));
 
+// Compression middleware
+app.use(compression());
+
 // Database connection
 export const pool = new Pool({
   host: process.env.DB_HOST,
@@ -85,12 +90,13 @@ app.use(rateLimit({
   message: { error: 'Too many requests, please try again later' }
 }));
 
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://yourdomain.com'] 
-    : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174'],
-  credentials: true
-}));
+// CORS - only needed for development
+if (process.env.NODE_ENV !== 'production') {
+  app.use(cors({
+    origin: ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174'],
+    credentials: true
+  }));
+}
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -107,23 +113,9 @@ app.use(session({
   }
 }));
 
-// Page routes (with redirect middleware for expired sessions)
-app.get('/dashboard', requireAuthWithRedirect, (req, res) => {
-  res.send('<h1>User Dashboard</h1><p>Welcome to your dashboard!</p>');
-});
-
-app.get('/campaigns', requireAuthWithRedirect, (req, res) => {
-  res.send('<h1>Campaigns</h1><p>Manage your campaigns here.</p>');
-});
-
-app.get('/templates', requireAuthWithRedirect, (req, res) => {
-  res.send('<h1>Templates</h1><p>Manage your templates here.</p>');
-});
-
-// Login page (no auth required)
-app.get('/login', (req, res) => {
-  res.send('<h1>Login</h1><form><p>Please log in to continue.</p></form>');
-});
+// Serve static files from client build
+const clientDist = path.join(__dirname, '../../client/dist');
+app.use(express.static(clientDist, { maxAge: '7d', etag: true }));
 
 // API routes (use regular auth middleware, return JSON)
 app.use('/api/auth', authRoutes);
@@ -157,9 +149,15 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   res.status(status).json({ error: message });
 });
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Route not found' });
+// SPA fallback - serve React app for all non-API routes
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(clientDist, 'index.html'));
+});
+
+// 404 handler for API routes only
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ error: 'API route not found' });
 });
 
 // Graceful shutdown handler
