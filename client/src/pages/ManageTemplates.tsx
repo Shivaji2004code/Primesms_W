@@ -162,22 +162,67 @@ export default function ManageTemplates({ currentUser }: ManageTemplatesProps) {
 
   const getStatusBadge = (status: TemplateStatus) => {
     const statusConfig = {
-      DRAFT: { variant: 'secondary' as const, icon: Edit, label: 'Draft' },
-      IN_REVIEW: { variant: 'default' as const, icon: Clock, label: 'In Review' },
-      PENDING: { variant: 'default' as const, icon: Clock, label: 'Pending' },
-      APPROVED: { variant: 'default' as const, icon: CheckCircle, label: 'Approved' },
-      ACTIVE: { variant: 'default' as const, icon: CheckCircle, label: 'Active' },
-      REJECTED: { variant: 'destructive' as const, icon: XCircle, label: 'Rejected' },
-      PAUSED: { variant: 'secondary' as const, icon: Pause, label: 'Paused' },
-      DISABLED: { variant: 'destructive' as const, icon: Ban, label: 'Disabled' },
-      APPEAL_REQUESTED: { variant: 'default' as const, icon: AlertCircle, label: 'Appeal Requested' }
+      DRAFT: { 
+        variant: 'secondary' as const, 
+        icon: Edit, 
+        label: 'Draft',
+        className: 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+      },
+      IN_REVIEW: { 
+        variant: 'default' as const, 
+        icon: Clock, 
+        label: 'In Review',
+        className: 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+      },
+      PENDING: { 
+        variant: 'default' as const, 
+        icon: Clock, 
+        label: 'Pending',
+        className: 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+      },
+      APPROVED: { 
+        variant: 'default' as const, 
+        icon: CheckCircle, 
+        label: 'Approved',
+        className: 'bg-green-100 text-green-800 hover:bg-green-200'
+      },
+      ACTIVE: { 
+        variant: 'default' as const, 
+        icon: CheckCircle, 
+        label: 'Active',
+        className: 'bg-green-100 text-green-800 hover:bg-green-200'
+      },
+      REJECTED: { 
+        variant: 'destructive' as const, 
+        icon: XCircle, 
+        label: 'Rejected',
+        className: 'bg-red-100 text-red-800 hover:bg-red-200'
+      },
+      PAUSED: { 
+        variant: 'secondary' as const, 
+        icon: Pause, 
+        label: 'Paused',
+        className: 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+      },
+      DISABLED: { 
+        variant: 'destructive' as const, 
+        icon: Ban, 
+        label: 'Disabled',
+        className: 'bg-red-100 text-red-800 hover:bg-red-200'
+      },
+      APPEAL_REQUESTED: { 
+        variant: 'default' as const, 
+        icon: AlertCircle, 
+        label: 'Appeal Requested',
+        className: 'bg-orange-100 text-orange-800 hover:bg-orange-200'
+      }
     };
 
     const config = statusConfig[status];
     const Icon = config.icon;
 
     return (
-      <Badge variant={config.variant} className="flex items-center gap-1">
+      <Badge variant={config.variant} className={`flex items-center gap-1 ${config.className}`}>
         <Icon className="h-3 w-3" />
         {config.label}
       </Badge>

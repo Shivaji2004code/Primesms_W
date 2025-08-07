@@ -22,6 +22,7 @@ var CreditTransactionType;
     CreditTransactionType["DEDUCTION_QUICKSEND"] = "DEDUCTION_QUICKSEND";
     CreditTransactionType["DEDUCTION_CUSTOMISE_SMS"] = "DEDUCTION_CUSTOMISE_SMS";
     CreditTransactionType["DEDUCTION_API_DELIVERED"] = "DEDUCTION_API_DELIVERED";
+    CreditTransactionType["DEDUCTION_DUPLICATE_BLOCKED"] = "DEDUCTION_DUPLICATE_BLOCKED";
     CreditTransactionType["ADMIN_ADD"] = "ADMIN_ADD";
     CreditTransactionType["ADMIN_DEDUCT"] = "ADMIN_DEDUCT";
     CreditTransactionType["REFUND"] = "REFUND";

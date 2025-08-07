@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.requireAdmin = exports.requireAuth = void 0;
+exports.requireAdmin = exports.requireAuthWithRedirect = exports.requireAuth = void 0;
 const requireAuth = (req, res, next) => {
     if (!req.session.user) {
         return res.status(401).json({ error: 'Authentication required' });
@@ -8,6 +8,16 @@ const requireAuth = (req, res, next) => {
     next();
 };
 exports.requireAuth = requireAuth;
+const requireAuthWithRedirect = (req, res, next) => {
+    if (!req.session.user) {
+        const isPageRoute = req.headers.accept?.includes('text/html');
+        return isPageRoute
+            ? res.redirect('/login')
+            : res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+    next();
+};
+exports.requireAuthWithRedirect = requireAuthWithRedirect;
 const requireAdmin = (req, res, next) => {
     if (!req.session.user) {
         return res.status(401).json({ error: 'Authentication required' });

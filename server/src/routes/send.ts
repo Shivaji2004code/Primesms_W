@@ -10,6 +10,9 @@ import {
   calculateCreditCost, 
   TemplateCategory 
 } from '../utils/creditSystem';
+import { 
+  checkAndHandleDuplicate 
+} from '../middleware/duplicateDetection';
 
 const router = express.Router();
 
@@ -96,6 +99,7 @@ router.get('/template-info/:username/:templatename', async (req, res) => {
 
 router.all('/send', async (req, res) => {
   try {
+    
     // Extract parameters from both GET and POST requests
     const params = extractParameters(req);
     
@@ -142,6 +146,48 @@ router.all('/send', async (req, res) => {
 
     // Step 4: Construct Meta API payload
     const payload = constructMetaAPIPayload(params, template, businessInfo);
+
+    // Step 4.5: DUPLICATE DETECTION - Check if this exact message was sent recently
+    const variables = extractVariablesFromParams(params);
+    const duplicateCheck = await checkAndHandleDuplicate(
+      userId,
+      template.name,
+      params.recipient_number,
+      variables
+    );
+    
+    if (duplicateCheck.isDuplicate) {
+      console.log(`❌ DUPLICATE DETECTED: API call blocked for template ${template.name} to ${params.recipient_number}`);
+      
+      // Still deduct credits for duplicates as per requirement
+      try {
+        const templateCategory = template.category as TemplateCategory;
+        const { cost } = await calculateCreditCost(userId, template.name, 1);
+        
+        await deductCredits({
+          userId,
+          amount: cost,
+          transactionType: CreditTransactionType.DEDUCTION_DUPLICATE_BLOCKED,
+          templateCategory,
+          templateName: template.name,
+          description: `Duplicate message blocked via API - credits still deducted for ${params.recipient_number}`
+        });
+        
+        console.log(`[DUPLICATE DETECTION] Deducted ${cost} credits for blocked duplicate API message`);
+      } catch (creditError) {
+        console.error('[DUPLICATE DETECTION] Error deducting credits for duplicate API call:', creditError);
+      }
+      
+      return res.status(400).json({
+        success: false,
+        duplicate: true,
+        message: 'Duplicate message blocked - same template and variables sent to this number within 5 minutes',
+        template: template.name,
+        phone: params.recipient_number,
+        variables: variables,
+        hash: duplicateCheck.hash
+      });
+    }
 
     // Step 5: Send message via Meta WhatsApp Cloud API
     const sendResult = await sendWhatsAppMessage(payload, businessInfo);
@@ -198,6 +244,22 @@ router.all('/send', async (req, res) => {
     });
   }
 });
+
+/**
+ * Extract variables from parameters for duplicate detection
+ */
+function extractVariablesFromParams(params: any): Record<string, string> {
+  const variables: Record<string, string> = {};
+  
+  // Extract all variable parameters (var1, var2, var3, etc.)
+  Object.keys(params).forEach(key => {
+    if (key.startsWith('var') && params[key]) {
+      variables[key] = params[key].toString();
+    }
+  });
+  
+  return variables;
+}
 
 /**
  * Extract parameters from both GET (query) and POST (body) requests
@@ -339,7 +401,8 @@ async function fetchTemplate(userId: string, templateName: string): Promise<{
         template_id,
         header_media_id,
         header_type,
-        media_id
+        media_id,
+        category
       FROM templates 
       WHERE user_id = $1 AND name = $2 AND status IN ('APPROVED', 'ACTIVE')
     `;
@@ -377,6 +440,7 @@ async function fetchTemplate(userId: string, templateName: string): Promise<{
 function constructMetaAPIPayload(params: any, template: any, businessInfo: any): any {
   const payload = {
     messaging_product: "whatsapp",
+    recipient_type: "individual",
     to: params.recipient_number,
     type: "template",
     template: {
@@ -429,7 +493,47 @@ function constructMetaAPIPayload(params: any, template: any, businessInfo: any):
 
   // 2. Handle Body Variables
   const bodyComponent = templateComponents.find((c: any) => c.type === 'BODY');
-  if (bodyComponent) {
+  
+  // Special handling for AUTHENTICATION templates - they use 2025 format
+  // even if their components array is empty (Meta manages the structure)
+  if (template.category === 'AUTHENTICATION') {
+    // Extract all 'varX' parameters for authentication template
+    const vars = Object.keys(params)
+      .filter(k => k.startsWith('var'))
+      .sort((a, b) => {
+        const numA = parseInt(a.slice(3)) || 0;
+        const numB = parseInt(b.slice(3)) || 0;
+        return numA - numB;
+      })
+      .map(k => params[k])
+      .filter(v => v !== undefined && v !== null && v.toString().trim() !== '');
+
+    console.log(`🔍 DEBUG: Authentication template detected. Template: ${template.name}, Variables: ${vars.length}`);
+    
+    // For authentication templates, try the standard format first
+    if (vars.length > 0) {
+      const otpCode = vars[0]; // First variable is the OTP code
+      console.log(`🔍 DEBUG: Adding authentication template components with OTP: ${otpCode}`);
+      
+      // Standard 2025 authentication template format
+      components.push({
+        type: "body",
+        parameters: [{ type: "text", text: otpCode.toString() }]
+      });
+      
+      // Authentication templates may also need button component
+      components.push({
+        type: "button", 
+        sub_type: "url",
+        index: "0",
+        parameters: [{ type: "text", text: otpCode.toString() }]
+      });
+    } else {
+      console.log('🔍 DEBUG: No variables provided for authentication template - sending as static');
+      // Some authentication templates may be static - let WhatsApp handle it
+    }
+  } else if (bodyComponent) {
+    // Standard processing for non-authentication templates
     // Extract all 'varX' parameters from the request and sort them numerically
     const vars = Object.keys(params)
       .filter(k => k.startsWith('var'))
@@ -490,6 +594,13 @@ function constructMetaAPIPayload(params: any, template: any, businessInfo: any):
   }
 
   (payload.template as any).components = components;
+  
+  // DEBUG: Log template info and payload for all templates
+  console.log(`🔍 DEBUG: Template category: ${template.category}, name: ${template.name}`);
+  if (template.category === 'AUTHENTICATION') {
+    console.log('🔍 DEBUG: Authentication template payload:', JSON.stringify(payload, null, 2));
+  }
+  
   return payload;
 }
 

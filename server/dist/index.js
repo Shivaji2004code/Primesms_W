@@ -18,6 +18,12 @@ const admin_1 = __importDefault(require("./routes/admin"));
 const templates_1 = __importDefault(require("./routes/templates"));
 const whatsapp_1 = __importDefault(require("./routes/whatsapp"));
 const send_1 = __importDefault(require("./routes/send"));
+const credits_1 = __importDefault(require("./routes/credits"));
+const logs_1 = __importDefault(require("./routes/logs"));
+// Import middleware
+const auth_2 = require("./middleware/auth");
+// Import services
+const logCleanup_1 = require("./services/logCleanup");
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5050;
 // Database connection
@@ -61,11 +67,27 @@ app.use((0, express_session_1.default)({
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
 }));
-// Routes
+// Page routes (with redirect middleware for expired sessions)
+app.get('/dashboard', auth_2.requireAuthWithRedirect, (req, res) => {
+    res.send('<h1>User Dashboard</h1><p>Welcome to your dashboard!</p>');
+});
+app.get('/campaigns', auth_2.requireAuthWithRedirect, (req, res) => {
+    res.send('<h1>Campaigns</h1><p>Manage your campaigns here.</p>');
+});
+app.get('/templates', auth_2.requireAuthWithRedirect, (req, res) => {
+    res.send('<h1>Templates</h1><p>Manage your templates here.</p>');
+});
+// Login page (no auth required)
+app.get('/login', (req, res) => {
+    res.send('<h1>Login</h1><form><p>Please log in to continue.</p></form>');
+});
+// API routes (use regular auth middleware, return JSON)
 app.use('/api/auth', auth_1.default);
 app.use('/api/admin', admin_1.default);
 app.use('/api/whatsapp', whatsapp_1.default);
 app.use('/api/templates', templates_1.default);
+app.use('/api/credits', credits_1.default);
+app.use('/api/logs', logs_1.default);
 app.use('/api', send_1.default);
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -86,5 +108,7 @@ app.use('*', (req, res) => {
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV}`);
+    // Start log cleanup service
+    logCleanup_1.logCleanupService.startScheduledCleanup();
 });
 //# sourceMappingURL=index.js.map

@@ -77,7 +77,7 @@ export interface TemplateParameter {
 export interface TemplateExample {
     header_text?: string[];
     body_text?: string[][];
-    header_media_handle?: string[];
+    header_handle?: string[];
 }
 export interface TemplateButton {
     type: ButtonType;

@@ -13,7 +13,6 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from '../ui/dropdown-menu';
-import { NotificationBell } from '../ui/notification-system';
 import { useAuth } from '../../hooks/useAuth';
 
 interface HeaderProps {
@@ -82,8 +81,6 @@ export default function Header({ title, subtitle }: HeaderProps) {
               </div>
             )}
 
-            {/* Notifications */}
-            <NotificationBell />
 
             {/* User Menu */}
             <DropdownMenu>

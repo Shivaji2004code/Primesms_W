@@ -2,16 +2,24 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AdminRoute } from './components/guards/AdminRoute';
 import { UserRoute } from './components/guards/UserRoute';
+import { PrivateRoute } from './components/guards/PrivateRoute';
 import { Toaster } from './components/ui/toaster';
+import { LoadingProvider } from './contexts/LoadingContext';
+import { NotificationProvider } from './contexts/NotificationContext';
+import GlobalLoader from './components/ui/GlobalLoader';
+import TopNotification from './components/ui/TopNotification';
 import Layout from './components/layout/Layout';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import Profile from './pages/Profile';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUserDetails from './pages/AdminUserDetails';
 import AdminUserSettings from './pages/AdminUserSettings';
 import AdminUserWallet from './pages/AdminUserWallet';
 import AdminUserTemplates from './pages/AdminUserTemplates';
+import AdminLogCleanup from './pages/AdminLogCleanup';
+import NotificationTest from './pages/NotificationTest';
 import UserDashboard from './pages/UserDashboard';
 import ManageTemplatesWrapper from './components/ManageTemplatesWrapper';
 import CreateTemplateWrapper from './components/CreateTemplateWrapper';
@@ -34,8 +42,12 @@ const queryClient = new QueryClient({
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Router>
-        <Routes>
+      <LoadingProvider>
+        <NotificationProvider>
+          <Router>
+            <GlobalLoader />
+            <TopNotification />
+            <Routes>
           {/* Public routes - use old Layout */}
           <Route path="/" element={<Layout><Landing /></Layout>} />
           <Route path="/login" element={<Layout><Login /></Layout>} />
@@ -79,6 +91,22 @@ function App() {
             element={
               <AdminRoute>
                 <AdminUserTemplates />
+              </AdminRoute>
+            } 
+          />
+          <Route 
+            path="/admin/logs" 
+            element={
+              <AdminRoute>
+                <AdminLogCleanup />
+              </AdminRoute>
+            } 
+          />
+          <Route 
+            path="/admin/test-notifications" 
+            element={
+              <AdminRoute>
+                <NotificationTest />
               </AdminRoute>
             } 
           />
@@ -155,6 +183,32 @@ function App() {
               </UserRoute>
             } 
           />
+
+          {/* Profile routes - accessible by both admin and user */}
+          <Route 
+            path="/profile" 
+            element={
+              <PrivateRoute>
+                <Profile />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/admin/profile" 
+            element={
+              <AdminRoute>
+                <Profile />
+              </AdminRoute>
+            } 
+          />
+          <Route 
+            path="/user/profile" 
+            element={
+              <UserRoute>
+                <Profile />
+              </UserRoute>
+            } 
+          />
           
           {/* 404 Route */}
           <Route 
@@ -178,7 +232,9 @@ function App() {
           />
         </Routes>
         <Toaster />
-      </Router>
+          </Router>
+        </NotificationProvider>
+      </LoadingProvider>
     </QueryClientProvider>
   );
 }

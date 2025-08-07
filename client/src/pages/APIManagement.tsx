@@ -81,7 +81,7 @@ export default function APIManagement() {
   const fetchTemplates = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/templates', {
+      const response = await fetch('/api/whatsapp/templates', {
         credentials: 'include'
       });
 

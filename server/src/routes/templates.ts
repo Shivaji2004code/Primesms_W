@@ -49,34 +49,111 @@ const router = express.Router();
 // All template routes require authentication
 router.use(requireAuth);
 
-// FIXED: WhatsApp Cloud API Media Upload for Template Creation
+// NEW APPROACH: Try to get Business Manager ID and use for template media upload
 const uploadMediaForTemplate = async (
   phoneNumberId: string,
   filePath: string,
   accessToken: string,
   mimeType: string = 'image/jpeg'
 ): Promise<string> => {
-  console.log('\n🚀 UPLOADING MEDIA FOR TEMPLATE CREATION');
-  console.log('==========================================');
+  console.log('\n🚀 UPLOADING MEDIA FOR TEMPLATE CREATION (BUSINESS MANAGER APPROACH)');
+  console.log('=================================================================');
   console.log(`📱 Phone Number ID: ${phoneNumberId}`);
   console.log(`📁 File Path: ${filePath}`);
   console.log(`🔑 Token: ${accessToken.substring(0, 20)}...`);
   console.log(`📎 MIME Type: ${mimeType}`);
 
+  try {
+    // First, try to get Business Manager ID from debug token
+    console.log('🔍 Step 1: Getting Business Manager ID from access token...');
+    
+    const debugResponse = await axios.get(
+      `https://graph.facebook.com/v21.0/debug_token?input_token=${accessToken}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      }
+    );
+    
+    console.log('🔍 Debug token response:', JSON.stringify(debugResponse.data, null, 2));
+    
+    const appId = debugResponse.data?.data?.app_id;
+    console.log('📱 App ID found:', appId);
+
+    if (appId) {
+      // Try using the app ID for uploads endpoint
+      console.log('📤 Step 2: Trying Business Manager upload approach...');
+      
+      const fileStats = fs.statSync(filePath);
+      const fileName = path.basename(filePath);
+      
+      console.log('📤 Creating upload session with app ID...');
+      const sessionResponse = await axios.post(
+        `https://graph.facebook.com/v21.0/${appId}/uploads`,
+        {
+          file_length: fileStats.size,
+          file_name: fileName,
+          file_type: mimeType
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      const sessionId = sessionResponse.data.id;
+      console.log('✅ Upload session created:', sessionId);
+
+      // Upload file content
+      console.log('📤 Uploading file content...');
+      const fileContent = fs.readFileSync(filePath);
+      
+      const uploadResponse = await axios.post(
+        `https://graph.facebook.com/v21.0/${sessionId}`,
+        fileContent,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/octet-stream',
+            'file_offset': '0'
+          }
+        }
+      );
+
+      console.log('✅ Business Manager upload successful!');
+      console.log('📋 Upload Response:', JSON.stringify(uploadResponse.data, null, 2));
+
+      // Check for file handle in response
+      const fileHandle = uploadResponse.data.h;
+      if (fileHandle) {
+        console.log('🎯 Got file handle:', fileHandle);
+        return fileHandle;
+      }
+    }
+    
+    // Fallback: use regular media upload
+    console.log('⚠️ Falling back to regular media upload...');
+    
+  } catch (debugError: any) {
+    console.log('⚠️ Business Manager approach failed, trying regular upload:', debugError.message);
+  }
+
+  // Fallback to regular media upload
   const FormData = require('form-data');
   const form = new FormData();
   
-  // CRITICAL: Upload media with is_reusable=true for template creation
   form.append('file', fs.createReadStream(filePath));
   form.append('type', mimeType);
   form.append('messaging_product', 'whatsapp');
-  form.append('is_reusable', 'true'); // Essential for template creation
   
-  console.log('📤 Making template media upload request...');
+  console.log('📤 Making regular media upload request...');
   
   try {
     const response = await axios.post(
-      `https://graph.facebook.com/v20.0/${phoneNumberId}/media`,
+      `https://graph.facebook.com/v21.0/${phoneNumberId}/media`,
       form,
       { 
         headers: { 
@@ -86,17 +163,12 @@ const uploadMediaForTemplate = async (
       }
     );
     
-    console.log('✅ Template media upload successful!');
-    console.log('📋 Media Handle:', response.data.id);
-    console.log('📥 Full response:', JSON.stringify(response.data, null, 2));
-    
-    if (!response.data.id || typeof response.data.id !== 'string') {
-      throw new Error(`Invalid media handle received: ${JSON.stringify(response.data)}`);
-    }
+    console.log('✅ Regular media upload successful!');
+    console.log('📋 Media ID:', response.data.id);
     
     return response.data.id;
   } catch (error: any) {
-    console.error('❌ Template media upload failed!');
+    console.error('❌ All media upload approaches failed!');
     console.error('❌ Error:', error.response?.data || error.message);
     throw error;
   }
@@ -138,12 +210,12 @@ const uploadMediaToWhatsApp = async (
   formData.append('messaging_product', 'whatsapp');
 
   console.log(`   - FormData prepared with file stream`);
-  console.log(`   - Sending to: https://graph.facebook.com/v20.0/${phoneNumberId}/media`);
+  console.log(`   - Sending to: https://graph.facebook.com/v21.0/${phoneNumberId}/media`);
 
   try {
     // Upload to WhatsApp Media API using axios with exact pattern
     const uploadResponse = await axios.post(
-      `https://graph.facebook.com/v20.0/${phoneNumberId}/media`,
+      `https://graph.facebook.com/v21.0/${phoneNumberId}/media`,
       formData,
       {
         headers: {
@@ -180,31 +252,74 @@ const createWhatsAppTemplate = async (
   // META WHATSAPP RULES: Process components according to category-specific rules
   let processedComponents: any[] = [];
 
-  // AUTHENTICATION: Only BODY component allowed
+  // AUTHENTICATION: Use new components structure with BODY, FOOTER, and BUTTONS
   if (templateData.category === 'AUTHENTICATION') {
-    const bodyComponent = templateData.components.find(c => c.type === 'BODY');
-    if (!bodyComponent) {
-      throw new Error('AUTHENTICATION templates must have a BODY component');
+    console.log('🔐 Processing AUTHENTICATION template with new 2025 format...');
+    
+    // Extract authentication-specific data from templateData
+    const authData = templateData as any;
+    
+    // Build components array for new authentication template format
+    const components: any[] = [];
+    
+    // 1. BODY component with optional security recommendation
+    const bodyComponent: any = {
+      type: 'BODY'
+    };
+    
+    if (authData.add_security_recommendation !== undefined) {
+      bodyComponent.add_security_recommendation = authData.add_security_recommendation;
     }
     
-    // Process BODY with variables
-    const processedBody = processVariablesInComponent(bodyComponent, customExamples);
-    processedComponents = [processedBody];
+    components.push(bodyComponent);
     
-    console.log('🔐 AUTHENTICATION template: Only BODY component included');
+    // 2. FOOTER component with optional code expiration
+    if (authData.code_expiration_minutes !== undefined) {
+      components.push({
+        type: 'FOOTER',
+        code_expiration_minutes: authData.code_expiration_minutes
+      });
+    }
+    
+    // 3. BUTTONS component with OTP button
+    const buttonsComponent: any = {
+      type: 'BUTTONS',
+      buttons: [
+        {
+          type: 'OTP',
+          otp_type: authData.otp_type || 'COPY_CODE'
+        }
+      ]
+    };
+    
+    // Add button text if provided (for display purposes)
+    if (authData.otp_button_text) {
+      buttonsComponent.buttons[0].text = authData.otp_button_text;
+    }
+    
+    // Add supported apps for ONE_TAP if provided
+    if (authData.otp_type === 'ONE_TAP' && authData.supported_apps) {
+      buttonsComponent.buttons[0].supported_apps = authData.supported_apps;
+    }
+    
+    components.push(buttonsComponent);
+    
+    processedComponents = components;
+    
+    console.log('🔐 AUTHENTICATION template components:', JSON.stringify(processedComponents, null, 2));
   }
   
   // MARKETING: Allow all components like UTILITY
   else if (templateData.category === 'MARKETING') {
     processedComponents = templateData.components.map(component => {
-      // FIXED: Handle IMAGE headers with header_media_handle
+      // CORRECT: Handle IMAGE headers with header_handle
       if (component.type === 'HEADER' && component.format === 'IMAGE') {
         let mediaHandle = '';
-        if (component.example?.header_media_handle) {
-          if (Array.isArray(component.example.header_media_handle)) {
-            mediaHandle = component.example.header_media_handle[0] || '';
-          } else if (typeof component.example.header_media_handle === 'string') {
-            mediaHandle = component.example.header_media_handle;
+        if (component.example?.header_handle) {
+          if (Array.isArray(component.example.header_handle)) {
+            mediaHandle = component.example.header_handle[0] || '';
+          } else if (typeof component.example.header_handle === 'string') {
+            mediaHandle = component.example.header_handle;
           }
         } else if (component.media?.id) {
           mediaHandle = component.media.id;
@@ -223,7 +338,7 @@ const createWhatsAppTemplate = async (
           type: 'HEADER',
           format: 'IMAGE',
           example: {
-            header_media_handle: [mediaHandle] // FIXED: Use header_media_handle
+            header_handle: [mediaHandle] // CORRECT: Use header_handle as per Meta API
           }
         };
       }
@@ -260,17 +375,17 @@ const createWhatsAppTemplate = async (
   // UTILITY: All components allowed
   else if (templateData.category === 'UTILITY') {
     processedComponents = templateData.components.map(component => {
-      // FIXED: Handle IMAGE headers with header_media_handle
+      // CORRECT: Handle IMAGE headers with header_handle
       if (component.type === 'HEADER' && component.format === 'IMAGE') {
         let mediaHandle = '';
-        if (component.example?.header_media_handle) {
-          if (Array.isArray(component.example.header_media_handle)) {
-            mediaHandle = component.example.header_media_handle[0] || '';
-          } else if (typeof component.example.header_media_handle === 'string') {
-            mediaHandle = component.example.header_media_handle;
+        if (component.example?.header_handle) {
+          if (Array.isArray(component.example.header_handle)) {
+            mediaHandle = component.example.header_handle[0] || '';
+          } else if (typeof component.example.header_handle === 'string') {
+            mediaHandle = component.example.header_handle;
           }
         } else if (component.media?.id) {
-          // Fallback to media.id if header_media_handle not available
+          // Fallback to media.id if header_handle not available
           mediaHandle = component.media.id;
         }
         
@@ -287,7 +402,7 @@ const createWhatsAppTemplate = async (
           type: 'HEADER',
           format: 'IMAGE',
           example: {
-            header_media_handle: [mediaHandle] // FIXED: Use header_media_handle
+            header_handle: [mediaHandle] // CORRECT: Use header_handle as per Meta API
           }
         };
       }
@@ -322,7 +437,7 @@ const createWhatsAppTemplate = async (
   }
 
   // FIXED: Build payload without namespace (not required for Cloud API)
-  const payload = {
+  const payload: any = {
     name: templateData.name,
     language: templateData.language || 'en_US',
     category: templateData.category,
@@ -330,8 +445,18 @@ const createWhatsAppTemplate = async (
     allow_category_change: templateData.allow_category_change ?? true
   };
 
+  // Add authentication-specific fields
+  if (templateData.category === 'AUTHENTICATION') {
+    if ((templateData as any).add_security_recommendation !== undefined) {
+      payload.add_security_recommendation = (templateData as any).add_security_recommendation;
+    }
+    if ((templateData as any).code_expiration_minutes !== undefined) {
+      payload.code_expiration_minutes = (templateData as any).code_expiration_minutes;
+    }
+  }
+
   if (templateData.message_send_ttl_seconds) {
-    (payload as any).message_send_ttl_seconds = templateData.message_send_ttl_seconds;
+    payload.message_send_ttl_seconds = templateData.message_send_ttl_seconds;
   }
 
   console.log('📤 Template creation payload (FIXED):');
@@ -346,7 +471,7 @@ const createWhatsAppTemplate = async (
 
   try {
     const response = await axios.post(
-      `https://graph.facebook.com/v20.0/${businessInfo.wabaId!}/message_templates`,
+      `https://graph.facebook.com/v21.0/${businessInfo.wabaId!}/message_templates`,
       payload,
       {
         headers: {
@@ -365,8 +490,8 @@ const createWhatsAppTemplate = async (
     
     // Check for specific media handle error
     if (error.response?.data?.error?.error_subcode === 2494102) {
-      console.error('🚨 SPECIFIC ERROR: Invalid header_media_handle detected!');
-      console.error('💡 This means the media handle used in header_media_handle is invalid or expired');
+      console.error('🚨 SPECIFIC ERROR: Invalid header_handle detected!');
+      console.error('💡 This means the media handle used in header_handle is invalid or expired');
       throw new Error('Invalid media handle: The uploaded media handle is not valid for template creation');
     }
     
@@ -446,13 +571,38 @@ const generateExampleValue = (variableName: string): string => {
   return `Sample${variableName.charAt(0).toUpperCase() + variableName.slice(1)}`;
 };
 
+// Get template status from Meta API
+const getTemplateStatus = async (templateId: string, accessToken: string): Promise<string | null> => {
+  console.log(`🔍 Querying template status for ID: ${templateId}`);
+  
+  try {
+    const response = await axios.get(
+      `https://graph.facebook.com/v21.0/${templateId}?fields=status,category,name,language`,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      }
+    );
+
+    const templateStatus = response.data.status;
+    console.log(`✅ Retrieved template status: ${templateStatus}`);
+    console.log(`📋 Template details:`, JSON.stringify(response.data, null, 2));
+    return templateStatus;
+  } catch (error: any) {
+    console.error('❌ Failed to get template status:', error.response?.data || error.message);
+    // Don't throw error - this is optional status checking
+    return null;
+  }
+};
+
 // Get namespace helper
 const getNamespace = async (wabaId: string, accessToken: string): Promise<string> => {
   console.log(`🔍 Getting namespace for WABA: ${wabaId}`);
   
   try {
     const response = await axios.get(
-      `https://graph.facebook.com/v20.0/${wabaId}?fields=message_template_namespace`,
+      `https://graph.facebook.com/v21.0/${wabaId}?fields=message_template_namespace`,
       {
         headers: {
           'Authorization': `Bearer ${accessToken}`
@@ -719,27 +869,32 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
       console.log(`  - Access Token: ${businessInfo.accessToken.substring(0, 20)}...`);
 
       try {
-        // FIXED: Upload media for template creation
-        const mediaHandle = await uploadMediaForTemplate(
+        // SIMPLE: Upload media for template creation using regular media upload
+        const mediaId = await uploadMediaForTemplate(
           businessInfo.phoneNumberId,
           req.file.path,
           businessInfo.accessToken,
           req.file.mimetype
         );
 
-        console.log('✅ Template media uploaded successfully, Handle:', mediaHandle);
-        console.log('🔍 MEDIA HANDLE DEBUG: type:', typeof mediaHandle);
-        console.log('🔍 MEDIA HANDLE DEBUG: length:', mediaHandle.length);
-        console.log('🔍 MEDIA HANDLE DEBUG: value:', JSON.stringify(mediaHandle));
+        console.log('✅ Template media uploaded successfully, ID:', mediaId);
+        console.log('🔍 MEDIA ID DEBUG: type:', typeof mediaId);
+        console.log('🔍 MEDIA ID DEBUG: length:', mediaId?.length);
+        console.log('🔍 MEDIA ID DEBUG: value:', JSON.stringify(mediaId));
+        
+        // Validate media ID format
+        if (!mediaId || typeof mediaId !== 'string' || mediaId.length < 10) {
+          throw new Error(`Invalid media ID format received: "${mediaId}". Expected a valid WhatsApp media ID.`);
+        }
 
-        // FIXED: Update image header component with media handle in correct format
+        // FIXED: Update image header component with media ID
         templateData.components = templateData.components.map(component => {
           if (component.type === 'HEADER' && component.format === 'IMAGE') {
             return {
               ...component,
               media: undefined, // Remove media property
               example: {
-                header_media_handle: [mediaHandle] // FIXED: Use header_media_handle
+                header_handle: [mediaId] // Use the media ID from regular upload
               }
             };
           }
@@ -803,17 +958,17 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
     
     for (const component of templateData.components) {
       if (component.type === 'HEADER') {
-        if (component.format === 'IMAGE' && component.example?.header_media_handle) {
+        if (component.format === 'IMAGE' && component.example?.header_handle) {
           header_type = 'STATIC_IMAGE';
           
-          // FIXED: Store the raw header_media_handle for future reference
-          if (Array.isArray(component.example.header_media_handle) && component.example.header_media_handle.length > 0) {
-            header_handle = component.example.header_media_handle[0];
+          // CORRECT: Store the header_handle for future reference
+          if (Array.isArray(component.example.header_handle) && component.example.header_handle.length > 0) {
+            header_handle = component.example.header_handle[0];
             // Media handle is used for both template creation and messaging
             header_media_id = header_handle;
             media_id = header_handle;
-          } else if (typeof component.example.header_media_handle === 'string') {
-            header_handle = component.example.header_media_handle;
+          } else if (typeof component.example.header_handle === 'string') {
+            header_handle = component.example.header_handle;
             header_media_id = header_handle;
             media_id = header_handle;
           }
@@ -881,6 +1036,185 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
 
   } catch (error) {
     console.error('Create template error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Create Authentication Template - Specific route for authentication templates
+router.post('/authentication', async (req, res) => {
+  try {
+    const userId = req.session.user!.id;
+    const {
+      name,
+      language = 'en_US',
+      otp_type = 'COPY_CODE',
+      otp_button_text = 'Copy Code',
+      code_expiration_minutes,
+      add_security_recommendation = false,
+      allow_category_change = false,
+      supported_apps // For ONE_TAP authentication
+    } = req.body;
+
+    console.log('🔐 Creating AUTHENTICATION template with new 2025 format:', JSON.stringify(req.body, null, 2));
+
+    // Validation
+    if (!name) {
+      return res.status(400).json({ 
+        error: 'Template name is required for authentication templates' 
+      });
+    }
+
+    // Validate template name format
+    if (!/^[a-z0-9_]{1,60}$/.test(name)) {
+      return res.status(400).json({ 
+        error: 'Template name must be 1-60 lowercase characters (a-z), numbers, or underscores' 
+      });
+    }
+
+    // Validate OTP type
+    if (!['COPY_CODE', 'ONE_TAP'].includes(otp_type)) {
+      return res.status(400).json({ 
+        error: 'otp_type must be either COPY_CODE or ONE_TAP' 
+      });
+    }
+
+    // Validate expiration minutes if provided
+    if (code_expiration_minutes !== undefined && 
+        (code_expiration_minutes < 1 || code_expiration_minutes > 90)) {
+      return res.status(400).json({ 
+        error: 'code_expiration_minutes must be between 1 and 90' 
+      });
+    }
+
+    // Check for duplicate template name for this user
+    const existingTemplate = await pool.query(
+      'SELECT id FROM templates WHERE user_id = $1 AND name = $2',
+      [userId, name]
+    );
+
+    if (existingTemplate.rows.length > 0) {
+      return res.status(409).json({ 
+        error: 'A template with this name already exists' 
+      });
+    }
+
+    // Create the template data structure with new authentication format
+    const templateData: CreateTemplateRequest & any = {
+      name,
+      language,
+      category: 'AUTHENTICATION',
+      components: [], // Will be processed by the authentication logic
+      allow_category_change,
+      // Authentication-specific fields
+      otp_type,
+      otp_button_text,
+      add_security_recommendation,
+      code_expiration_minutes,
+      supported_apps
+    };
+
+    let template_id: string | null = null;
+    let whatsapp_response: any = null;
+    let status = 'DRAFT';
+    let rejection_reason: string | null = null;
+
+    // Get user's business info for WhatsApp submission
+    const businessResult = await pool.query(
+      'SELECT waba_id, access_token FROM user_business_info WHERE user_id = $1 AND is_active = true',
+      [userId]
+    );
+
+    if (businessResult.rows.length === 0) {
+      return res.status(400).json({ 
+        error: 'WhatsApp Business API credentials not configured. Please set up your business information first.' 
+      });
+    }
+
+    const businessInfo = {
+      wabaId: businessResult.rows[0].waba_id,
+      accessToken: businessResult.rows[0].access_token
+    } as UserBusinessInfo;
+
+    // Try to create template in WhatsApp
+    try {
+      const whatsappResult = await createWhatsAppTemplate(templateData, businessInfo, {});
+      template_id = whatsappResult.id;
+      whatsapp_response = whatsappResult;
+      
+      // Meta API might return status immediately or not
+      // If status is provided, use it; otherwise try to query it
+      if (whatsappResult.status) {
+        status = whatsappResult.status.toUpperCase();
+        console.log(`✅ Authentication template created with status: ${status}`);
+      } else {
+        console.log('🔍 Status not returned immediately, attempting to query...');
+        
+        // Try to get status by querying the template
+        const queriedStatus = await getTemplateStatus(whatsappResult.id, businessInfo.accessToken!);
+        
+        if (queriedStatus) {
+          status = queriedStatus.toUpperCase();
+          console.log(`✅ Retrieved template status: ${status}`);
+        } else {
+          status = 'PENDING';
+          console.log('⚠️ Could not retrieve status, defaulting to PENDING');
+          console.log('💡 Template status will be updated via webhook or manual refresh');
+        }
+      }
+      
+      console.log(`📋 Template ID: ${template_id}, Final Status: ${status}`);
+    } catch (whatsappError: any) {
+      console.error('❌ WhatsApp API error:', whatsappError);
+      console.error('❌ Full error details:', JSON.stringify(whatsappError.response?.data, null, 2));
+      rejection_reason = whatsappError.response?.data?.error?.message || whatsappError.message;
+      status = 'REJECTED';
+    }
+
+    // Save template to database
+    const result = await pool.query(
+      `INSERT INTO templates 
+       (user_id, name, category, language, status, components, template_id, 
+        allow_category_change, whatsapp_response, rejection_reason, header_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING id, user_id, name, category, language, status, components, 
+                 template_id, allow_category_change, rejection_reason, created_at, updated_at`,
+      [
+        userId,
+        name,
+        'AUTHENTICATION',
+        language,
+        status,
+        JSON.stringify(templateData.components),
+        template_id,
+        false, // allow_category_change always false for authentication
+        whatsapp_response ? JSON.stringify(whatsapp_response) : null,
+        rejection_reason,
+        'NONE' // header_type for authentication templates
+      ]
+    );
+
+    const newTemplate = result.rows[0];
+
+    res.status(201).json({
+      message: 'Authentication template created successfully',
+      template: {
+        id: newTemplate.id,
+        userId: newTemplate.user_id,
+        name: newTemplate.name,
+        category: newTemplate.category,
+        language: newTemplate.language,
+        status: newTemplate.status,
+        components: newTemplate.components,
+        templateId: newTemplate.template_id,
+        allowCategoryChange: newTemplate.allow_category_change,
+        rejectionReason: newTemplate.rejection_reason,
+        createdAt: newTemplate.created_at,
+        updatedAt: newTemplate.updated_at
+      }
+    });
+
+  } catch (error) {
+    console.error('Create authentication template error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -976,12 +1310,12 @@ router.put('/:id', async (req, res) => {
       
       for (const component of updateData.components) {
         if (component.type === 'HEADER') {
-          if (component.format === 'IMAGE' && component.example?.header_media_handle) {
+          if (component.format === 'IMAGE' && component.example?.header_handle) {
             header_type = 'STATIC_IMAGE';
             
-            // FIXED: Use header_media_handle
-            if (Array.isArray(component.example.header_media_handle) && component.example.header_media_handle.length > 0) {
-              header_handle = component.example.header_media_handle[0];
+            // CORRECT: Use header_handle as per Meta API
+            if (Array.isArray(component.example.header_handle) && component.example.header_handle.length > 0) {
+              header_handle = component.example.header_handle[0];
               header_media_id = header_handle;
               media_id = header_handle;
             }
@@ -1257,8 +1591,8 @@ router.post('/upload-template-media', upload.single('media'), async (req, res) =
     } as any;
 
     try {
-      // FIXED: Upload to WhatsApp for template creation
-      const mediaHandle = await uploadMediaForTemplate(
+      // SIMPLE: Upload to WhatsApp for template creation using regular media upload
+      const mediaId = await uploadMediaForTemplate(
         businessInfo.phoneNumberId,
         req.file.path,
         businessInfo.accessToken,
@@ -1270,9 +1604,9 @@ router.post('/upload-template-media', upload.single('media'), async (req, res) =
 
       res.json({
         message: 'Template media uploaded successfully',
-        mediaHandle: mediaHandle, // FIXED: Return media handle
-        mediaId: mediaHandle, // Keep for backward compatibility
-        templateHandle: mediaHandle, // Keep for backward compatibility
+        mediaId: mediaId, // Return media ID from regular upload
+        mediaHandle: mediaId, // Keep for backward compatibility
+        templateHandle: mediaId, // Keep for backward compatibility
         fileName: req.file.originalname,
         mimeType: req.file.mimetype,
         size: req.file.size
@@ -1368,6 +1702,89 @@ router.post('/upload-media', upload.single('media'), async (req, res) => {
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Refresh template status from Meta API
+router.post('/:id/refresh-status', async (req, res) => {
+  try {
+    const userId = req.session.user!.id;
+    const { id } = req.params;
+
+    // Get template from database
+    const templateResult = await pool.query(
+      'SELECT * FROM templates WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+
+    if (templateResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    const template = templateResult.rows[0];
+
+    if (!template.template_id) {
+      return res.status(400).json({ 
+        error: 'Template does not have a WhatsApp template ID - cannot refresh status' 
+      });
+    }
+
+    // Get user's business info
+    const businessResult = await pool.query(
+      'SELECT access_token FROM user_business_info WHERE user_id = $1 AND is_active = true',
+      [userId]
+    );
+
+    if (businessResult.rows.length === 0) {
+      return res.status(400).json({ 
+        error: 'WhatsApp Business API credentials not configured' 
+      });
+    }
+
+    const accessToken = businessResult.rows[0].access_token;
+
+    console.log(`🔄 Refreshing status for template ${template.name} (ID: ${template.template_id})`);
+
+    // Query current status from Meta
+    const currentStatus = await getTemplateStatus(template.template_id, accessToken);
+
+    if (currentStatus) {
+      const normalizedStatus = currentStatus.toUpperCase();
+      
+      // Update database if status changed
+      if (normalizedStatus !== template.status) {
+        await pool.query(
+          'UPDATE templates SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [normalizedStatus, id]
+        );
+
+        console.log(`✅ Template status updated: ${template.status} → ${normalizedStatus}`);
+
+        res.json({
+          message: 'Template status refreshed successfully',
+          previousStatus: template.status,
+          currentStatus: normalizedStatus,
+          updated: true
+        });
+      } else {
+        console.log(`ℹ️ Template status unchanged: ${normalizedStatus}`);
+
+        res.json({
+          message: 'Template status checked - no changes',
+          currentStatus: normalizedStatus,
+          updated: false
+        });
+      }
+    } else {
+      res.status(400).json({
+        error: 'Could not retrieve template status from WhatsApp API',
+        currentStatus: template.status
+      });
+    }
+
+  } catch (error) {
+    console.error('Refresh template status error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

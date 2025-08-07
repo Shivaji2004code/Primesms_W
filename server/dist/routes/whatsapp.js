@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // [Claude AI] Credit System Enhancement — Aug 2025
 const express_1 = __importDefault(require("express"));
 const multer_1 = __importDefault(require("multer"));
-const xlsx_1 = __importDefault(require("xlsx"));
+const XLSX = require('xlsx');
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const axios_1 = __importDefault(require("axios"));
@@ -14,6 +14,7 @@ const form_data_1 = __importDefault(require("form-data"));
 const index_1 = require("../index");
 const auth_1 = require("../middleware/auth");
 const creditSystem_1 = require("../utils/creditSystem");
+const duplicateDetection_1 = require("../middleware/duplicateDetection");
 // Configure multer for file uploads
 const storage = multer_1.default.diskStorage({
     destination: (req, file, cb) => {
@@ -34,19 +35,22 @@ const upload = (0, multer_1.default)({
         fileSize: 10 * 1024 * 1024 // 10MB limit for Excel files
     },
     fileFilter: (req, file, cb) => {
-        // Allow Excel and CSV files for recipient import
+        // Allow Excel and CSV files for recipient import, and images for template headers
         const allowedMimes = [
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
             'application/vnd.ms-excel', // .xls
             'text/csv', // .csv
-            'text/plain' // .txt
+            'text/plain', // .txt
+            'image/jpeg', // .jpg, .jpeg
+            'image/png', // .png
+            'image/gif' // .gif
         ];
         if (allowedMimes.includes(file.mimetype) ||
-            file.originalname.match(/\.(xlsx|xls|csv|txt)$/i)) {
+            file.originalname.match(/\.(xlsx|xls|csv|txt|jpg|jpeg|png|gif)$/i)) {
             cb(null, true);
         }
         else {
-            cb(new Error('Only Excel (.xlsx, .xls), CSV (.csv), and text (.txt) files are allowed'));
+            cb(new Error('Only Excel (.xlsx, .xls), CSV (.csv), text (.txt), and image (.jpg, .jpeg, .png, .gif) files are allowed'));
         }
     }
 });
@@ -148,7 +152,7 @@ router.get('/numbers', auth_1.requireAuth, async (req, res) => {
             phone_number_id: row.phone_number_id,
             phone_number: row.phone_number,
             display_name: row.business_name || 'WhatsApp Business',
-            label: `${row.business_name || 'WhatsApp Business'} (+${row.phone_number})`
+            label: `${row.business_name || 'WhatsApp Business'} (${row.phone_number})`
         }));
         res.json({
             success: true,
@@ -167,7 +171,7 @@ router.get('/numbers', auth_1.requireAuth, async (req, res) => {
 router.get('/templates', auth_1.requireAuth, async (req, res) => {
     try {
         const userId = req.session.user.id;
-        const { language } = req.query;
+        const { language, exclude_auth } = req.query;
         let query = `
       SELECT 
         id,
@@ -177,12 +181,17 @@ router.get('/templates', auth_1.requireAuth, async (req, res) => {
         status,
         components
       FROM templates 
-      WHERE user_id = $1
+      WHERE user_id = $1 AND status IN ('APPROVED', 'ACTIVE')
     `;
         const params = [userId];
+        let paramCount = 1;
         if (language) {
-            query += ` AND language = $2`;
+            paramCount++;
+            query += ` AND language = $${paramCount}`;
             params.push(language);
+        }
+        if (exclude_auth === 'true') {
+            query += ` AND category != 'AUTHENTICATION'`;
         }
         query += ` ORDER BY name, language`;
         const result = await index_1.pool.query(query, params);
@@ -333,53 +342,84 @@ router.post('/template-details', auth_1.requireAuth, async (req, res) => {
             imageRequired: false,
             description: ''
         };
-        for (const component of components) {
-            if (component.type === 'HEADER') {
-                if (component.format === 'IMAGE') {
-                    const hasHeaderHandle = component.example && component.example.header_handle;
-                    const hasVariableInText = component.text && component.text.includes('{{');
-                    if (hasVariableInText) {
-                        // DYNAMIC IMAGE: Template has explicit {{1}} variable in header text
-                        templateTypeInfo.hasDynamicImage = true;
-                        templateTypeInfo.imageRequired = true;
-                        templateTypeInfo.description = 'Dynamic image template (requires image URL at runtime)';
-                        // Extract header variable
-                        const matches = component.text.match(/\{\{(\d+)\}\}/g);
+        // Special handling for AUTHENTICATION templates
+        if (template.category === 'AUTHENTICATION') {
+            // Authentication templates always need an OTP code parameter
+            variables.push({
+                index: 1,
+                component: 'BODY',
+                placeholder: 'OTP Code (e.g., 123456)',
+                required: true,
+                type: 'otp_code'
+            });
+            templateTypeInfo.description = 'Authentication template (requires OTP code parameter)';
+        }
+        else {
+            // Standard processing for other template categories
+            for (const component of components) {
+                if (component.type === 'HEADER') {
+                    if (component.format === 'IMAGE') {
+                        const hasHeaderHandle = component.example && component.example.header_handle;
+                        const hasVariableInText = component.text && component.text.includes('{{');
+                        if (hasVariableInText) {
+                            // DYNAMIC IMAGE: Template has explicit {{1}} variable in header text
+                            templateTypeInfo.hasDynamicImage = true;
+                            templateTypeInfo.imageRequired = true;
+                            templateTypeInfo.description = 'Dynamic image template (requires image URL at runtime)';
+                            // Extract header variable
+                            const matches = component.text.match(/\{\{(\d+)\}\}/g);
+                            if (matches) {
+                                matches.forEach((match) => {
+                                    const variableIndex = parseInt(match.replace(/[{}]/g, ''));
+                                    variables.push({
+                                        index: variableIndex,
+                                        component: 'HEADER',
+                                        placeholder: 'Image URL (https://example.com/image.jpg)',
+                                        required: true,
+                                        type: 'image_url'
+                                    });
+                                });
+                            }
+                        }
+                        else if (hasHeaderHandle) {
+                            // STATIC IMAGE: Template has pre-uploaded media with header_handle
+                            templateTypeInfo.hasStaticImage = true;
+                            templateTypeInfo.imageRequired = false;
+                            templateTypeInfo.description = 'Static image template (uses pre-uploaded image - no URL needed)';
+                        }
+                        else {
+                            // UNKNOWN: Image template without header_handle or variables - treat as dynamic
+                            templateTypeInfo.hasDynamicImage = true;
+                            templateTypeInfo.imageRequired = true;
+                            templateTypeInfo.description = 'Dynamic image template (requires image URL)';
+                            variables.push({
+                                index: 1,
+                                component: 'HEADER',
+                                placeholder: 'Image URL (https://example.com/image.jpg)',
+                                required: true,
+                                type: 'image_url'
+                            });
+                        }
+                    }
+                    else if (component.format === 'TEXT') {
+                        templateTypeInfo.hasTextHeader = true;
+                        const text = component.text || '';
+                        const matches = text.match(/\{\{(\d+)\}\}/g);
                         if (matches) {
                             matches.forEach((match) => {
                                 const variableIndex = parseInt(match.replace(/[{}]/g, ''));
                                 variables.push({
                                     index: variableIndex,
                                     component: 'HEADER',
-                                    placeholder: 'Image URL (https://example.com/image.jpg)',
+                                    placeholder: `Header text for variable ${variableIndex}`,
                                     required: true,
-                                    type: 'image_url'
+                                    type: 'text'
                                 });
                             });
                         }
                     }
-                    else if (hasHeaderHandle) {
-                        // STATIC IMAGE: Template has pre-uploaded media with header_handle
-                        templateTypeInfo.hasStaticImage = true;
-                        templateTypeInfo.imageRequired = false;
-                        templateTypeInfo.description = 'Static image template (uses pre-uploaded image - no URL needed)';
-                    }
-                    else {
-                        // UNKNOWN: Image template without header_handle or variables - treat as dynamic
-                        templateTypeInfo.hasDynamicImage = true;
-                        templateTypeInfo.imageRequired = true;
-                        templateTypeInfo.description = 'Dynamic image template (requires image URL)';
-                        variables.push({
-                            index: 1,
-                            component: 'HEADER',
-                            placeholder: 'Image URL (https://example.com/image.jpg)',
-                            required: true,
-                            type: 'image_url'
-                        });
-                    }
                 }
-                else if (component.format === 'TEXT') {
-                    templateTypeInfo.hasTextHeader = true;
+                else if (component.type === 'BODY' || component.type === 'FOOTER') {
                     const text = component.text || '';
                     const matches = text.match(/\{\{(\d+)\}\}/g);
                     if (matches) {
@@ -387,8 +427,8 @@ router.post('/template-details', auth_1.requireAuth, async (req, res) => {
                             const variableIndex = parseInt(match.replace(/[{}]/g, ''));
                             variables.push({
                                 index: variableIndex,
-                                component: 'HEADER',
-                                placeholder: `Header text for variable ${variableIndex}`,
+                                component: component.type,
+                                placeholder: `${component.type.toLowerCase()} text for variable ${variableIndex}`,
                                 required: true,
                                 type: 'text'
                             });
@@ -396,22 +436,9 @@ router.post('/template-details', auth_1.requireAuth, async (req, res) => {
                     }
                 }
             }
-            else if (component.type === 'BODY' || component.type === 'FOOTER') {
-                const text = component.text || '';
-                const matches = text.match(/\{\{(\d+)\}\}/g);
-                if (matches) {
-                    matches.forEach((match) => {
-                        const variableIndex = parseInt(match.replace(/[{}]/g, ''));
-                        variables.push({
-                            index: variableIndex,
-                            component: component.type,
-                            placeholder: `${component.type.toLowerCase()} text for variable ${variableIndex}`,
-                            required: true,
-                            type: 'text'
-                        });
-                    });
-                }
-            }
+        }
+        // Process buttons for all template types
+        for (const component of components) {
             if (component.type === 'BUTTONS') {
                 hasButtons = true;
                 component.buttons?.forEach((button, index) => {
@@ -525,11 +552,11 @@ router.post('/preview-excel', auth_1.requireAuth, upload.single('file'), async (
         }
         try {
             console.log(`Previewing Excel file: ${req.file.originalname}`);
-            const workbook = xlsx_1.default.readFile(filePath);
+            const workbook = XLSX.readFile(filePath);
             const sheetName = workbook.SheetNames[0];
             console.log(`Using sheet: ${sheetName}`);
             const worksheet = workbook.Sheets[sheetName];
-            const jsonData = xlsx_1.default.utils.sheet_to_json(worksheet, { header: 1 });
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
             console.log(`Total rows in Excel: ${jsonData.length}`);
             if (jsonData.length === 0) {
                 return res.status(400).json({
@@ -606,10 +633,10 @@ router.post('/import-excel-column', auth_1.requireAuth, upload.single('file'), a
         }
         try {
             console.log(`Importing from column "${column}" in file: ${req.file.originalname}`);
-            const workbook = xlsx_1.default.readFile(filePath);
+            const workbook = XLSX.readFile(filePath);
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
-            const jsonData = xlsx_1.default.utils.sheet_to_json(worksheet, { header: 1 });
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
             if (jsonData.length === 0) {
                 return res.status(400).json({
                     success: false,
@@ -635,7 +662,7 @@ router.post('/import-excel-column', auth_1.requireAuth, upload.single('file'), a
                 }
                 return phone;
             })
-                .filter(phone => phone && phone !== '');
+                .filter((phone) => phone && phone !== '');
             console.log(`Extracted ${phoneNumbers.length} phone numbers from column "${column}"`);
             console.log(`Raw phone numbers:`, phoneNumbers);
             // For Excel import, accept all values from the selected column as-is
@@ -698,16 +725,16 @@ router.post('/import-recipients', auth_1.requireAuth, upload.single('file'), asy
                 const lines = fileContent.split('\n');
                 phoneNumbers = lines
                     .map(line => line.split(',')[0]?.trim())
-                    .filter(phone => phone && phone !== '');
+                    .filter((phone) => phone && phone !== '');
             }
             else {
                 // Handle Excel files
                 console.log(`Processing Excel file: ${req.file.originalname}`);
-                const workbook = xlsx_1.default.readFile(filePath);
+                const workbook = XLSX.readFile(filePath);
                 const sheetName = workbook.SheetNames[0];
                 console.log(`Using sheet: ${sheetName}`);
                 const worksheet = workbook.Sheets[sheetName];
-                const jsonData = xlsx_1.default.utils.sheet_to_json(worksheet, { header: 1 });
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
                 console.log(`Total rows in Excel: ${jsonData.length}`);
                 phoneNumbers = jsonData
                     .map((row, index) => {
@@ -717,7 +744,7 @@ router.post('/import-recipients', auth_1.requireAuth, upload.single('file'), asy
                     }
                     return phone;
                 })
-                    .filter(phone => phone && phone !== '');
+                    .filter((phone) => phone && phone !== '');
                 console.log(`Extracted ${phoneNumbers.length} phone numbers from Excel file`);
             }
             // Validate and format phone numbers
@@ -767,6 +794,94 @@ router.post('/import-recipients', auth_1.requireAuth, upload.single('file'), asy
         });
     }
 });
+// POST /api/whatsapp/import-bulk-recipients - Handle Excel file upload for WhatsApp Bulk (Quick Send)
+router.post('/import-bulk-recipients', auth_1.requireAuth, upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                error: 'No file uploaded'
+            });
+        }
+        const filePath = req.file.path;
+        const fileExtension = path_1.default.extname(req.file.originalname).toLowerCase();
+        let phoneNumbers = [];
+        try {
+            if (fileExtension === '.csv') {
+                // Handle CSV files
+                const fileContent = fs_1.default.readFileSync(filePath, 'utf8');
+                const lines = fileContent.split('\n');
+                phoneNumbers = lines
+                    .map(line => line.split(',')[0]?.trim())
+                    .filter((phone) => phone && phone !== '');
+            }
+            else {
+                // Handle Excel files
+                console.log(`Processing Excel file for WhatsApp Bulk: ${req.file.originalname}`);
+                const workbook = XLSX.readFile(filePath);
+                const sheetName = workbook.SheetNames[0];
+                console.log(`Using sheet: ${sheetName}`);
+                const worksheet = workbook.Sheets[sheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                console.log(`Total rows in Excel: ${jsonData.length}`);
+                phoneNumbers = jsonData
+                    .map((row, index) => {
+                    const phone = row[0]?.toString().trim();
+                    if (phone) {
+                        console.log(`Row ${index + 1}: Found phone number: ${phone}`);
+                    }
+                    return phone;
+                })
+                    .filter((phone) => phone && phone !== '');
+                console.log(`Extracted ${phoneNumbers.length} phone numbers from Excel file`);
+            }
+            // Validate and format phone numbers
+            const validNumbers = [];
+            const invalidNumbers = [];
+            phoneNumbers.forEach(phone => {
+                if (validatePhoneNumber(phone)) {
+                    validNumbers.push(formatPhoneNumber(phone));
+                }
+                else {
+                    invalidNumbers.push(phone);
+                }
+            });
+            // Remove duplicates
+            const uniqueValidNumbers = [...new Set(validNumbers)];
+            res.json({
+                success: true,
+                data: {
+                    valid_numbers: uniqueValidNumbers,
+                    invalid_numbers: invalidNumbers,
+                    total_processed: phoneNumbers.length,
+                    valid_count: uniqueValidNumbers.length,
+                    invalid_count: invalidNumbers.length
+                }
+            });
+        }
+        catch (parseError) {
+            console.error('Error parsing file for WhatsApp Bulk:', parseError);
+            res.status(400).json({
+                success: false,
+                error: 'Failed to parse file. Please ensure it\'s a valid Excel or CSV file.'
+            });
+        }
+        finally {
+            // Clean up uploaded file
+            fs_1.default.unlink(filePath, (err) => {
+                if (err)
+                    console.error('Error deleting temp file:', err);
+            });
+        }
+    }
+    catch (error) {
+        console.error('Error importing bulk recipients:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to import recipients'
+        });
+    }
+});
 // POST /api/whatsapp/preview-campaign - Generate campaign preview
 router.post('/preview-campaign', auth_1.requireAuth, async (req, res) => {
     try {
@@ -779,7 +894,7 @@ router.post('/preview-campaign', auth_1.requireAuth, async (req, res) => {
             });
         }
         // Get template details including media ID, header type, and media URL
-        const templateResult = await index_1.pool.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, template_name, language]);
+        const templateResult = await index_1.pool.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, template_name, language]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({
                 success: false,
@@ -854,14 +969,25 @@ router.post('/preview-campaign', auth_1.requireAuth, async (req, res) => {
         });
     }
 });
-// POST /api/whatsapp/quick-send - Handle quick message sending
-router.post('/quick-send', auth_1.requireAuth, async (req, res) => {
+// POST /api/whatsapp/quick-send - Handle quick message sending (with optional image upload)
+router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), async (req, res) => {
     try {
         const userId = req.session.user.id;
         console.log(`🔍 DEBUG QUICK-SEND: userId from session = ${userId}`);
-        const { phone_number_id, template_name, language = 'en_US', variables = {}, recipients_text = '', campaign_name } = req.body;
+        let { phone_number_id, template_name, language = 'en_US', variables = {}, recipients_text = '', campaign_name } = req.body;
+        // Parse variables if it's a JSON string (when sent via FormData)
+        if (typeof variables === 'string') {
+            try {
+                variables = JSON.parse(variables);
+            }
+            catch (parseError) {
+                console.log(`⚠️ DEBUG QUICK-SEND: Failed to parse variables JSON:`, variables);
+                variables = {};
+            }
+        }
         console.log(`🔍 DEBUG QUICK-SEND: Request body:`, { phone_number_id, template_name, language, campaign_name });
         console.log(`🔍 DEBUG QUICK-SEND: Recipients text:`, recipients_text);
+        console.log(`🔍 DEBUG QUICK-SEND: Variables:`, variables);
         // Validation
         if (!phone_number_id || !template_name || !recipients_text.trim()) {
             console.log(`❌ DEBUG QUICK-SEND: Validation failed - missing fields`);
@@ -871,30 +997,28 @@ router.post('/quick-send', auth_1.requireAuth, async (req, res) => {
             });
         }
         console.log(`✅ DEBUG QUICK-SEND: Validation passed`);
-        // Parse recipients with CSV support (supports both static and dynamic variables)
+        // Parse recipients (quick-send only supports phone numbers, no CSV/dynamic variables)
         const lines = recipients_text
             .split('\n')
             .map((line) => line.trim())
             .filter((line) => line.length > 0);
-        // Process each line to extract phone numbers and variables
-        const recipientData = [];
-        lines.forEach((line, index) => {
-            // Check if line contains comma-separated values (Excel format with dynamic variables)
-            if (line.includes(',')) {
-                const columns = line.split(',').map((col) => col.trim());
-                const phone = columns[0]; // First column is phone number
-                // Create variables from remaining columns (1, 2, 3, etc.)
-                const lineVariables = {};
-                for (let i = 1; i < columns.length; i++) {
-                    lineVariables[i.toString()] = columns[i];
+        // Check if any line contains CSV format (commas) and reject it
+        const csvLines = lines.filter((line) => line.includes(','));
+        if (csvLines.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Quick-send only supports phone numbers. For dynamic variables per recipient, please use the Customize feature instead.',
+                details: {
+                    csvLinesFound: csvLines.length,
+                    suggestion: 'Remove commas and extra columns, or use Customize for dynamic variables'
                 }
-                recipientData.push({ phone, variables: lineVariables });
-                console.log(`📊 Quick-send row ${index + 1}: Phone=${phone}, Variables=`, lineVariables);
-            }
-            else {
-                // Simple phone number format (uses static variables)
-                recipientData.push({ phone: line, variables: {} });
-            }
+            });
+        }
+        // Process each line as a simple phone number (all use same static variables)
+        const recipientData = [];
+        lines.forEach((line) => {
+            // Quick-send: all recipients use the same static variables from form
+            recipientData.push({ phone: line, variables: variables || {} });
         });
         const phoneNumbers = recipientData.map(item => item.phone);
         const formattedNumbers = phoneNumbers.map((num) => formatPhoneNumber(num));
@@ -941,36 +1065,95 @@ router.post('/quick-send', auth_1.requireAuth, async (req, res) => {
         }
         const { access_token } = numberResult.rows[0];
         // Get template details including media ID, header type, and media URL
-        const templateResult = await index_1.pool.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, template_name, language]);
+        const templateResult = await index_1.pool.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, template_name, language]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({
                 success: false,
                 error: 'Template not found'
             });
         }
-        // CRITICAL FIX: Validate template variables match requirements
-        const components = templateResult.rows[0].components;
-        const requiredVariables = new Set();
-        // Extract all required variables from template components
-        for (const component of components) {
-            if (component.text) {
-                const matches = component.text.match(/\{\{(\d+)\}\}/g) || [];
-                matches.forEach((match) => {
-                    const variableIndex = match.replace(/[{}]/g, '');
-                    requiredVariables.add(variableIndex);
+        const templateDetails = templateResult.rows[0];
+        // Check if template has image header and handle image upload
+        let uploadedImageMediaId = null;
+        if (templateDetails.header_type === 'STATIC_IMAGE') {
+            console.log('🖼️ Template has image header - checking for uploaded image');
+            if (req.file) {
+                console.log('📤 Image uploaded for template message, uploading to WhatsApp...');
+                try {
+                    // Upload the image to WhatsApp media endpoint
+                    const FormData = require('form-data');
+                    const form = new FormData();
+                    form.append('file', fs_1.default.createReadStream(req.file.path));
+                    form.append('type', req.file.mimetype);
+                    form.append('messaging_product', 'whatsapp');
+                    const mediaResponse = await axios_1.default.post(`https://graph.facebook.com/v21.0/${phone_number_id}/media`, form, {
+                        headers: {
+                            Authorization: `Bearer ${access_token}`,
+                            ...form.getHeaders()
+                        }
+                    });
+                    uploadedImageMediaId = mediaResponse.data.id;
+                    console.log('✅ Image uploaded successfully, media_id:', uploadedImageMediaId);
+                    // Clean up temporary file
+                    fs_1.default.unlinkSync(req.file.path);
+                }
+                catch (uploadError) {
+                    console.error('❌ Image upload failed:', uploadError.response?.data || uploadError.message);
+                    // Clean up temporary file
+                    if (req.file && fs_1.default.existsSync(req.file.path)) {
+                        fs_1.default.unlinkSync(req.file.path);
+                    }
+                    return res.status(400).json({
+                        success: false,
+                        error: 'Failed to upload image to WhatsApp',
+                        details: uploadError.response?.data || uploadError.message
+                    });
+                }
+            }
+            else {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Template requires an image header, but no image was uploaded. Please upload an image.'
                 });
             }
-            // Check button URLs for variables
-            if (component.type === 'BUTTONS' && component.buttons) {
-                component.buttons.forEach((button) => {
-                    if (button.url && button.url.includes('{{')) {
-                        const matches = button.url.match(/\{\{(\d+)\}\}/g) || [];
-                        matches.forEach((match) => {
-                            const variableIndex = match.replace(/[{}]/g, '');
-                            requiredVariables.add(variableIndex);
-                        });
-                    }
-                });
+        }
+        // CRITICAL FIX: Validate template variables match requirements
+        const components = templateDetails.components;
+        const requiredVariables = new Set();
+        // Special handling for AUTHENTICATION templates
+        if (templateDetails.category === 'AUTHENTICATION') {
+            console.log(`🔍 Authentication template detected: ${template_name}`);
+            // Authentication templates typically require at least one variable (the OTP code)
+            // even if their components array doesn't show explicit placeholders
+            if (Object.keys(variables).length > 0) {
+                // If variables are provided, accept them (usually variable 1 for OTP)
+                requiredVariables.add('1');
+            }
+            // If no variables provided, assume it's a static authentication template
+        }
+        else {
+            // Standard processing for non-authentication templates
+            // Extract all required variables from template components
+            for (const component of components) {
+                if (component.text) {
+                    const matches = component.text.match(/\{\{(\d+)\}\}/g) || [];
+                    matches.forEach((match) => {
+                        const variableIndex = match.replace(/[{}]/g, '');
+                        requiredVariables.add(variableIndex);
+                    });
+                }
+                // Check button URLs for variables
+                if (component.type === 'BUTTONS' && component.buttons) {
+                    component.buttons.forEach((button) => {
+                        if (button.url && button.url.includes('{{')) {
+                            const matches = button.url.match(/\{\{(\d+)\}\}/g) || [];
+                            matches.forEach((match) => {
+                                const variableIndex = match.replace(/[{}]/g, '');
+                                requiredVariables.add(variableIndex);
+                            });
+                        }
+                    });
+                }
             }
         }
         const requiredVariablesList = Array.from(requiredVariables).sort((a, b) => parseInt(a) - parseInt(b));
@@ -1064,7 +1247,9 @@ router.post('/quick-send', auth_1.requireAuth, async (req, res) => {
                 : variables;
             console.log(`📤 Sending to ${recipient} with variables:`, recipientVariables);
             return sendTemplateMessage(phone_number_id, access_token, recipient, template_name, language, recipientVariables, // Dynamic or static variables per recipient
-            templateResult.rows[0].components, campaignId, templateResult.rows[0].header_media_id, templateResult.rows[0].header_type, templateResult.rows[0].header_media_url, templateResult.rows[0].header_handle, templateResult.rows[0].media_id).then(() => {
+            templateDetails.components, campaignId, userId, templateDetails.header_media_id, templateDetails.header_type, templateDetails.header_media_url, templateDetails.header_handle, uploadedImageMediaId || templateDetails.media_id, // Use fresh uploaded media_id if available
+            templateDetails.category // Template category for authentication template handling
+            ).then(() => {
                 successCount++;
             }).catch((error) => {
                 failCount++;
@@ -1151,7 +1336,7 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
         }
         const { access_token } = numberResult.rows[0];
         // Get template details including media ID, header type, and media URL
-        const templateResult = await index_1.pool.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, template_name, language]);
+        const templateResult = await index_1.pool.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, template_name, language]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({
                 success: false,
@@ -1160,27 +1345,42 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
         }
         // CRITICAL FIX: Validate template variables match requirements (same as quick-send)
         const components = templateResult.rows[0].components;
+        const templateCategory = templateResult.rows[0].category;
         const requiredVariables = new Set();
-        // Extract all required variables from template components
-        for (const component of components) {
-            if (component.text) {
-                const matches = component.text.match(/\{\{(\d+)\}\}/g) || [];
-                matches.forEach((match) => {
-                    const variableIndex = match.replace(/[{}]/g, '');
-                    requiredVariables.add(variableIndex);
-                });
+        // Special handling for AUTHENTICATION templates
+        if (templateCategory === 'AUTHENTICATION') {
+            console.log(`🔍 Authentication template detected in bulk send: ${template_name}`);
+            // Authentication templates typically require at least one variable (the OTP code)
+            // even if their components array doesn't show explicit placeholders
+            if (Object.keys(variables).length > 0) {
+                // If variables are provided, accept them (usually variable 1 for OTP)
+                requiredVariables.add('1');
             }
-            // Check button URLs for variables
-            if (component.type === 'BUTTONS' && component.buttons) {
-                component.buttons.forEach((button) => {
-                    if (button.url && button.url.includes('{{')) {
-                        const matches = button.url.match(/\{\{(\d+)\}\}/g) || [];
-                        matches.forEach((match) => {
-                            const variableIndex = match.replace(/[{}]/g, '');
-                            requiredVariables.add(variableIndex);
-                        });
-                    }
-                });
+            // If no variables provided, assume it's a static authentication template
+        }
+        else {
+            // Standard processing for non-authentication templates
+            // Extract all required variables from template components
+            for (const component of components) {
+                if (component.text) {
+                    const matches = component.text.match(/\{\{(\d+)\}\}/g) || [];
+                    matches.forEach((match) => {
+                        const variableIndex = match.replace(/[{}]/g, '');
+                        requiredVariables.add(variableIndex);
+                    });
+                }
+                // Check button URLs for variables
+                if (component.type === 'BUTTONS' && component.buttons) {
+                    component.buttons.forEach((button) => {
+                        if (button.url && button.url.includes('{{')) {
+                            const matches = button.url.match(/\{\{(\d+)\}\}/g) || [];
+                            matches.forEach((match) => {
+                                const variableIndex = match.replace(/[{}]/g, '');
+                                requiredVariables.add(variableIndex);
+                            });
+                        }
+                    });
+                }
             }
         }
         const requiredVariablesList = Array.from(requiredVariables).sort((a, b) => parseInt(a) - parseInt(b));
@@ -1275,7 +1475,7 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
         const messagePromises = [];
         for (const batch of batches) {
             for (const recipient of batch) {
-                const messagePromise = sendTemplateMessage(phone_number_id, access_token, recipient, template_name, language, variables, templateResult.rows[0].components, campaignId, templateResult.rows[0].header_media_id, templateResult.rows[0].header_type, templateResult.rows[0].header_media_url, templateResult.rows[0].header_handle, templateResult.rows[0].media_id);
+                const messagePromise = sendTemplateMessage(phone_number_id, access_token, recipient, template_name, language, variables, templateResult.rows[0].components, campaignId, userId, templateResult.rows[0].header_media_id, templateResult.rows[0].header_type, templateResult.rows[0].header_media_url, templateResult.rows[0].header_handle, templateResult.rows[0].media_id, templateResult.rows[0].category);
                 messagePromises.push(messagePromise);
             }
             // Wait between batches to respect rate limits
@@ -1319,137 +1519,154 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
     }
 });
 // Function to send individual template message
-async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templateName, language, variables, components, campaignId, headerMediaId, headerType, headerMediaUrl, headerHandle, mediaId) {
+async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templateName, language, variables, components, campaignId, userId, headerMediaId, headerType, headerMediaUrl, headerHandle, mediaId, templateCategory) {
     try {
+        // DUPLICATE DETECTION: Check if this exact message was sent recently
+        const duplicateCheck = await (0, duplicateDetection_1.checkAndHandleDuplicate)(userId, templateName, recipient, variables, campaignId);
+        if (duplicateCheck.isDuplicate) {
+            console.log(`❌ DUPLICATE DETECTED: Skipping message to ${recipient} with template ${templateName}`);
+            return {
+                success: false,
+                duplicate: true,
+                recipient,
+                hash: duplicateCheck.hash,
+                message: 'Duplicate message blocked'
+            };
+        }
         const templateComponents = [];
-        console.log(`🚀 Processing template "${templateName}" with header_type: ${headerType || 'UNKNOWN'}`);
-        // SIMPLIFIED LOGIC: Only handle STATIC_IMAGE, TEXT, and NONE
-        for (const component of components) {
-            if (component.type === 'HEADER') {
-                // Handle IMAGE templates (both STATIC_IMAGE and dynamic) - Use stored media_id for sending
-                if (component.format === 'IMAGE' || headerType === 'STATIC_IMAGE') {
-                    console.log(`📸 IMAGE template detected - using stored media_id for sending`);
-                    console.log(`🔍 Available data:`);
-                    console.log(`   header_handle: ${headerHandle ? headerHandle.substring(0, 50) + '...' : 'Not set'}`);
-                    console.log(`   media_id: ${mediaId || 'Not set'}`);
-                    // CORRECT LOGIC: Use the stored media_id for message sending
-                    if (mediaId) {
-                        console.log(`✅ Using stored media_id for sending: ${mediaId}`);
-                        const headerComponent = {
-                            type: "header",
-                            parameters: [{
-                                    type: "image",
-                                    image: {
-                                        id: mediaId // Use the stored media_id from template creation
-                                    }
-                                }]
-                        };
-                        templateComponents.push(headerComponent);
-                        console.log(`✅ Added header component with stored media_id: ${mediaId}`);
+        console.log(`🚀 Processing template "${templateName}" with category: ${templateCategory || 'UNKNOWN'}, header_type: ${headerType || 'UNKNOWN'}`);
+        // Special handling for AUTHENTICATION templates (2025 format)
+        if (templateCategory === 'AUTHENTICATION') {
+            console.log(`🔐 Authentication template detected - using 2025 format`);
+            // Get OTP code from variables (usually var1)
+            const otpCode = variables['1'] || variables['var1'] || Object.values(variables)[0];
+            if (otpCode) {
+                console.log(`🔐 Adding authentication template components with OTP: ${otpCode}`);
+                // Add body component with OTP code
+                templateComponents.push({
+                    type: "body",
+                    parameters: [{ type: "text", text: otpCode.toString() }]
+                });
+                // Add button component with OTP code (required for authentication templates)
+                templateComponents.push({
+                    type: "button",
+                    sub_type: "url",
+                    index: "0",
+                    parameters: [{ type: "text", text: otpCode.toString() }]
+                });
+                console.log(`✅ Added authentication template components (body + button)`);
+            }
+            else {
+                console.log(`⚠️ Authentication template but no OTP code provided in variables:`, variables);
+            }
+        }
+        else {
+            // SIMPLIFIED LOGIC: Only handle STATIC_IMAGE, TEXT, and NONE for non-auth templates
+            for (const component of components) {
+                if (component.type === 'HEADER') {
+                    // Handle IMAGE templates - Use fresh uploaded media_id
+                    if (component.format === 'IMAGE' || headerType === 'STATIC_IMAGE') {
+                        console.log(`📸 IMAGE template detected - using fresh uploaded media_id for sending`);
+                        console.log(`🔍 Available data:`);
+                        console.log(`   media_id (fresh upload): ${mediaId || 'Not set'}`);
+                        // Use the fresh uploaded media_id from quick-send
+                        if (mediaId) {
+                            console.log(`✅ Using fresh uploaded media_id for message sending: ${mediaId}`);
+                            const headerComponent = {
+                                type: "header",
+                                parameters: [{
+                                        type: "image",
+                                        image: {
+                                            id: mediaId // Use fresh media_id from upload
+                                        }
+                                    }]
+                            };
+                            templateComponents.push(headerComponent);
+                            console.log(`✅ Added header component with fresh media_id: ${mediaId}`);
+                        }
+                        else {
+                            throw new Error(`Template '${templateName}' requires image but no fresh media_id provided. Upload image in quick-send.`);
+                        }
                     }
-                    else {
-                        // Fallback: If no media_id stored, upload image to get one
-                        console.log(`⚠️ No stored media_id found. Performing fallback upload...`);
-                        const imageUrl = headerMediaUrl;
-                        if (!imageUrl) {
-                            throw new Error(`Template '${templateName}' has no stored media_id and no header_media_url for fallback upload.`);
+                    // Handle TEXT headers with variables
+                    else if (headerType === 'TEXT' && component.text && component.text.includes('{{')) {
+                        console.log(`📝 TEXT header with variables detected`);
+                        const headerParams = [];
+                        const matches = component.text.match(/\{\{(\d+)\}\}/g);
+                        if (matches) {
+                            // CRITICAL FIX: Always send ALL required parameters, even if empty
+                            matches.forEach((match) => {
+                                const variableIndex = parseInt(match.replace(/[{}]/g, ''));
+                                const value = variables[variableIndex.toString()] || `[Header Variable ${variableIndex} not provided]`;
+                                headerParams.push({
+                                    type: "text",
+                                    text: value
+                                });
+                            });
+                            // Always add header component if template has variables (Meta requirement)
+                            templateComponents.push({
+                                type: "header",
+                                parameters: headerParams
+                            });
+                            console.log(`   ✅ Added text header with ${headerParams.length} parameters (${matches.length} required)`);
                         }
-                        const freshMediaId = await uploadWhatsappMedia(imageUrl, phoneNumberId, accessToken);
-                        if (!freshMediaId) {
-                            throw new Error(`Fallback media upload failed for template ${templateName}.`);
-                        }
-                        console.log(`🔄 Fallback upload successful. Got media_id: ${freshMediaId}`);
-                        const headerComponent = {
-                            type: "header",
-                            parameters: [{
-                                    type: "image",
-                                    image: {
-                                        id: freshMediaId
-                                    }
-                                }]
-                        };
-                        templateComponents.push(headerComponent);
-                        console.log(`✅ Added header component with fallback media_id: ${freshMediaId}`);
                     }
                 }
-                // Handle TEXT headers with variables
-                else if (headerType === 'TEXT' && component.text && component.text.includes('{{')) {
-                    console.log(`📝 TEXT header with variables detected`);
-                    const headerParams = [];
+                else if (component.type === 'BODY' && component.text) {
+                    // Handle body variables
                     const matches = component.text.match(/\{\{(\d+)\}\}/g);
                     if (matches) {
+                        const bodyParams = [];
                         // CRITICAL FIX: Always send ALL required parameters, even if empty
                         matches.forEach((match) => {
                             const variableIndex = parseInt(match.replace(/[{}]/g, ''));
-                            const value = variables[variableIndex.toString()] || `[Header Variable ${variableIndex} not provided]`;
-                            headerParams.push({
+                            const value = variables[variableIndex.toString()] || `[Variable ${variableIndex} not provided]`;
+                            console.log(`🔍 META API - Variable ${variableIndex}: "${value}" (from variables object:`, variables, `)`);
+                            bodyParams.push({
                                 type: "text",
                                 text: value
                             });
                         });
-                        // Always add header component if template has variables (Meta requirement)
+                        // Always add body component if template has variables (Meta requirement)
                         templateComponents.push({
-                            type: "header",
-                            parameters: headerParams
+                            type: "body",
+                            parameters: bodyParams
                         });
-                        console.log(`   ✅ Added text header with ${headerParams.length} parameters (${matches.length} required)`);
+                        console.log(`   ✅ Sending body component with ${bodyParams.length} parameters (${matches.length} required)`);
                     }
                 }
-            }
-            else if (component.type === 'BODY' && component.text) {
-                // Handle body variables
-                const matches = component.text.match(/\{\{(\d+)\}\}/g);
-                if (matches) {
-                    const bodyParams = [];
-                    // CRITICAL FIX: Always send ALL required parameters, even if empty
-                    matches.forEach((match) => {
-                        const variableIndex = parseInt(match.replace(/[{}]/g, ''));
-                        const value = variables[variableIndex.toString()] || `[Variable ${variableIndex} not provided]`;
-                        console.log(`🔍 META API - Variable ${variableIndex}: "${value}" (from variables object:`, variables, `)`);
-                        bodyParams.push({
-                            type: "text",
-                            text: value
-                        });
-                    });
-                    // Always add body component if template has variables (Meta requirement)
-                    templateComponents.push({
-                        type: "body",
-                        parameters: bodyParams
-                    });
-                    console.log(`   ✅ Sending body component with ${bodyParams.length} parameters (${matches.length} required)`);
-                }
-            }
-            else if (component.type === 'BUTTONS' && component.buttons) {
-                // Handle button variables (dynamic URLs)
-                component.buttons.forEach((button, buttonIndex) => {
-                    if (button.type === 'URL' && button.url && button.url.includes('{{')) {
-                        const matches = button.url.match(/\{\{(\d+)\}\}/g);
-                        if (matches) {
-                            const buttonParams = [];
-                            matches.forEach((match) => {
-                                const variableIndex = parseInt(match.replace(/[{}]/g, ''));
-                                const value = variables[variableIndex.toString()];
-                                if (value) {
-                                    buttonParams.push({
-                                        type: "text",
-                                        text: value
-                                    });
-                                }
-                            });
-                            if (buttonParams.length > 0) {
-                                templateComponents.push({
-                                    type: "button",
-                                    sub_type: "url",
-                                    index: buttonIndex.toString(),
-                                    parameters: buttonParams
+                else if (component.type === 'BUTTONS' && component.buttons) {
+                    // Handle button variables (dynamic URLs)
+                    component.buttons.forEach((button, buttonIndex) => {
+                        if (button.type === 'URL' && button.url && button.url.includes('{{')) {
+                            const matches = button.url.match(/\{\{(\d+)\}\}/g);
+                            if (matches) {
+                                const buttonParams = [];
+                                matches.forEach((match) => {
+                                    const variableIndex = parseInt(match.replace(/[{}]/g, ''));
+                                    const value = variables[variableIndex.toString()];
+                                    if (value) {
+                                        buttonParams.push({
+                                            type: "text",
+                                            text: value
+                                        });
+                                    }
                                 });
-                                console.log(`   ✅ Sending button component for button ${buttonIndex}`);
+                                if (buttonParams.length > 0) {
+                                    templateComponents.push({
+                                        type: "button",
+                                        sub_type: "url",
+                                        index: buttonIndex.toString(),
+                                        parameters: buttonParams
+                                    });
+                                    console.log(`   ✅ Sending button component for button ${buttonIndex}`);
+                                }
                             }
                         }
-                    }
-                });
-            }
-        }
+                    });
+                }
+            } // End of component processing loop for non-auth templates
+        } // End of else block for non-auth templates
         // Build the template payload
         const templatePayload = {
             name: templateName,
@@ -1565,10 +1782,10 @@ router.post('/parse-excel', auth_1.requireAuth, upload.single('file'), async (re
             }
             else {
                 // Handle Excel files
-                const workbook = xlsx_1.default.readFile(filePath);
+                const workbook = XLSX.readFile(filePath);
                 const sheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[sheetName];
-                data = xlsx_1.default.utils.sheet_to_json(worksheet);
+                data = XLSX.utils.sheet_to_json(worksheet);
                 if (data.length > 0) {
                     columns = Object.keys(data[0]);
                 }
@@ -1618,7 +1835,7 @@ router.post('/preview-custom', auth_1.requireAuth, async (req, res) => {
             });
         }
         // Get template details
-        const templateResult = await index_1.pool.query('SELECT components FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, templateName, language]);
+        const templateResult = await index_1.pool.query('SELECT components, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, templateName, language]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({
                 success: false,
@@ -1694,10 +1911,10 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
                 }
             }
             else {
-                const workbook = xlsx_1.default.readFile(filePath);
+                const workbook = XLSX.readFile(filePath);
                 const sheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[sheetName];
-                data = xlsx_1.default.utils.sheet_to_json(worksheet);
+                data = XLSX.utils.sheet_to_json(worksheet);
             }
             if (data.length === 0) {
                 return res.status(400).json({
@@ -1739,7 +1956,7 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
                 });
             }
             // Get template details
-            const templateResult = await index_1.pool.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, templateName, language]);
+            const templateResult = await index_1.pool.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, templateName, language]);
             if (templateResult.rows.length === 0) {
                 return res.status(404).json({
                     success: false,
@@ -1819,7 +2036,7 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
                         rowVariables[variableIndex] = row[columnName].toString();
                     }
                 });
-                return sendTemplateMessage(wabaId, numberResult.rows[0].access_token, formatPhoneNumber(recipientNumber.toString()), templateName, language, rowVariables, templateResult.rows[0].components, campaignId, templateResult.rows[0].header_media_id, templateResult.rows[0].header_type, templateResult.rows[0].header_media_url, templateResult.rows[0].header_handle, templateResult.rows[0].media_id).then(() => {
+                return sendTemplateMessage(wabaId, numberResult.rows[0].access_token, formatPhoneNumber(recipientNumber.toString()), templateName, language, rowVariables, templateResult.rows[0].components, campaignId, userId, templateResult.rows[0].header_media_id, templateResult.rows[0].header_type, templateResult.rows[0].header_media_url, templateResult.rows[0].header_handle, templateResult.rows[0].media_id, templateResult.rows[0].category).then(() => {
                     successCount++;
                 }).catch((error) => {
                     failCount++;
@@ -1908,7 +2125,7 @@ function replaceCustomVariables(text, variableMappings, rowData) {
 router.get('/reports', auth_1.requireAuth, async (req, res) => {
     try {
         const userId = req.session.user.id;
-        const { page = 1, limit = 50, dateFrom = '', dateTo = '', recipientNumber = '', template = '', status = 'all', export: exportCsv = 'false' } = req.query;
+        const { page = 1, limit = 50, dateFrom = '', dateTo = '', recipientNumber = '', template = '', status = 'all', export: exportFormat = 'false' } = req.query;
         const offset = (Number(page) - 1) * Number(limit);
         // Build WHERE conditions
         let whereConditions = 'WHERE cl.user_id = $1';
@@ -1962,15 +2179,15 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
       LEFT JOIN user_business_info ubi ON cl.phone_number_id = ubi.whatsapp_number_id AND cl.user_id = ubi.user_id
       ${whereConditions}
       ORDER BY ml.created_at DESC
-      ${exportCsv === 'true' ? '' : `LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`}
+      ${exportFormat && exportFormat !== 'false' ? '' : `LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`}
     `;
-        if (exportCsv !== 'true') {
+        if (!exportFormat || exportFormat === 'false') {
             params.push(Number(limit), offset);
         }
         const reportsResult = await index_1.pool.query(reportsQuery, params);
-        // If exporting CSV
-        if (exportCsv === 'true') {
-            const csvHeaders = [
+        // If exporting data
+        if (exportFormat && exportFormat !== 'false') {
+            const headers = [
                 'Campaign Name',
                 'Template',
                 'From Number',
@@ -1981,21 +2198,59 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
                 'Read At',
                 'Failure Reason'
             ];
-            const csvRows = reportsResult.rows.map(row => [
-                `"${row.campaign_name}"`,
-                `"${row.template_used}"`,
-                `"${row.from_number}"`,
-                `"${row.recipient_number}"`,
-                `"${row.status}"`,
-                `"${row.sent_at || ''}"`,
-                `"${row.delivered_at || ''}"`,
-                `"${row.read_at || ''}"`,
-                `"${row.error_message || ''}"`
+            const rows = reportsResult.rows.map(row => [
+                row.campaign_name || '',
+                row.template_used || '',
+                row.from_number || '',
+                row.recipient_number || '',
+                row.status || '',
+                row.sent_at || '',
+                row.delivered_at || '',
+                row.read_at || '',
+                row.error_message || ''
             ]);
-            const csvContent = [csvHeaders.join(','), ...csvRows.map(row => row.join(','))].join('\n');
-            res.setHeader('Content-Type', 'text/csv');
-            res.setHeader('Content-Disposition', 'attachment; filename="whatsapp_reports.csv"');
-            return res.send(csvContent);
+            if (exportFormat === 'csv') {
+                const csvRows = rows.map(row => row.map(cell => `"${cell.toString().replace(/"/g, '""')}"`).join(','));
+                const csvContent = [headers.join(','), ...csvRows].join('\n');
+                res.setHeader('Content-Type', 'text/csv');
+                res.setHeader('Content-Disposition', 'attachment; filename="whatsapp_reports.csv"');
+                return res.send(csvContent);
+            }
+            else if (exportFormat === 'excel') {
+                try {
+                    console.log('📊 Creating Excel file with', rows.length, 'rows');
+                    const workbook = XLSX.utils.book_new();
+                    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+                    // Set column widths
+                    const columnWidths = [
+                        { wch: 25 }, // Campaign Name
+                        { wch: 15 }, // Template
+                        { wch: 15 }, // From Number
+                        { wch: 15 }, // Recipient Number
+                        { wch: 10 }, // Status
+                        { wch: 18 }, // Sent At
+                        { wch: 18 }, // Delivered At
+                        { wch: 18 }, // Read At
+                        { wch: 30 } // Failure Reason
+                    ];
+                    worksheet['!cols'] = columnWidths;
+                    XLSX.utils.book_append_sheet(workbook, worksheet, 'WhatsApp Reports');
+                    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+                    console.log('✅ Excel buffer created, size:', excelBuffer.length, 'bytes');
+                    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                    res.setHeader('Content-Disposition', 'attachment; filename="whatsapp_reports.xlsx"');
+                    res.setHeader('Content-Length', excelBuffer.length.toString());
+                    return res.send(excelBuffer);
+                }
+                catch (excelError) {
+                    console.error('❌ Excel creation failed:', excelError);
+                    return res.status(500).json({
+                        success: false,
+                        error: 'Failed to create Excel file',
+                        details: excelError instanceof Error ? excelError.message : 'Unknown error'
+                    });
+                }
+            }
         }
         // Get total count for pagination
         const countQuery = `
@@ -2173,7 +2428,7 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
         }
         const businessInfo = businessResult.rows[0];
         // Get template details
-        const templateResult = await index_1.pool.query('SELECT components FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, templateName, language]);
+        const templateResult = await index_1.pool.query('SELECT components, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, templateName, language]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({
                 success: false,
@@ -2258,7 +2513,12 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
                 });
                 console.log(`🔍 Final variables for ${recipient}:`, variables);
                 // Send the message
-                await sendTemplateMessage(businessInfo.whatsapp_number_id, businessInfo.access_token, recipient, templateName, language, variables, template.components, campaignId.toString());
+                await sendTemplateMessage(businessInfo.whatsapp_number_id, businessInfo.access_token, recipient, templateName, language, variables, template.components, campaignId.toString(), userId, undefined, // headerMediaId
+                undefined, // headerType
+                undefined, // headerMediaUrl
+                undefined, // headerHandle
+                undefined, // mediaId
+                template.category);
                 successfulSends++;
                 // Add small delay to avoid rate limiting
                 await new Promise(resolve => setTimeout(resolve, 100));

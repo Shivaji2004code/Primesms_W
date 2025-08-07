@@ -60,6 +60,11 @@ interface TemplateState {
   bodyText: string;
   footerText: string;
   buttons: TemplateButton[];
+  // Authentication-specific fields (updated for 2025 format)
+  otpType: 'COPY_CODE' | 'ONE_TAP';
+  otpButtonText: string;
+  codeExpirationMinutes: number;
+  addSecurityRecommendation: boolean;
 }
 
 const TEMPLATE_CATEGORIES: { value: TemplateCategory; label: string; description: string }[] = [
@@ -120,7 +125,12 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
     headerImage: null,
     bodyText: '',
     footerText: '',
-    buttons: []
+    buttons: [],
+    // Authentication-specific defaults (updated for 2025 format)
+    otpType: 'COPY_CODE',
+    otpButtonText: 'Copy Code',
+    codeExpirationMinutes: 10,
+    addSecurityRecommendation: true
   });
 
   // Dialog and UI states
@@ -143,13 +153,14 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
   useEffect(() => {
     if (templateData.category === 'AUTHENTICATION') {
       // Clear header, footer, and buttons for AUTHENTICATION
-      if (templateData.headerType !== 'none' || templateData.footerText || templateData.buttons.length > 0) {
+      if (templateData.headerType !== 'none' || templateData.footerText || templateData.buttons.length > 0 || templateData.bodyText !== '') {
         updateTemplateData({
           headerType: 'none',
           headerText: '',
           headerImage: null,
           footerText: '',
-          buttons: []
+          buttons: [],
+          bodyText: '' // Clear body text since authentication has fixed body format
         });
       }
     } else if (templateData.category === 'MARKETING') {
@@ -243,46 +254,21 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
 
     if (!templateData.name.trim()) {
       errors.push('Template name is required');
-    } else if (!/^[a-z0-9_]+$/.test(templateData.name)) {
-      errors.push('Template name can only contain lowercase letters, numbers, and underscores');
+    } else if (!/^[a-z0-9_]{1,60}$/.test(templateData.name)) {
+      errors.push('Template name must be 1-60 characters long and contain only lowercase letters, numbers, and underscores');
     }
 
-    if (!templateData.bodyText.trim()) {
-      errors.push('Body text is required');
-    }
-
-    // Check for header/footer length limits
-    if (templateData.headerType === 'text' && templateData.headerText.length > 60) {
-      errors.push('Header text cannot exceed 60 characters');
-    }
-
-    if (templateData.footerText.length > 60) {
-      errors.push('Footer text cannot exceed 60 characters');
-    }
-
-    // Check button limits
-    if (templateData.buttons.length > 10) {
-      errors.push('Cannot have more than 10 buttons');
-    }
-
-    templateData.buttons.forEach((btn, btnIndex) => {
-      if (!btn.text.trim()) {
-        errors.push(`Button ${btnIndex + 1} must have text`);
-      }
-      if (btn.text.length > 25) {
-        errors.push(`Button text cannot exceed 25 characters`);
-      }
-      if (btn.type === 'URL' && btn.url && !/^https?:\/\/.+/.test(btn.url)) {
-        errors.push(`Invalid URL format in button ${btnIndex + 1}`);
-      }
-      if (btn.type === 'PHONE_NUMBER' && btn.phone_number && !/^\+?[\d\s-()]+$/.test(btn.phone_number)) {
-        errors.push(`Invalid phone number format in button ${btnIndex + 1}`);
-      }
-    });
-
-    // META WHATSAPP CATEGORY-SPECIFIC VALIDATION
+    // Category-specific validation
     if (templateData.category === 'AUTHENTICATION') {
-      // AUTHENTICATION: Only BODY allowed
+      // AUTHENTICATION specific validation (updated for 2025 format)
+      // Note: OTP button text is now optional in the new format
+      if (templateData.codeExpirationMinutes < 1 || templateData.codeExpirationMinutes > 90) {
+        errors.push('Code expiration must be between 1 and 90 minutes');
+      }
+      if (!['COPY_CODE', 'ONE_TAP'].includes(templateData.otpType)) {
+        errors.push('OTP type must be either COPY_CODE or ONE_TAP');
+      }
+      // Headers, footers, body text, and buttons are not allowed for authentication
       if (templateData.headerType !== 'none') {
         errors.push('AUTHENTICATION templates cannot have headers');
       }
@@ -290,12 +276,45 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
         errors.push('AUTHENTICATION templates cannot have footers');
       }
       if (templateData.buttons.length > 0) {
-        errors.push('AUTHENTICATION templates cannot have buttons');
+        errors.push('AUTHENTICATION templates cannot have custom buttons');
       }
-    } else if (templateData.category === 'MARKETING') {
-      // MARKETING: All components allowed like UTILITY (no restrictions)
-    } else if (templateData.category === 'UTILITY') {
-      // UTILITY: All components allowed (no additional restrictions)
+      if (templateData.bodyText.trim()) {
+        errors.push('AUTHENTICATION templates have fixed body text and cannot be customized');
+      }
+    } else {
+      // For MARKETING and UTILITY templates
+      if (!templateData.bodyText.trim()) {
+        errors.push('Body text is required');
+      }
+
+      // Check for header/footer length limits
+      if (templateData.headerType === 'text' && templateData.headerText.length > 60) {
+        errors.push('Header text cannot exceed 60 characters');
+      }
+
+      if (templateData.footerText.length > 60) {
+        errors.push('Footer text cannot exceed 60 characters');
+      }
+
+      // Check button limits
+      if (templateData.buttons.length > 10) {
+        errors.push('Cannot have more than 10 buttons');
+      }
+
+      templateData.buttons.forEach((btn, btnIndex) => {
+        if (!btn.text.trim()) {
+          errors.push(`Button ${btnIndex + 1} must have text`);
+        }
+        if (btn.text.length > 25) {
+          errors.push(`Button text cannot exceed 25 characters`);
+        }
+        if (btn.type === 'URL' && btn.url && !/^https?:\/\/.+/.test(btn.url)) {
+          errors.push(`Invalid URL format in button ${btnIndex + 1}`);
+        }
+        if (btn.type === 'PHONE_NUMBER' && btn.phone_number && !/^\+?[\d\s-()]+$/.test(btn.phone_number)) {
+          errors.push(`Invalid phone number format in button ${btnIndex + 1}`);
+        }
+      });
     }
 
     return errors;
@@ -339,50 +358,76 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
     setIsLoading(true);
 
     try {
-      // Create FormData for multipart/form-data submission
-      const formData = new FormData();
-      
-      // Add basic template information
-      formData.append('name', templateData.name);
-      formData.append('category', templateData.category);
-      formData.append('language', templateData.language);
-      formData.append('bodyText', templateData.bodyText);
-      
-      // Add header data
-      if (templateData.headerType === 'text' && templateData.headerText) {
-        formData.append('headerText', templateData.headerText);
-      } else if (templateData.headerType === 'image' && templateData.headerImage) {
-                formData.append('headerMedia', templateData.headerImage);
-      }
-      
-      // Add footer if present
-      if (templateData.footerText) {
-        formData.append('footerText', templateData.footerText);
-      }
-      
-      // Add buttons if present
-      if (templateData.buttons.length > 0) {
-        formData.append('buttons', JSON.stringify(templateData.buttons));
-      }
-      
-      // Add variable examples if present
-      if (Object.keys(variableExamples).length > 0) {
-        formData.append('variableExamples', JSON.stringify(variableExamples));
-      }
+      let response: Response;
 
-            if (submitToWhatsApp) {
-        formData.append('submit_to_whatsapp', 'true');
-      }
+      if (templateData.category === 'AUTHENTICATION') {
+        // Use the specific authentication template endpoint with 2025 format
+        const authData = {
+          name: templateData.name,
+          language: templateData.language,
+          otp_type: templateData.otpType,
+          otp_button_text: templateData.otpButtonText,
+          code_expiration_minutes: templateData.codeExpirationMinutes,
+          add_security_recommendation: templateData.addSecurityRecommendation,
+          allow_category_change: false
+        };
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/templates`, {
-        method: 'POST',
-        body: formData,
-        credentials: 'include'
-      });
+        response = await fetch(`${import.meta.env.VITE_API_URL}/api/templates/authentication`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(authData),
+          credentials: 'include'
+        });
+      } else {
+        // Use the regular template endpoint for MARKETING and UTILITY
+        const formData = new FormData();
+        
+        // Add basic template information
+        formData.append('name', templateData.name);
+        formData.append('category', templateData.category);
+        formData.append('language', templateData.language);
+        formData.append('bodyText', templateData.bodyText);
+        
+        // Add header data
+        if (templateData.headerType === 'text' && templateData.headerText) {
+          formData.append('headerText', templateData.headerText);
+        } else if (templateData.headerType === 'image' && templateData.headerImage) {
+          formData.append('headerMedia', templateData.headerImage);
+        }
+        
+        // Add footer if present
+        if (templateData.footerText) {
+          formData.append('footerText', templateData.footerText);
+        }
+        
+        // Add buttons if present
+        if (templateData.buttons.length > 0) {
+          formData.append('buttons', JSON.stringify(templateData.buttons));
+        }
+        
+        // Add variable examples if present
+        if (Object.keys(variableExamples).length > 0) {
+          formData.append('variableExamples', JSON.stringify(variableExamples));
+        }
+
+        if (submitToWhatsApp) {
+          formData.append('submit_to_whatsapp', 'true');
+        }
+
+        response = await fetch(`${import.meta.env.VITE_API_URL}/api/templates`, {
+          method: 'POST',
+          body: formData,
+          credentials: 'include'
+        });
+      }
 
       if (response.ok) {
         toast.success(
-          submitToWhatsApp 
+          templateData.category === 'AUTHENTICATION' 
+            ? 'Authentication template created and submitted to WhatsApp!' 
+            : submitToWhatsApp 
             ? 'Template created and submitted to WhatsApp for review!' 
             : 'Template created successfully!'
         );
@@ -467,7 +512,15 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
               {/* Body Text */}
               <div className="p-3">
                 <div className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">
-                  {templateData.bodyText ? getTextWithVariables(templateData.bodyText) : (
+                  {templateData.category === 'AUTHENTICATION' ? (
+                    <div>
+                      <span className="text-gray-500 italic">Your verification code is: </span>
+                      <span className="font-mono bg-gray-100 px-2 py-1 rounded">123456</span>
+                      <div className="text-xs text-gray-400 mt-1">
+                        (This is a preview - actual code will be sent by WhatsApp)
+                      </div>
+                    </div>
+                  ) : templateData.bodyText ? getTextWithVariables(templateData.bodyText) : (
                     <span className="text-gray-400 italic">Start typing your message...</span>
                   )}
                 </div>
@@ -491,7 +544,13 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
               </div>
               
               {/* Buttons */}
-              {templateData.buttons.length > 0 && (
+              {templateData.category === 'AUTHENTICATION' ? (
+                <div className="border-t border-gray-100 p-1">
+                  <div className="mx-2 my-1 py-2 px-3 text-center text-sm font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer">
+                    {templateData.otpButtonText || 'Copy Code'}
+                  </div>
+                </div>
+              ) : templateData.buttons.length > 0 && (
                 <div className="border-t border-gray-100 p-1">
                   {templateData.buttons.map((button, index) => (
                     <div 
@@ -572,15 +631,17 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
               </DialogContent>
             </Dialog>
             
-            <Button 
-              variant="outline" 
-              onClick={() => handleSave(false)}
-              disabled={isLoading}
-              className="bg-white/80 hover:bg-white border-gray-200"
-            >
-              <Save className="h-4 w-4 mr-2" />
-              {isLoading ? 'Saving...' : 'Save Draft'}
-            </Button>
+{templateData.category !== 'AUTHENTICATION' && (
+              <Button 
+                variant="outline" 
+                onClick={() => handleSave(false)}
+                disabled={isLoading}
+                className="bg-white/80 hover:bg-white border-gray-200"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {isLoading ? 'Saving...' : 'Save Draft'}
+              </Button>
+            )}
             
             <Button 
               onClick={() => handleSave(true)}
@@ -588,7 +649,7 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
               className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white border-0 shadow-lg"
             >
               <Send className="h-4 w-4 mr-2" />
-              {isLoading ? 'Creating...' : 'Create & Submit'}
+              {isLoading ? 'Creating...' : templateData.category === 'AUTHENTICATION' ? 'Create & Submit' : 'Create & Submit'}
             </Button>
           </div>
         </div>
@@ -827,35 +888,36 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
             </Card>
 
             {/* Body Card */}
-            <Card className="bg-white/80 backdrop-blur-sm border-gray-200 shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <MessageSquare className="h-5 w-5 mr-2 text-indigo-600" />
-                    Message Body *
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setVariableDialog(true)}
-                  >
-                    <Variable className="h-4 w-4 mr-1" />
-                    Add Variable
-                  </Button>
-                </CardTitle>
-                <CardDescription>
-                  The main content of your message
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Textarea
-                  value={templateData.bodyText}
-                  onChange={(e) => updateTemplateData({ bodyText: e.target.value })}
-                  placeholder="Type your message here... Use variables for dynamic content"
-                  rows={6}
-                  className="bg-white/80 resize-none"
-                />
+            {templateData.category !== 'AUTHENTICATION' ? (
+              <Card className="bg-white/80 backdrop-blur-sm border-gray-200 shadow-lg">
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <MessageSquare className="h-5 w-5 mr-2 text-indigo-600" />
+                      Message Body *
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setVariableDialog(true)}
+                    >
+                      <Variable className="h-4 w-4 mr-1" />
+                      Add Variable
+                    </Button>
+                  </CardTitle>
+                  <CardDescription>
+                    The main content of your message
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Textarea
+                    value={templateData.bodyText}
+                    onChange={(e) => updateTemplateData({ bodyText: e.target.value })}
+                    placeholder="Type your message here... Use variables for dynamic content"
+                    rows={6}
+                    className="bg-white/80 resize-none"
+                  />
                 {/* Variable Examples Section */}
                 {getVariablesFromText(templateData.bodyText).length > 0 && (
                   <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -900,6 +962,114 @@ export default function CreateTemplate({ }: CreateTemplateProps) {
                 </div>
               </CardContent>
             </Card>
+            ) : (
+              /* Authentication Template Settings */
+              <Card className="bg-white/80 backdrop-blur-sm border-gray-200 shadow-lg">
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <MessageSquare className="h-5 w-5 mr-2 text-indigo-600" />
+                    Authentication Template Settings (2025 Format)
+                  </CardTitle>
+                  <CardDescription>
+                    WhatsApp will automatically generate the OTP message body. Configure the OTP button and security settings below using the new 2025 API format.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-start space-x-2">
+                      <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                      <div className="text-sm text-blue-800">
+                        <p className="font-medium mb-1">New 2025 Authentication Template Format:</p>
+                        <p>• Uses BODY, FOOTER, and BUTTONS components structure</p>
+                        <p>• Security recommendation is added to BODY component</p>
+                        <p>• Code expiration is configured in FOOTER component</p>
+                        <p>• OTP button uses new OTP type with COPY_CODE or ONE_TAP</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="otpType" className="text-sm font-medium text-gray-700">
+                        OTP Type *
+                      </Label>
+                      <Select 
+                        value={templateData.otpType} 
+                        onValueChange={(value: string) => 
+                          updateTemplateData({ otpType: value as 'COPY_CODE' | 'ONE_TAP' })
+                        }
+                      >
+                        <SelectTrigger className="mt-1 bg-white/80">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="COPY_CODE">Copy Code</SelectItem>
+                          <SelectItem value="ONE_TAP">One Tap</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Copy Code: Manual copy. One Tap: Auto-fill (requires app configuration).
+                      </p>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="otpButtonText" className="text-sm font-medium text-gray-700">
+                        OTP Button Text
+                      </Label>
+                      <Input
+                        id="otpButtonText"
+                        value={templateData.otpButtonText}
+                        onChange={(e) => updateTemplateData({ otpButtonText: e.target.value })}
+                        placeholder="Copy Code"
+                        maxLength={25}
+                        className="mt-1 bg-white/80"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Display text for the OTP button (optional, max 25 characters)
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="codeExpirationMinutes" className="text-sm font-medium text-gray-700">
+                        Code Expiration (minutes)
+                      </Label>
+                      <Input
+                        id="codeExpirationMinutes"
+                        type="number"
+                        min="1"
+                        max="90"
+                        value={templateData.codeExpirationMinutes}
+                        onChange={(e) => updateTemplateData({ codeExpirationMinutes: parseInt(e.target.value) || 10 })}
+                        className="mt-1 bg-white/80"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Code validity period (1-90 minutes) - Goes into FOOTER component
+                      </p>
+                    </div>
+
+                    <div className="flex items-center space-x-3">
+                      <input
+                        id="addSecurityRecommendation"
+                        type="checkbox"
+                        checked={templateData.addSecurityRecommendation}
+                        onChange={(e) => updateTemplateData({ addSecurityRecommendation: e.target.checked })}
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                      />
+                      <div>
+                        <Label htmlFor="addSecurityRecommendation" className="text-sm font-medium text-gray-700">
+                          Add Security Recommendation
+                        </Label>
+                        <p className="text-xs text-gray-500">
+                          Adds security warning to BODY component
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Footer Card - For UTILITY and MARKETING templates */}
             {(templateData.category === 'UTILITY' || templateData.category === 'MARKETING') && (

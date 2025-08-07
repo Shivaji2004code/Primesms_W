@@ -7,7 +7,9 @@ import {
   MessageSquare,
   Settings,
   BarChart3,
-  Code
+  Code,
+  User,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { cn } from '../../lib/utils';
@@ -60,6 +62,11 @@ export default function SideNav() {
       name: 'Support',
       path: '/user/support',
       icon: LifeBuoy
+    },
+    {
+      name: 'Profile',
+      path: '/user/profile',
+      icon: User
     }
   ];
 
@@ -75,9 +82,19 @@ export default function SideNav() {
       icon: FileText
     },
     {
+      name: 'Log Management',
+      path: '/admin/logs',
+      icon: Trash2
+    },
+    {
       name: 'Support',
       path: '/admin/support',
       icon: LifeBuoy
+    },
+    {
+      name: 'Profile',
+      path: '/admin/profile',
+      icon: User
     }
   ];
 

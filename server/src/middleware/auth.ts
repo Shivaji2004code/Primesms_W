@@ -7,6 +7,16 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
   next();
 };
 
+export const requireAuthWithRedirect = (req: Request, res: Response, next: NextFunction) => {
+  if (!req.session.user) {
+    const isPageRoute = req.headers.accept?.includes('text/html');
+    return isPageRoute
+      ? res.redirect('/login')
+      : res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+  next();
+};
+
 export const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Authentication required' });

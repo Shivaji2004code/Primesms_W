@@ -11,7 +11,8 @@ import {
   Clock,
   Phone,
   MessageSquare,
-  Calendar
+  Calendar,
+  ChevronDown
 } from 'lucide-react';
 import DashboardLayout from '../components/layout/DashboardLayout';
 import { Button } from '../components/ui/button';
@@ -24,7 +25,7 @@ interface MessageReport {
   template_used: string;
   from_number: string | null;
   recipient_number: string | null;
-  status: 'sent' | 'delivered' | 'read' | 'failed';
+  status: 'sent' | 'delivered' | 'read' | 'failed' | 'duplicate';
   read_status: string | null;
   error_message: string | null;
   sent_at: string | null;
@@ -60,6 +61,7 @@ export default function ManageReports() {
   const [totalPages, setTotalPages] = useState(1);
   const [pageSize] = useState(50);
   const [availableTemplates, setAvailableTemplates] = useState<string[]>([]);
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
 
   // Load reports data
   useEffect(() => {
@@ -73,6 +75,24 @@ export default function ManageReports() {
     setCurrentPage(1);
     loadReports();
   }, [filters]);
+
+  // Close export dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (exportDropdownOpen && !target.closest('.relative')) {
+        setExportDropdownOpen(false);
+      }
+    };
+
+    if (exportDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [exportDropdownOpen]);
 
   const loadReports = async () => {
     setLoading(true);
@@ -167,15 +187,17 @@ export default function ManageReports() {
     });
   };
 
-  const exportReports = async () => {
+  const exportReports = async (format: 'csv' | 'excel') => {
     try {
+      console.log(`📊 Starting ${format.toUpperCase()} export...`);
+      
       const params = new URLSearchParams({
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
         recipientNumber: filters.recipientNumber,
         template: filters.template,
         status: filters.status,
-        export: 'csv'
+        export: format
       });
 
       // Remove empty parameters
@@ -185,12 +207,26 @@ export default function ManageReports() {
         }
       }
 
+      console.log(`📊 Export URL: /api/whatsapp/reports?${params}`);
+
       const response = await fetch(`/api/whatsapp/reports?${params}`, {
         credentials: 'include'
       });
 
+      console.log(`📊 Response status: ${response.status}`);
+      console.log(`📊 Response headers:`, response.headers);
+
       if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        console.log(`📊 Content-Type: ${contentType}`);
+        
         const blob = await response.blob();
+        console.log(`📊 Blob size: ${blob.size} bytes, type: ${blob.type}`);
+        
+        if (blob.size === 0) {
+          throw new Error('Empty file received');
+        }
+        
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -201,9 +237,12 @@ export default function ManageReports() {
           .map(([key, value]) => `${key}-${value}`)
           .join('_');
         
+        const fileExtension = format === 'csv' ? 'csv' : 'xlsx';
         const filename = filterStr 
-          ? `whatsapp_reports_filtered_${filterStr}_${new Date().toISOString().split('T')[0]}.csv`
-          : `whatsapp_reports_all_${new Date().toISOString().split('T')[0]}.csv`;
+          ? `whatsapp_reports_filtered_${filterStr}_${new Date().toISOString().split('T')[0]}.${fileExtension}`
+          : `whatsapp_reports_all_${new Date().toISOString().split('T')[0]}.${fileExtension}`;
+        
+        console.log(`📊 Download filename: ${filename}`);
         
         link.download = filename;
         document.body.appendChild(link);
@@ -213,13 +252,26 @@ export default function ManageReports() {
         
         toast({
           title: "Success",
-          description: filterStr ? "Filtered reports exported successfully" : "All reports exported successfully",
+          description: filterStr 
+            ? `Filtered reports exported as ${format.toUpperCase()} successfully` 
+            : `All reports exported as ${format.toUpperCase()} successfully`,
           variant: "default"
         });
       } else {
+        const errorText = await response.text();
+        console.error(`📊 Export failed: ${response.status} - ${errorText}`);
+        
+        let errorMessage = "Failed to export reports";
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.details || errorData.message || errorMessage;
+        } catch (e) {
+          errorMessage = errorText || errorMessage;
+        }
+        
         toast({
           title: "Error",
-          description: "Failed to export reports",
+          description: errorMessage,
           variant: "destructive"
         });
       }
@@ -227,7 +279,7 @@ export default function ManageReports() {
       console.error('Error exporting reports:', error);
       toast({
         title: "Error",
-        description: "Failed to export reports",
+        description: error instanceof Error ? error.message : "Failed to export reports",
         variant: "destructive"
       });
     }
@@ -254,6 +306,13 @@ export default function ManageReports() {
           <div className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-800 rounded-full text-xs font-medium min-w-[60px] justify-center">
             <XCircle className="h-2.5 w-2.5" />
             <span>Failed</span>
+          </div>
+        );
+      case 'duplicate':
+        return (
+          <div className="flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-800 rounded-full text-xs font-medium min-w-[75px] justify-center">
+            <XCircle className="h-2.5 w-2.5" />
+            <span>Duplicate</span>
           </div>
         );
       case 'read':
@@ -379,11 +438,26 @@ export default function ManageReports() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={exportReports}
+                  onClick={() => {
+                    console.log('CSV export clicked');
+                    exportReports('csv');
+                  }}
                   className="text-blue-600 border-blue-600 hover:bg-blue-50"
                 >
                   <Download className="h-4 w-4 mr-1" />
                   Export CSV
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    console.log('Excel export clicked');
+                    exportReports('excel');
+                  }}
+                  className="text-green-600 border-green-600 hover:bg-green-50"
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Export Excel
                 </Button>
               </div>
             </CardTitle>
@@ -480,6 +554,7 @@ export default function ManageReports() {
                     <option value="sent">Sent</option>
                     <option value="delivered">Delivered</option>
                     <option value="failed">Failed</option>
+                    <option value="duplicate">Duplicate Blocked</option>
                     <option value="read">Read</option>
                   </select>
                 </div>

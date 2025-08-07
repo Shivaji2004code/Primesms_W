@@ -14,6 +14,14 @@ import adminRoutes from './routes/admin';
 import templateRoutes from './routes/templates';
 import whatsappRoutes from './routes/whatsapp';
 import sendRoutes from './routes/send';
+import creditsRoutes from './routes/credits';
+import logsRoutes from './routes/logs';
+
+// Import middleware
+import { requireAuthWithRedirect } from './middleware/auth';
+
+// Import services
+import { logCleanupService } from './services/logCleanup';
 
 const app = express();
 const PORT = process.env.PORT || 5050;
@@ -64,11 +72,31 @@ app.use(session({
   }
 }));
 
-// Routes
+// Page routes (with redirect middleware for expired sessions)
+app.get('/dashboard', requireAuthWithRedirect, (req, res) => {
+  res.send('<h1>User Dashboard</h1><p>Welcome to your dashboard!</p>');
+});
+
+app.get('/campaigns', requireAuthWithRedirect, (req, res) => {
+  res.send('<h1>Campaigns</h1><p>Manage your campaigns here.</p>');
+});
+
+app.get('/templates', requireAuthWithRedirect, (req, res) => {
+  res.send('<h1>Templates</h1><p>Manage your templates here.</p>');
+});
+
+// Login page (no auth required)
+app.get('/login', (req, res) => {
+  res.send('<h1>Login</h1><form><p>Please log in to continue.</p></form>');
+});
+
+// API routes (use regular auth middleware, return JSON)
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/templates', templateRoutes);
+app.use('/api/credits', creditsRoutes);
+app.use('/api/logs', logsRoutes);
 app.use('/api', sendRoutes);
 
 // Health check endpoint
@@ -93,4 +121,7 @@ app.use('*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV}`);
+  
+  // Start log cleanup service
+  logCleanupService.startScheduledCleanup();
 });

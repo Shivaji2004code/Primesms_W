@@ -87,7 +87,7 @@ export interface TemplateParameter {
 export interface TemplateExample {
   header_text?: string[];
   body_text?: string[][];
-  header_media_handle?: string[]; // FIXED: Use header_media_handle for template creation
+  header_handle?: string[]; // CORRECT: Use header_handle as per Meta WhatsApp API for template creation
 }
 
 export interface TemplateButton {

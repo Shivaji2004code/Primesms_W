@@ -30,6 +30,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { Progress } from './ui/progress';
 import { useStore } from '../store/useStore';
+import { useNotifier } from '../contexts/NotificationContext';
+import { apiRequest } from '../lib/api';
 
 interface WhatsAppNumber {
   id: string;
@@ -80,14 +82,9 @@ interface ImportResult {
   invalid_count: number;
 }
 
-interface ExcelPreview {
-  columns: string[];
-  sample_data: any[][];
-  total_rows: number;
-}
 
 export default function WhatsAppBulkMessaging() {
-  const { addNotification } = useStore();
+  const notifier = useNotifier();
   
   // Form state
   const [selectedNumber, setSelectedNumber] = useState<string>('');
@@ -100,12 +97,14 @@ export default function WhatsAppBulkMessaging() {
   const [templatePreview, setTemplatePreview] = useState<string>('');
   const [campaignPreview, setCampaignPreview] = useState<any>(null);
   
-  // Excel import state
-  const [excelPreview, setExcelPreview] = useState<ExcelPreview | null>(null);
-  const [selectedColumn, setSelectedColumn] = useState<string>('');
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [excelData, setExcelData] = useState<any[]>([]);
-  const [columnMappings, setColumnMappings] = useState<Record<string, string>>({});
+  // Excel import state (for future customize feature)
+  
+  // Image upload state for template headers
+  const [headerImage, setHeaderImage] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string>('');
+  
+  // Recipients selection state
+  const [selectedRecipients, setSelectedRecipients] = useState<number[]>([]);
   
   // Data state
   const [whatsappNumbers, setWhatsappNumbers] = useState<WhatsAppNumber[]>([]);
@@ -136,13 +135,12 @@ export default function WhatsAppBulkMessaging() {
     languages: false,
     preview: false,
     sending: false,
-    columnImport: false
   });
   
   // Alert state
   const [alertState, setAlertState] = useState<{
     show: boolean;
-    type: 'success' | 'error' | 'warning';
+    type: 'success' | 'error' | 'warning' | 'info';
     title: string;
     message: string;
   } | null>(null);
@@ -155,6 +153,11 @@ export default function WhatsAppBulkMessaging() {
     fetchWhatsAppNumbers();
     fetchLanguages();
   }, []);
+
+  // Clear recipient selection when recipients array changes
+  useEffect(() => {
+    setSelectedRecipients([]);
+  }, [recipients]);
 
   // Load templates when language changes
   useEffect(() => {
@@ -191,34 +194,18 @@ export default function WhatsAppBulkMessaging() {
   const fetchWhatsAppNumbers = async () => {
     setLoading(prev => ({ ...prev, numbers: true }));
     try {
-      const response = await fetch('/api/whatsapp/numbers', {
-        credentials: 'include'
-      });
+      const response = await apiRequest('/api/whatsapp/numbers');
       
       if (response.ok) {
         const data = await response.json();
         setWhatsappNumbers(data.data || []);
-      } else if (response.status === 401) {
-        addNotification({
-          type: 'error',
-          title: 'Authentication required',
-          description: 'Please log in first to access WhatsApp functionality'
-        });
       } else {
         console.error('Failed to load WhatsApp numbers:', response.status);
-        addNotification({
-          type: 'error',
-          title: 'Error loading WhatsApp numbers',
-          description: 'Please try again'
-        });
+        notifier.error('Error loading WhatsApp numbers. Please try again.');
       }
     } catch (error) {
       console.error('Error fetching WhatsApp numbers:', error);
-      addNotification({
-        type: 'error',
-        title: 'Connection error',
-        description: 'Please check your connection and try again'
-      });
+      notifier.error('Connection error. Please check your connection and try again.');
     } finally {
       setLoading(prev => ({ ...prev, numbers: false }));
     }
@@ -294,6 +281,42 @@ export default function WhatsAppBulkMessaging() {
     }
   };
 
+  // Handle header image upload
+  const handleHeaderImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+    if (!allowedTypes.includes(file.type)) {
+      setAlertState({
+        show: true,
+        type: 'error',
+        title: 'Invalid file type',
+        message: 'Please upload a JPG or PNG image file.'
+      });
+      return;
+    }
+
+    // Validate file size (5MB limit)
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxSize) {
+      setAlertState({
+        show: true,
+        type: 'error',
+        title: 'File too large',
+        message: 'Please upload an image smaller than 5MB.'
+      });
+      return;
+    }
+
+    setHeaderImage(file);
+    
+    // Create preview URL
+    const previewUrl = URL.createObjectURL(file);
+    setImagePreviewUrl(previewUrl);
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -324,41 +347,19 @@ export default function WhatsAppBulkMessaging() {
       return;
     }
 
-    // For Excel files, first preview the columns
+    // For Excel files in Quick-Send: automatically import from first column only
     if (fileExtension === '.xlsx' || fileExtension === '.xls') {
       try {
-        console.log('Previewing Excel file:', file.name);
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const response = await fetch('/api/whatsapp/preview-excel', {
-          method: 'POST',
-          credentials: 'include',
-          body: formData
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setExcelPreview(data.data);
-          setUploadedFile(file);
-          setSelectedColumn(''); // Reset column selection
-          
-          setAlertState({
-            show: true,
-            type: 'success',
-            title: 'Excel file loaded',
-            message: `Found ${data.data.columns.length} columns. Please select the column containing phone numbers.`
-          });
-        } else {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || 'Failed to preview Excel file');
-        }
+        console.log('Importing Excel file for Quick-Send (first column only):', file.name);
+        
+        // Quick-Send: Import directly from first column, no column selection needed
+        await importRecipientsFromFile(file);
       } catch (error) {
-        console.error('Error previewing Excel file:', error);
+        console.error('Error importing Excel file:', error);
         setAlertState({
           show: true,
           type: 'error',
-          title: 'Preview failed',
+          title: 'Import failed',
           message: error instanceof Error ? error.message : 'Please check your Excel file format'
         });
       }
@@ -377,7 +378,7 @@ export default function WhatsAppBulkMessaging() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('/api/whatsapp/import-recipients', {
+      const response = await fetch('/api/whatsapp/import-bulk-recipients', {
         method: 'POST',
         credentials: 'include',
         body: formData
@@ -386,26 +387,30 @@ export default function WhatsAppBulkMessaging() {
       console.log('Import response status:', response.status);
 
       if (response.ok) {
-        const data: ImportResult = await response.json();
-        console.log('Import response data:', data);
+        const result = await response.json();
+        console.log('Import response data:', result);
+        
+        // Handle the nested data structure from backend
+        const data = result.data || result;
         
         if (data.valid_numbers && data.valid_numbers.length > 0) {
           // Put numbers in manual entry field line by line
           const numbersText = data.valid_numbers.join('\n');
+          console.log('Setting manual recipients:', numbersText);
           setManualRecipients(numbersText);
           
           setAlertState({
             show: true,
             type: 'success',
             title: 'Numbers imported to manual entry',
-            message: `Imported ${data.valid_count} numbers to manual entry field${data.invalid_count > 0 ? `. ${data.invalid_count} invalid numbers skipped` : ''}`
+            message: `Imported ${data.valid_count} numbers from first column to manual entry field${data.invalid_count > 0 ? `. ${data.invalid_count} invalid numbers skipped` : ''}. Ready to send!`
           });
         } else {
           setAlertState({
             show: true,
             type: 'warning',
             title: 'No valid numbers found',
-            message: 'Please check your file format. For Excel files, ensure phone numbers are in the selected column.'
+            message: 'Please check your file format. Excel files should have phone numbers in the first column.'
           });
         }
       } else {
@@ -423,123 +428,6 @@ export default function WhatsAppBulkMessaging() {
     }
   };
 
-  const handleColumnSelection = async () => {
-    console.log('handleColumnSelection called');
-    console.log('selectedColumn:', selectedColumn);
-    console.log('uploadedFile:', uploadedFile);
-    
-    if (!selectedColumn || !uploadedFile) {
-      console.log('Missing selectedColumn or uploadedFile');
-      return;
-    }
-
-    setLoading(prev => ({ ...prev, columnImport: true }));
-
-    try {
-      console.log('Importing from selected column:', selectedColumn);
-      const formData = new FormData();
-      formData.append('file', uploadedFile);
-      formData.append('column', selectedColumn);
-
-      console.log('Sending request to /api/whatsapp/import-excel-column');
-      const response = await fetch('/api/whatsapp/import-excel-column', {
-        method: 'POST',
-        credentials: 'include',
-        body: formData
-      });
-
-      console.log('Response status:', response.status);
-      console.log('Response ok:', response.ok);
-
-      if (response.ok) {
-        const data: ImportResult = await response.json();
-        console.log('Column import response data:', data);
-        
-        if (data.valid_numbers && data.valid_numbers.length > 0) {
-          console.log('Setting manual recipients:', data.valid_numbers);
-          // Put numbers in manual entry field line by line
-          const numbersText = data.valid_numbers.join('\n');
-          setManualRecipients(numbersText);
-          
-          setAlertState({
-            show: true,
-            type: 'success',
-            title: 'Numbers imported to manual entry',
-            message: `Imported ${data.valid_count} numbers from column "${selectedColumn}" to manual entry field${data.invalid_count > 0 ? `. ${data.invalid_count} invalid numbers skipped` : ''}`
-          });
-          
-          // Clear Excel preview state
-          setExcelPreview(null);
-          setSelectedColumn('');
-          setUploadedFile(null);
-        } else {
-          setAlertState({
-            show: true,
-            type: 'warning',
-            title: 'No data found',
-            message: `No data found in column "${selectedColumn}". Please select a different column.`
-          });
-        }
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.log('Error response data:', errorData);
-        throw new Error(errorData.error || 'Failed to import from selected column');
-      }
-    } catch (error) {
-      console.error('Error importing from column:', error);
-      setAlertState({
-        show: true,
-        type: 'error',
-        title: 'Import failed',
-        message: error instanceof Error ? error.message : 'Please try again'
-      });
-    } finally {
-      setLoading(prev => ({ ...prev, columnImport: false }));
-    }
-  };
-
-  const handleCopyColumnData = () => {
-    if (!selectedColumn || !excelPreview) return;
-    
-    const columnIndex = excelPreview.columns.findIndex(col => col === selectedColumn);
-    if (columnIndex === -1) return;
-    
-    // Extract data from selected column only (for quick-send with static variables)
-    const columnData = excelPreview.sample_data
-      .map(row => row[columnIndex])
-      .filter(cell => cell && cell.toString().trim() !== '')
-      .map(cell => cell.toString().trim());
-    
-    if (columnData.length === 0) {
-      setAlertState({
-        show: true,
-        type: 'warning',
-        title: 'No data to copy',
-        message: `No data found in column "${selectedColumn}"`
-      });
-      return;
-    }
-    
-    // Copy to clipboard
-    const textToCopy = columnData.join('\n');
-    navigator.clipboard.writeText(textToCopy).then(() => {
-      setAlertState({
-        show: true,
-        type: 'success',
-        title: 'Data copied!',
-        message: `Copied ${columnData.length} entries from column "${selectedColumn}". Paste them in the manual entry field below.`
-      });
-    }).catch(() => {
-      // Fallback: put data directly in manual entry field
-      setManualRecipients(textToCopy);
-      setAlertState({
-        show: true,
-        type: 'success',
-        title: 'Data added to manual entry',
-        message: `Added ${columnData.length} entries from column "${selectedColumn}" to manual entry field.`
-      });
-    });
-  };
 
   // Simple CSV file reader for client-side processing
   const handleSimpleFileImport = (file: File) => {
@@ -672,23 +560,56 @@ export default function WhatsAppBulkMessaging() {
       return;
     }
 
+    // Check if template requires image but no image uploaded
+    if (templateDetails.templateTypeInfo?.hasStaticImage && !headerImage) {
+      setAlertState({
+        show: true,
+        type: 'error',
+        title: 'Image required',
+        message: 'This template requires an image header. Please upload an image.'
+      });
+      return;
+    }
+
     setLoading(prev => ({ ...prev, sending: true }));
     try {
-      const payload = {
-        phone_number_id: selectedNumber,
-        template_name: selectedTemplate,
-        language: selectedLanguage,
-        recipients_text: recipients.join('\n'),
-        variables: templateVariables,
-        campaign_name: campaignName || `Quick Send - ${selectedTemplate} - ${new Date().toISOString()}`
-      };
+      // Use FormData when image is present, otherwise use JSON
+      let response;
+      
+      if (headerImage) {
+        // Use FormData for image upload
+        const formData = new FormData();
+        formData.append('phone_number_id', selectedNumber);
+        formData.append('template_name', selectedTemplate);
+        formData.append('language', selectedLanguage);
+        formData.append('recipients_text', recipients.join('\n'));
+        formData.append('variables', JSON.stringify(templateVariables));
+        formData.append('campaign_name', campaignName || `Quick Send - ${selectedTemplate} - ${new Date().toISOString()}`);
+        formData.append('headerImage', headerImage);
 
-      const response = await fetch('/api/whatsapp/quick-send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(payload)
-      });
+        response = await fetch('/api/whatsapp/quick-send', {
+          method: 'POST',
+          credentials: 'include',
+          body: formData
+        });
+      } else {
+        // Use JSON for text-only templates
+        const payload = {
+          phone_number_id: selectedNumber,
+          template_name: selectedTemplate,
+          language: selectedLanguage,
+          recipients_text: recipients.join('\n'),
+          variables: templateVariables,
+          campaign_name: campaignName || `Quick Send - ${selectedTemplate} - ${new Date().toISOString()}`
+        };
+
+        response = await fetch('/api/whatsapp/quick-send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(payload)
+        });
+      }
 
       if (response.ok) {
         await response.json();
@@ -727,7 +648,10 @@ export default function WhatsAppBulkMessaging() {
     setRecipients([]);
     setManualRecipients('');
     setTemplateVariables({});
+    setHeaderImage(null);
+    setImagePreviewUrl('');
     setCampaignPreview(null);
+    setSelectedRecipients([]);
     setTemplateDetails({
       variables: [],
       buttons: [],
@@ -739,6 +663,69 @@ export default function WhatsAppBulkMessaging() {
   const removeRecipient = (index: number) => {
     const newRecipients = recipients.filter((_, i) => i !== index);
     setRecipients(newRecipients);
+  };
+
+  const copyRecipientsToClipboard = async () => {
+    const recipientsText = recipients.join('\n');
+    
+    try {
+      await navigator.clipboard.writeText(recipientsText);
+      setAlertState({
+        show: true,
+        type: 'success',
+        title: 'Recipients copied!',
+        message: `Copied ${recipients.length} phone numbers to clipboard.`
+      });
+    } catch (error) {
+      // Fallback: put recipients in manual entry field
+      setManualRecipients(recipientsText);
+      setAlertState({
+        show: true,
+        type: 'success',
+        title: 'Recipients added to manual entry',
+        message: `Added ${recipients.length} phone numbers to manual entry field.`
+      });
+    }
+  };
+
+  const copySelectedRecipientsToClipboard = async () => {
+    const selectedNumbers = selectedRecipients.map(index => recipients[index]);
+    const recipientsText = selectedNumbers.join('\n');
+    
+    try {
+      await navigator.clipboard.writeText(recipientsText);
+      setAlertState({
+        show: true,
+        type: 'success',
+        title: 'Selected recipients copied!',
+        message: `Copied ${selectedNumbers.length} selected phone numbers to clipboard.`
+      });
+    } catch (error) {
+      // Fallback: put recipients in manual entry field
+      setManualRecipients(prev => prev ? `${prev}\n${recipientsText}` : recipientsText);
+      setAlertState({
+        show: true,
+        type: 'success',
+        title: 'Selected recipients added to manual entry',
+        message: `Added ${selectedNumbers.length} selected phone numbers to manual entry field.`
+      });
+    }
+  };
+
+  const toggleRecipientSelection = (index: number) => {
+    setSelectedRecipients(prev => 
+      prev.includes(index) 
+        ? prev.filter(i => i !== index)
+        : [...prev, index]
+    );
+  };
+
+  const selectAllRecipients = () => {
+    setSelectedRecipients(recipients.map((_, index) => index));
+  };
+
+  const clearRecipientSelection = () => {
+    setSelectedRecipients([]);
   };
 
   const generateLivePreview = () => {
@@ -927,18 +914,7 @@ export default function WhatsAppBulkMessaging() {
                   <SelectContent>
                     {templates.map((template) => (
                       <SelectItem key={template.id} value={template.name}>
-                        <div className="flex items-center justify-between w-full py-1">
-                          <div className="flex items-center">
-                            <FileText className="h-5 w-5 mr-3 text-purple-600" />
-                            <div>
-                              <div className="font-medium">{template.name}</div>
-                              <div className="text-sm text-gray-500">{template.language}</div>
-                            </div>
-                          </div>
-                          <Badge variant="outline" className="ml-2">
-                            {template.category}
-                          </Badge>
-                        </div>
+                        {template.name.replace(/_(UTILITY|MARKETING|AUTHENTICATION)$/, '').replace(/_/g, ' ')}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1000,12 +976,12 @@ export default function WhatsAppBulkMessaging() {
                       id="manual-recipients"
                       value={manualRecipients}
                       onChange={(e) => setManualRecipients(e.target.value)}
-                      placeholder="Enter phone numbers separated by commas or new lines (e.g., +1234567890, +0987654321)"
+                      placeholder="Enter phone numbers separated by commas or new lines (e.g., 1234567890, 919876543210)"
                       className="mt-1"
                       rows={4}
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      Include country code (e.g., +1 for US, +91 for India)
+                      Include country code (e.g., 1 for US, 91 for India)
                     </p>
                   </div>
                   <Button 
@@ -1035,8 +1011,8 @@ export default function WhatsAppBulkMessaging() {
                         Upload .txt, .csv, .xlsx, or .xls file with phone numbers
                       </div>
                       <div className="text-xs text-gray-400 mb-4">
-                        • Excel files: Preview columns → select data → copy to manual entry<br/>
-                        • CSV/TXT files: Direct import to manual entry field<br/>
+                        • Excel/CSV files: Auto-import phone numbers from first column to manual entry<br/>
+                        • Phone numbers will be auto-populated line by line<br/>
                         • Include country code (e.g., 919394567890, 1234567890)
                       </div>
                       <Button variant="outline" className="bg-white">
@@ -1046,129 +1022,19 @@ export default function WhatsAppBulkMessaging() {
                     </label>
                   </div>
 
-                  {/* Excel Column Selection */}
-                  {excelPreview && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-lg font-medium text-green-900">Select Phone Number Column</h3>
-                          <Badge variant="secondary" className="bg-green-100 text-green-800">
-                            {excelPreview.total_rows} rows found
-                          </Badge>
-                        </div>
-                        
-                        <div>
-                          <Label htmlFor="column-select" className="text-sm font-medium text-green-800">
-                            Choose the column containing phone numbers:
-                          </Label>
-                          <Select value={selectedColumn} onValueChange={setSelectedColumn}>
-                            <SelectTrigger className="mt-1">
-                              <SelectValue placeholder="Select a column" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {excelPreview.columns.map((column, index) => (
-                                <SelectItem key={index} value={column}>
-                                  <div className="flex items-center">
-                                    <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded mr-2">
-                                      {String.fromCharCode(65 + index)}
-                                    </span>
-                                    {column}
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        {/* Sample Data Preview */}
-                        {excelPreview.sample_data.length > 0 && (
-                          <div>
-                            <Label className="text-sm font-medium text-green-800 mb-2 block">
-                              Sample data from selected columns:
-                            </Label>
-                            <div className="bg-white border border-green-200 rounded-lg overflow-hidden">
-                              <div className="overflow-x-auto">
-                                <table className="w-full text-xs">
-                                  <thead className="bg-green-100">
-                                    <tr>
-                                      {excelPreview.columns.map((column, index) => (
-                                        <th key={index} className="px-3 py-2 text-left font-medium text-green-800">
-                                          {String.fromCharCode(65 + index)}: {column}
-                                        </th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {excelPreview.sample_data.slice(0, 5).map((row, rowIndex) => (
-                                      <tr key={rowIndex} className="border-t border-green-100">
-                                        {row.map((cell, cellIndex) => (
-                                          <td key={cellIndex} className="px-3 py-2 text-gray-700">
-                                            {cell || '-'}
-                                          </td>
-                                        ))}
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="flex gap-3">
-                          <Button
-                            onClick={handleColumnSelection}
-                            disabled={!selectedColumn || loading.columnImport}
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            {loading.columnImport ? (
-                              <>
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                Importing...
-                              </>
-                            ) : (
-                              <>
-                                <Upload className="h-4 w-4 mr-2" />
-                                Import from {selectedColumn}
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            onClick={handleCopyColumnData}
-                            disabled={!selectedColumn}
-                            variant="outline"
-                            className="border-blue-300 text-blue-700 hover:bg-blue-50"
-                          >
-                            <Copy className="h-4 w-4 mr-2" />
-                            Copy All Data (CSV)
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => {
-                              setExcelPreview(null);
-                              setSelectedColumn('');
-                              setUploadedFile(null);
-                            }}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                   
                   {/* File Upload Instructions */}
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <div className="flex items-start space-x-3">
                       <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
                       <div className="text-sm text-blue-800">
-                        <div className="font-medium mb-2">📊 Excel Variable Import:</div>
+                        <div className="font-medium mb-2">📱 Quick-Send File Import:</div>
                         <ul className="space-y-1 text-xs">
-                          <li>• Excel: Select phone number column → Copy data copies ALL columns</li>
-                          <li>• Format: Phone number + template variables in CSV format</li>
-                          <li>• Example: 919398424270,John,123456 (phone,name,code)</li>
-                          <li>• Template variables will be automatically filled from Excel columns</li>
-                          <li>• Review data in manual entry field before sending</li>
+                          <li>• Excel/CSV: Phone numbers auto-imported from first column</li>
+                          <li>• Numbers populate directly into manual entry field</li>
+                          <li>• Example: 919398424270, 918765432109, 917654321098</li>
+                          <li>• All recipients use the same static template variables</li>
+                          <li>• For dynamic variables per recipient, use the Customize feature</li>
                           <li>• Maximum file size: 10MB</li>
                         </ul>
                       </div>
@@ -1181,21 +1047,70 @@ export default function WhatsAppBulkMessaging() {
               {recipients.length > 0 && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label className="text-sm font-medium">Recipients ({recipients.length})</Label>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setRecipients([])}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4 mr-1" />
-                      Clear All
-                    </Button>
+                    <div className="flex items-center gap-3">
+                      <Label className="text-sm font-medium">Recipients ({recipients.length})</Label>
+                      {recipients.length > 0 && (
+                        <div className="flex items-center gap-2 text-xs text-gray-600">
+                          <input
+                            type="checkbox"
+                            checked={selectedRecipients.length === recipients.length}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                selectAllRecipients();
+                              } else {
+                                clearRecipientSelection();
+                              }
+                            }}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <span>Select All ({selectedRecipients.length} selected)</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      {selectedRecipients.length > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={copySelectedRecipientsToClipboard}
+                          className="text-green-600 hover:text-green-700"
+                        >
+                          <Copy className="h-4 w-4 mr-1" />
+                          Copy Selected ({selectedRecipients.length})
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={copyRecipientsToClipboard}
+                        className="text-blue-600 hover:text-blue-700"
+                      >
+                        <Copy className="h-4 w-4 mr-1" />
+                        Copy All
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setRecipients([])}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Clear All
+                      </Button>
+                    </div>
                   </div>
                   <div className="max-h-40 overflow-y-auto space-y-2">
                     {recipients.map((recipient, index) => (
                       <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded border">
-                        <span className="text-sm font-mono">{recipient}</span>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedRecipients.includes(index)}
+                            onChange={() => toggleRecipientSelection(index)}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <span className="text-sm font-mono">{recipient}</span>
+                        </div>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1212,7 +1127,82 @@ export default function WhatsAppBulkMessaging() {
             </CardContent>
           </Card>
 
-          {/* Step 3: Template Variables */}
+          {/* Step 3: Image Upload (for image templates) */}
+          {templateDetails.templateTypeInfo?.hasStaticImage && (
+            <Card className={`border-2 ${headerImage ? 'border-green-200 bg-green-50' : 'border-orange-200 bg-orange-50'}`}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${headerImage ? 'bg-green-500' : 'bg-orange-500'}`}>
+                      {headerImage ? (
+                        <CheckCircle2 className="h-5 w-5 text-white" />
+                      ) : (
+                        <Upload className="h-4 w-4 text-white" />
+                      )}
+                    </div>
+                    <div>
+                      <CardTitle className="flex items-center text-lg">
+                        <Upload className="h-5 w-5 mr-2 text-purple-600" />
+                        Template Image Header
+                      </CardTitle>
+                      <CardDescription>Upload an image for your template header</CardDescription>
+                    </div>
+                  </div>
+                  {headerImage && (
+                    <Badge variant="secondary" className="bg-green-100 text-green-800">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Image Ready
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    Upload Header Image <span className="text-red-500">*</span>
+                  </Label>
+                  <div className="flex items-center space-x-4">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png"
+                      onChange={handleHeaderImageUpload}
+                      className="hidden"
+                      id="header-image-upload"
+                    />
+                    <label
+                      htmlFor="header-image-upload"
+                      className="flex items-center px-4 py-2 border border-gray-300 rounded-md cursor-pointer hover:bg-gray-50 transition-colors"
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      Choose Image
+                    </label>
+                    {headerImage && (
+                      <span className="text-sm text-gray-600">
+                        {headerImage.name} ({(headerImage.size / 1024 / 1024).toFixed(2)} MB)
+                      </span>
+                    )}
+                  </div>
+                  {imagePreviewUrl && (
+                    <div className="mt-4">
+                      <Label className="text-sm font-medium">Preview:</Label>
+                      <div className="mt-2 border rounded-lg p-2 bg-gray-50">
+                        <img
+                          src={imagePreviewUrl}
+                          alt="Header preview"
+                          className="max-w-full h-32 object-contain rounded"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <div className="text-xs text-gray-500">
+                    Supported formats: JPG, PNG • Max size: 5MB
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Step 4: Template Variables */}
           {templateDetails.hasVariables && templateDetails.variables.length > 0 && (
             <Card className={`border-2 ${getStepStatus(4) === 'completed' ? 'border-green-200 bg-green-50' : getStepStatus(4) === 'current' ? 'border-blue-200 bg-blue-50' : 'border-gray-200'}`}>
               <CardHeader>
@@ -1383,7 +1373,7 @@ export default function WhatsAppBulkMessaging() {
               <div className="text-sm text-gray-700">
                 <div className="font-medium mb-2">📱 Phone Numbers:</div>
                 <ul className="space-y-1 text-xs">
-                  <li>• Include country code (+1, +91, etc.)</li>
+                  <li>• Include country code (1, 91, etc.)</li>
                   <li>• One number per line in files</li>
                   <li>• Separate with commas manually</li>
                 </ul>

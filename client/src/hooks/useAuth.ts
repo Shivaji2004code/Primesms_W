@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { type User } from '../types';
+import { apiRequest, setAuthStateUpdater } from '../lib/api';
 
 interface AuthState {
   user: User | null;
@@ -18,6 +19,12 @@ export function useAuth() {
     lastActivity: Date.now(),
   });
 
+  // Register the auth state updater for global 401 handling
+  useEffect(() => {
+    setAuthStateUpdater(setAuthState);
+    return () => setAuthStateUpdater(null);
+  }, []);
+
   const updateLastActivity = () => {
     setAuthState(prev => ({
       ...prev,
@@ -27,12 +34,11 @@ export function useAuth() {
 
   const login = async (username: string, password: string) => {
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await apiRequest('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
         body: JSON.stringify({ username, password }),
       });
 
@@ -59,9 +65,8 @@ export function useAuth() {
 
   const logout = async () => {
     try {
-      await fetch('/api/auth/logout', {
+      await apiRequest('/api/auth/logout', {
         method: 'POST',
-        credentials: 'include',
       });
     } catch (error) {
       console.error('Logout error:', error);
@@ -96,9 +101,7 @@ export function useAuth() {
       }
 
       // Then check with server
-      const response = await fetch('/api/auth/me', {
-        credentials: 'include',
-      });
+      const response = await apiRequest('/api/auth/me');
 
       if (response.ok) {
         const data = await response.json();
@@ -135,9 +138,7 @@ export function useAuth() {
   // Function to refresh user data (especially credit balance) from server
   const refreshUserData = async () => {
     try {
-      const response = await fetch('/api/auth/me', {
-        credentials: 'include',
-      });
+      const response = await apiRequest('/api/auth/me');
 
       if (response.ok) {
         const data = await response.json();
@@ -163,12 +164,11 @@ export function useAuth() {
     phoneNumber?: string;
   }) => {
     try {
-      const response = await fetch('/api/auth/signup', {
+      const response = await apiRequest('/api/auth/signup', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
         body: JSON.stringify(data),
       });
 

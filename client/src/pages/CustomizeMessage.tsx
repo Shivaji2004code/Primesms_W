@@ -33,7 +33,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Badge } from '../components/ui/badge';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { Progress } from '../components/ui/progress';
-import { useToast } from '../components/ui/use-toast';
+import { useNotifier } from '../contexts/NotificationContext';
+import { apiRequest } from '../lib/api';
 
 interface WhatsAppNumber {
   id: string;
@@ -61,7 +62,7 @@ interface Language {
 
 export default function CustomizeMessage() {
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const notifier = useNotifier();
 
   // Form state
   const [selectedWabaId, setSelectedWabaId] = useState('');
@@ -195,8 +196,7 @@ export default function CustomizeMessage() {
       console.log('Loading WhatsApp numbers...');
       console.log('Current user from localStorage:', localStorage.getItem('user'));
       
-      const response = await fetch('/api/whatsapp/numbers', {
-        credentials: 'include',
+      const response = await apiRequest('/api/whatsapp/numbers', {
         headers: {
           'Content-Type': 'application/json'
         }
@@ -208,30 +208,15 @@ export default function CustomizeMessage() {
         const data = await response.json();
         console.log('WhatsApp numbers loaded:', data);
         setWhatsappNumbers(data.data || []);
-      } else if (response.status === 401) {
-        console.error('Authentication required for WhatsApp numbers');
-        toast({
-          title: "Authentication required",
-          description: "Please log in first to access WhatsApp functionality",
-          variant: "destructive"
-        });
       } else {
         console.error('Failed to load WhatsApp numbers:', response.status);
         const errorText = await response.text();
         console.error('Error response:', errorText);
-        toast({
-          title: "Error loading WhatsApp numbers",
-          description: `Status: ${response.status}. Please try again.`,
-          variant: "destructive"
-        });
+        notifier.error(`Error loading WhatsApp numbers. Status: ${response.status}. Please try again.`);
       }
     } catch (error) {
       console.error('Error loading WhatsApp numbers:', error);
-      toast({
-        title: "Connection error",
-        description: "Please check your connection and try again",
-        variant: "destructive"
-      });
+      notifier.error("Connection error: Please check your connection and try again");
     }
   };
 
@@ -243,8 +228,7 @@ export default function CustomizeMessage() {
       console.log('Loading templates for language:', selectedLanguage);
       console.log('Current user from localStorage:', localStorage.getItem('user'));
       
-      const response = await fetch(`/api/whatsapp/templates?language=${selectedLanguage}`, {
-        credentials: 'include',
+      const response = await apiRequest(`/api/whatsapp/templates?language=${selectedLanguage}&exclude_auth=true`, {
         headers: {
           'Content-Type': 'application/json'
         }
@@ -257,13 +241,6 @@ export default function CustomizeMessage() {
         const data = await response.json();
         console.log('Templates loaded:', data);
         setTemplates(data.data || []);
-      } else if (response.status === 401) {
-        console.error('Authentication required for templates');
-        toast({
-          title: "Authentication required",
-          description: "Please log in first to access templates",
-          variant: "destructive"
-        });
       } else {
         console.error('Failed to load templates:', response.status);
         const errorText = await response.text();
@@ -276,11 +253,7 @@ export default function CustomizeMessage() {
       }
     } catch (error) {
       console.error('Error loading templates:', error);
-      toast({
-        title: "Error loading templates",
-        description: "Please check your connection",
-        variant: "destructive"
-      });
+      notifier.error("Error loading templates: Please check your connection");
     } finally {
       setTemplatesLoading(false);
     }
@@ -288,9 +261,7 @@ export default function CustomizeMessage() {
 
   const loadLanguages = async () => {
     try {
-      const response = await fetch('/api/whatsapp/languages', {
-        credentials: 'include'
-      });
+      const response = await apiRequest('/api/whatsapp/languages');
       
       if (response.ok) {
         const data = await response.json();
@@ -298,19 +269,11 @@ export default function CustomizeMessage() {
         setLanguages(data.data || []);
       } else {
         console.error('Failed to load languages:', response.status);
-        toast({
-          title: "Error loading languages",
-          description: "Please try again",
-          variant: "destructive"
-        });
+        notifier.error("Error loading languages: Please try again");
       }
     } catch (error) {
       console.error('Error loading languages:', error);
-      toast({
-        title: "Error loading languages",
-        description: "Please check your connection",
-        variant: "destructive"
-      });
+      notifier.error("Error loading languages: Please check your connection");
     }
   };
 
@@ -319,11 +282,7 @@ export default function CustomizeMessage() {
     if (!file) return;
 
     if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls') && !file.name.endsWith('.csv')) {
-      toast({
-        title: "Invalid file type",
-        description: "Please upload an Excel file (.xlsx, .xls) or CSV file (.csv)",
-        variant: "destructive"
-      });
+      notifier.error("Invalid file type: Please upload an Excel file (.xlsx, .xls) or CSV file (.csv)");
       return;
     }
 
@@ -459,11 +418,7 @@ export default function CustomizeMessage() {
       });
     } catch (error) {
       console.error('Error generating preview:', error);
-      toast({
-        title: "Preview failed",
-        description: "Please check your data and try again",
-        variant: "destructive"
-      });
+      notifier.error("Preview failed: Please check your data and try again");
     } finally {
       setPreviewLoading(false);
     }
@@ -471,11 +426,7 @@ export default function CustomizeMessage() {
 
   const handleSendCustomMessages = async () => {
     if (!selectedWabaId || !selectedTemplate || !uploadedFile || !recipientColumn) {
-      toast({
-        title: "Missing information",
-        description: "Please fill in all required fields",
-        variant: "destructive"
-      });
+      notifier.error("Missing information: Please fill in all required fields");
       return;
     }
 
@@ -694,10 +645,7 @@ export default function CustomizeMessage() {
                             <SelectItem key={number.id} value={number.phone_number_id}>
                               <div className="flex items-center py-1">
                                 <Phone className="h-5 w-5 mr-3 text-green-600" />
-                                <div>
-                                  <div className="font-medium">{number.label}</div>
-                                  <div className="text-sm text-gray-500">{number.phone_number}</div>
-                                </div>
+                                <div className="font-medium">{number.label}</div>
                               </div>
                             </SelectItem>
                           ))
@@ -716,25 +664,12 @@ export default function CustomizeMessage() {
                       }}
                     >
                       <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors">
-                        <SelectValue placeholder={languages.length === 0 ? "Loading languages..." : "Select language"}>
-                          {selectedLanguage ? (
-                            <div className="flex items-center">
-                              <Globe className="h-4 w-4 mr-2 text-blue-600" />
-                              {languages.find(l => l.code === selectedLanguage)?.name || 'Language'}
-                            </div>
-                          ) : 'Select language'}
-                        </SelectValue>
+                        <SelectValue placeholder={languages.length === 0 ? "Loading languages..." : "Select language"} />
                       </SelectTrigger>
                       <SelectContent>
                         {languages.map((language) => (
                           <SelectItem key={language.code} value={language.code}>
-                            <div className="flex items-center py-1">
-                              <Globe className="h-5 w-5 mr-3 text-blue-600" />
-                              <div>
-                                <div className="font-medium">{language.name}</div>
-                                <div className="text-sm text-gray-500">{language.code}</div>
-                              </div>
-                            </div>
+                            {language.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -768,14 +703,7 @@ export default function CustomizeMessage() {
                     disabled={templatesLoading}
                   >
                     <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors">
-                      <SelectValue placeholder={templatesLoading ? "Loading templates..." : templates.length === 0 ? "No templates available" : "Select template"}>
-                        {selectedTemplate ? (
-                          <div className="flex items-center">
-                            <FileText className="h-4 w-4 mr-2 text-purple-600" />
-                            {selectedTemplate.name.replace(/_UTILITY$|_MARKETING$|_AUTHENTICATION$/, '')}
-                          </div>
-                        ) : (templatesLoading ? "Loading templates..." : templates.length === 0 ? "No templates available" : "Select template")}
-                      </SelectValue>
+                      <SelectValue placeholder={templatesLoading ? "Loading templates..." : templates.length === 0 ? "No templates available" : "Select template"} />
                     </SelectTrigger>
                     <SelectContent>
                       {templates.length === 0 ? (
@@ -798,18 +726,7 @@ export default function CustomizeMessage() {
                       ) : (
                         templates.map((template) => (
                           <SelectItem key={template.id} value={template.name}>
-                            <div className="flex items-center justify-between w-full py-1">
-                              <div className="flex items-center">
-                                <FileText className="h-5 w-5 mr-3 text-purple-600" />
-                                <div>
-                                  <div className="font-medium">{template.name}</div>
-                                  <div className="text-sm text-gray-500">{template.language}</div>
-                                </div>
-                              </div>
-                              <Badge variant="outline" className="ml-2">
-                                {template.category}
-                              </Badge>
-                            </div>
+                            {template.name.replace(/_(UTILITY|MARKETING|AUTHENTICATION)$/, '').replace(/_/g, ' ')}
                           </SelectItem>
                         ))
                       )}
@@ -1016,7 +933,7 @@ export default function CustomizeMessage() {
                 {selectedTemplate && (
                   <div className="p-4 bg-white rounded-lg border border-purple-200 shadow-sm">
                     <div className="text-sm font-semibold text-gray-900 mb-2">Selected Template</div>
-                    <div className="text-sm text-gray-600 mb-2">{selectedTemplate.name.replace(/_UTILITY$|_MARKETING$|_AUTHENTICATION$/, '')}</div>
+                    <div className="text-sm text-gray-600 mb-2">{selectedTemplate.name.replace(/_(UTILITY|MARKETING|AUTHENTICATION)$/, '').replace(/_/g, ' ')}</div>
                     <div className="flex items-center justify-between">
                       <Badge variant="outline" className="text-xs">
                         {selectedTemplate.category}
@@ -1071,7 +988,7 @@ export default function CustomizeMessage() {
                   </div>
                   <ul className="space-y-1 text-xs">
                     <li>• First row should contain column headers</li>
-                    <li>• Phone numbers should include country code</li>
+                    <li>• Phone numbers should include country code (e.g., 1, 91)</li>
                     <li>• Variables will be replaced automatically</li>
                   </ul>
                 </div>
