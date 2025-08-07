@@ -56,14 +56,18 @@ app.use(pinoHttp({ logger }));
 // Compression middleware
 app.use(compression());
 
-// Database connection
-export const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: parseInt(process.env.DB_PORT || '5431'),
-  database: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-});
+// Database connection - supports both DATABASE_URL and individual variables
+export const pool = new Pool(
+  process.env.DATABASE_URL 
+    ? { connectionString: process.env.DATABASE_URL }
+    : {
+        host: process.env.DB_HOST,
+        port: parseInt(process.env.DB_PORT || '5431'),
+        database: process.env.DB_NAME,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+      }
+);
 
 // Test database connection
 pool.connect((err, client, release) => {

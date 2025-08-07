@@ -51,14 +51,16 @@ const PORT = Number(process.env.PORT) || 5050;
 app.use((0, pino_http_1.default)({ logger }));
 // Compression middleware
 app.use((0, compression_1.default)());
-// Database connection
-exports.pool = new pg_1.Pool({
-    host: process.env.DB_HOST,
-    port: parseInt(process.env.DB_PORT || '5431'),
-    database: process.env.DB_NAME,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-});
+// Database connection - supports both DATABASE_URL and individual variables
+exports.pool = new pg_1.Pool(process.env.DATABASE_URL
+    ? { connectionString: process.env.DATABASE_URL }
+    : {
+        host: process.env.DB_HOST,
+        port: parseInt(process.env.DB_PORT || '5431'),
+        database: process.env.DB_NAME,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+    });
 // Test database connection
 exports.pool.connect((err, client, release) => {
     if (err) {
