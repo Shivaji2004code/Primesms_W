@@ -63,9 +63,9 @@ app.use(helmet({
   }
 }));
 
-// CORS configuration - simple and permissive for development
+// CORS configuration - production ready for Prime SMS
 const corsOptions = {
-  origin: true, // Allow all origins for now
+  origin: 'https://primesms.app', // Specific origin for production
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -181,16 +181,16 @@ const connectDatabase = async (retries = 5): Promise<void> => {
 // ============================================================================
 
 app.use(session({
-  secret: 'simple-secret-key-for-development',
+  name: 'prime.sid',
+  secret: env.sessionSecret,
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false, // Allow HTTP for development
+    secure: true, // HTTPS only
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: 'lax' // Simple setting
+    sameSite: 'none', // Required for cross-site cookies
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   },
-  name: 'connect.sid' // Standard session name
 }));
 
 // ============================================================================
