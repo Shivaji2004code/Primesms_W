@@ -5,7 +5,8 @@ Authentication works for login but fails for subsequent API calls (`/api/auth/me
 
 ## Root Cause
 - Current production: `SameSite=Strict` blocks cross-site cookies
-- Cookie name mismatch between sessions
+- Backend process appears to be down (502 Bad Gateway)
+- Session configuration issues causing server crashes
 
 ## Fixed Configuration
 
@@ -14,13 +15,13 @@ Authentication works for login but fails for subsequent API calls (`/api/auth/me
 ```typescript
 app.use(session({
   name: 'connect.sid',
-  secret: env.sessionSecret,
+  secret: process.env.SESSION_SECRET || 'fallback-secret-key-for-development',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: env.isProduction, // Secure only in production
+    secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    sameSite: env.isProduction ? 'none' : 'lax', // Cross-site for production
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   },
 }));
@@ -30,7 +31,7 @@ app.use(session({
 
 ```typescript
 const corsOptions = {
-  origin: env.isProduction ? 'https://primesms.app' : true,
+  origin: process.env.NODE_ENV === 'production' ? 'https://primesms.app' : true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -42,8 +43,9 @@ const corsOptions = {
 ## Deployment Steps
 
 1. Deploy the updated `src/index.ts` to production server
-2. Restart the Node.js/PM2 process
-3. Test authentication flow:
+2. **CRITICAL**: Restart the Node.js/PM2 process (currently down - 502 Bad Gateway)
+3. Verify server is running: `curl https://primesms.app/api/health`
+4. Test authentication flow:
    ```bash
    # Login should work and set proper cookies
    curl -c cookies.txt -X POST https://primesms.app/api/auth/login \

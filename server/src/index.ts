@@ -65,7 +65,7 @@ app.use(helmet({
 
 // CORS configuration - environment aware
 const corsOptions = {
-  origin: env.isProduction ? 'https://primesms.app' : true, // Specific origin for production, permissive for dev
+  origin: process.env.NODE_ENV === 'production' ? 'https://primesms.app' : true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -182,13 +182,13 @@ const connectDatabase = async (retries = 5): Promise<void> => {
 
 app.use(session({
   name: 'connect.sid',
-  secret: env.sessionSecret,
+  secret: process.env.SESSION_SECRET || 'fallback-secret-key-for-development',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: env.isProduction, // Secure only in production
+    secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    sameSite: env.isProduction ? 'none' : 'lax', // Cross-site for production, lax for dev
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   },
 }));
