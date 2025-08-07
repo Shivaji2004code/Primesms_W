@@ -127,6 +127,11 @@ class EnvValidator {
   get isProduction(): boolean {
     return this.requiredVars.NODE_ENV === 'production';
   }
+  
+  get isProductionLike(): boolean {
+    // Helper to test production-like settings locally
+    return this.requiredVars.NODE_ENV === 'production' || process.env.FORCE_PRODUCTION_SETTINGS === 'true';
+  }
 
   get isDevelopment(): boolean {
     return this.requiredVars.NODE_ENV === 'development';
