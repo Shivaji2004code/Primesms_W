@@ -65,11 +65,11 @@ export declare const authSchemas: {
         username: z.ZodString;
         password: z.ZodString;
     }, "strip", z.ZodTypeAny, {
-        password: string;
         username: string;
+        password: string;
     }, {
-        password: string;
         username: string;
+        password: string;
     }>;
     signup: z.ZodObject<{
         name: z.ZodString;
@@ -78,16 +78,16 @@ export declare const authSchemas: {
         password: z.ZodString;
         phoneNumber: z.ZodOptional<z.ZodString>;
     }, "strip", z.ZodTypeAny, {
-        password: string;
         username: string;
         name: string;
         email: string;
+        password: string;
         phoneNumber?: string | undefined;
     }, {
-        password: string;
         username: string;
         name: string;
         email: string;
+        password: string;
         phoneNumber?: string | undefined;
     }>;
     updateProfile: z.ZodObject<{
@@ -238,18 +238,18 @@ export declare const adminSchemas: {
         phoneNumber: z.ZodOptional<z.ZodString>;
         creditBalance: z.ZodDefault<z.ZodNumber>;
     }, "strip", z.ZodTypeAny, {
-        password: string;
         username: string;
         name: string;
         email: string;
+        password: string;
         role: "user" | "admin";
         creditBalance: number;
         phoneNumber?: string | undefined;
     }, {
-        password: string;
         username: string;
         name: string;
         email: string;
+        password: string;
         phoneNumber?: string | undefined;
         role?: "user" | "admin" | undefined;
         creditBalance?: number | undefined;

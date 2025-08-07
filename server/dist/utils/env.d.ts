@@ -25,6 +25,7 @@ declare class EnvValidator {
     get nodeEnv(): string;
     get port(): number;
     get isProduction(): boolean;
+    get isProductionLike(): boolean;
     get isDevelopment(): boolean;
     get database(): {
         host: string;

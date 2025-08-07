@@ -80,6 +80,9 @@ class EnvValidator {
     get isProduction() {
         return this.requiredVars.NODE_ENV === 'production';
     }
+    get isProductionLike() {
+        return this.requiredVars.NODE_ENV === 'production' || process.env.FORCE_PRODUCTION_SETTINGS === 'true';
+    }
     get isDevelopment() {
         return this.requiredVars.NODE_ENV === 'development';
     }

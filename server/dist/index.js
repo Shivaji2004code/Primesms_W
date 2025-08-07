@@ -4,6 +4,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.app = exports.pool = void 0;
+const dotenv_1 = require("dotenv");
+(0, dotenv_1.config)();
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
@@ -12,6 +14,7 @@ const hpp_1 = __importDefault(require("hpp"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const express_session_1 = __importDefault(require("express-session"));
 const pg_1 = require("pg");
+const connect_pg_simple_1 = __importDefault(require("connect-pg-simple"));
 const env_1 = require("./utils/env");
 const logger_1 = require("./utils/logger");
 const errorHandler_1 = require("./middleware/errorHandler");
@@ -45,7 +48,7 @@ app.use((0, helmet_1.default)({
     }
 }));
 const corsOptions = {
-    origin: true,
+    origin: process.env.NODE_ENV === 'production' ? 'https://primesms.app' : true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -102,11 +105,11 @@ app.use(express_1.default.urlencoded({
 }));
 app.use((0, logger_1.createHttpLogger)());
 exports.pool = new pg_1.Pool({
-    host: 'localhost',
-    port: 5431,
-    database: 'PrimeSMS_W',
-    user: 'postgres',
-    password: '',
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432'),
+    database: process.env.DB_NAME || 'PrimeSMS_W',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD || '',
     max: 20,
     min: 2,
     idleTimeoutMillis: 30000,
@@ -137,17 +140,23 @@ const connectDatabase = async (retries = 5) => {
         }
     }
 };
+const pgSession = (0, connect_pg_simple_1.default)(express_session_1.default);
 app.use((0, express_session_1.default)({
-    secret: 'simple-secret-key-for-development',
+    store: new pgSession({
+        pool: exports.pool,
+        tableName: 'session',
+        createTableIfMissing: true
+    }),
+    name: 'connect.sid',
+    secret: process.env.SESSION_SECRET || 'fallback-secret-key-for-development',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: false,
+        secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000,
-        sameSite: 'lax'
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
     },
-    name: 'connect.sid'
 }));
 app.use('/api', health_1.default);
 app.use('/api/auth', auth_1.default);

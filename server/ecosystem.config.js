@@ -9,11 +9,35 @@ module.exports = {
     // Environment variables
     env: {
       NODE_ENV: 'development',
-      PORT: 5050
+      PORT: 5050,
+      DB_HOST: 'localhost',
+      DB_PORT: 5432,
+      DB_NAME: 'PrimeSMS_W',
+      DB_USER: 'postgres',
+      DB_PASSWORD: '',
+      SESSION_SECRET: 'super-secure-session-secret-key-for-prime-sms-authentication-system-2024',
+      CORS_ORIGINS: 'https://primesms.app,https://www.primesms.app',
+      RATE_LIMIT_WINDOW_MS: 900000,
+      RATE_LIMIT_MAX_REQUESTS: 100,
+      LOG_LEVEL: 'info',
+      MAX_JSON_SIZE: '100kb',
+      TRUST_PROXY: 1
     },
     env_production: {
       NODE_ENV: 'production',
-      PORT: 5050
+      PORT: 5050,
+      DB_HOST: 'localhost',
+      DB_PORT: 5432,
+      DB_NAME: 'PrimeSMS_W',
+      DB_USER: 'postgres',
+      DB_PASSWORD: '',
+      SESSION_SECRET: 'super-secure-session-secret-key-for-prime-sms-authentication-system-2024',
+      CORS_ORIGINS: 'https://primesms.app,https://www.primesms.app',
+      RATE_LIMIT_WINDOW_MS: 900000,
+      RATE_LIMIT_MAX_REQUESTS: 100,
+      LOG_LEVEL: 'info',
+      MAX_JSON_SIZE: '100kb',
+      TRUST_PROXY: 1
     },
 
     // Performance & Resource Management

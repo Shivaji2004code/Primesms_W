@@ -1,4 +1,7 @@
 // src/index.ts
+import { config } from 'dotenv';
+config(); // Load environment variables before anything else
+
 import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -7,6 +10,7 @@ import hpp from 'hpp';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import { Pool } from 'pg';
+import connectPgSimple from 'connect-pg-simple';
 
 // Import utilities and configuration
 import { env } from './utils/env';
@@ -139,11 +143,11 @@ app.use(createHttpLogger());
 // ============================================================================
 
 export const pool = new Pool({
-  host: 'localhost',
-  port: 5431,
-  database: 'PrimeSMS_W',
-  user: 'postgres',
-  password: '', // Empty password as per your setup
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '5432'),
+  database: process.env.DB_NAME || 'PrimeSMS_W',
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || '',
   max: 20,
   min: 2,
   idleTimeoutMillis: 30000,
@@ -180,7 +184,15 @@ const connectDatabase = async (retries = 5): Promise<void> => {
 // SESSION CONFIGURATION
 // ============================================================================
 
+// Initialize PostgreSQL session store
+const pgSession = connectPgSimple(session);
+
 app.use(session({
+  store: new pgSession({
+    pool: pool,
+    tableName: 'session',
+    createTableIfMissing: true
+  }),
   name: 'connect.sid',
   secret: process.env.SESSION_SECRET || 'fallback-secret-key-for-development',
   resave: false,
