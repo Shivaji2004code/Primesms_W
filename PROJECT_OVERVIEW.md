@@ -46,7 +46,7 @@
 - **Duplicate Detection** system for messaging
 
 ### Database
-- **PostgreSQL** (Port 5431) with 7 core tables:
+- **PostgreSQL** (Port 5432) with 7 core tables:
   - `users` - User accounts and authentication
   - `user_business_info` - WhatsApp Business API configuration
   - `templates` - Message templates with JSONB components
@@ -69,7 +69,7 @@
 ```env
 # Database Configuration
 DB_HOST=localhost
-DB_PORT=5431
+DB_PORT=5432
 DB_NAME=PrimeSMS_W
 DB_USER=your_db_username
 DB_PASSWORD=your_db_password
@@ -92,10 +92,10 @@ VITE_APP_NAME=Primes SMS
 ### Database Setup
 ```bash
 # Create database
-psql -h localhost -p 5431 -c 'CREATE DATABASE "PrimeSMS_W";'
+psql -h localhost -p 5432 -c 'CREATE DATABASE "PrimeSMS_W";'
 
 # Run schema
-psql -h localhost -p 5431 -d PrimeSMS_W -f database-schema.sql
+psql -h localhost -p 5432 -d PrimeSMS_W -f database-schema.sql
 ```
 
 ### Installation

@@ -44,7 +44,7 @@ A complete WhatsApp Business API SaaS platform with modern landing page, authent
 ## 📋 Prerequisites
 
 - Node.js (v18 or higher)
-- PostgreSQL (running on port 5431)
+- PostgreSQL (running on port 5432)
 - npm or yarn
 
 ## 🗄 Database Setup
@@ -56,7 +56,7 @@ A complete WhatsApp Business API SaaS platform with modern landing page, authent
 
 2. **Run the database setup script:**
    ```bash
-   psql -h localhost -p 5431 -d PrimeSMS_W -f database_setup.sql
+   psql -h localhost -p 5432 -d PrimeSMS_W -f database_setup.sql
    ```
 
    This will create:
@@ -72,7 +72,7 @@ Update `server/.env` with your actual database credentials:
 ```env
 # Database Configuration
 DB_HOST=localhost
-DB_PORT=5431
+DB_PORT=5432
 DB_NAME=PrimeSMS_W
 DB_USER=your_actual_db_username
 DB_PASSWORD=your_actual_db_password
@@ -133,7 +133,7 @@ Client will run on http://localhost:5173
 ## 🧪 Testing Checklist
 
 ### ✅ Database Connection
-- [ ] Verify PostgreSQL is running on port 5431
+- [ ] Verify PostgreSQL is running on port 5432
 - [ ] Database "PrimeSMS_W" exists
 - [ ] Users table created successfully
 - [ ] Admin user exists (primesms/Primesms)

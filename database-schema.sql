@@ -1,5 +1,5 @@
 -- PrimeSMS_W Database Schema - Production Ready
--- Database: PrimeSMS_W (Port: 5431)
+-- Database: PrimeSMS_W (Port: 5432)
 -- This is the complete consolidated schema for deployment on Coolify
 --
 -- Required Tables: 7 core tables for PrimeSMS functionality
