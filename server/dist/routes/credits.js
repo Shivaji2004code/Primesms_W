@@ -5,13 +5,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deductCredits = void 0;
 const express_1 = __importDefault(require("express"));
-const index_1 = require("../index");
+const db_1 = __importDefault(require("../db"));
 const auth_1 = require("../middleware/auth");
 const router = express_1.default.Router();
 router.get('/balance', auth_1.requireAuth, async (req, res) => {
     try {
         const userId = req.session.user.id;
-        const result = await index_1.pool.query('SELECT credit_balance FROM users WHERE id = $1', [userId]);
+        const result = await db_1.default.query('SELECT credit_balance FROM users WHERE id = $1', [userId]);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -35,9 +35,9 @@ router.get('/history', auth_1.requireAuth, async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20;
         const offset = (page - 1) * limit;
-        const countResult = await index_1.pool.query('SELECT COUNT(*) as total FROM credit_transactions WHERE user_id = $1', [userId]);
+        const countResult = await db_1.default.query('SELECT COUNT(*) as total FROM credit_transactions WHERE user_id = $1', [userId]);
         const total = parseInt(countResult.rows[0].total);
-        const historyResult = await index_1.pool.query(`SELECT 
+        const historyResult = await db_1.default.query(`SELECT 
         id,
         amount,
         transaction_type,
@@ -86,7 +86,7 @@ router.post('/add', auth_1.requireAuth, async (req, res) => {
     try {
         const { userId, amount, description } = req.body;
         const adminId = req.session.user.id;
-        const adminCheck = await index_1.pool.query('SELECT role FROM users WHERE id = $1', [adminId]);
+        const adminCheck = await db_1.default.query('SELECT role FROM users WHERE id = $1', [adminId]);
         if (adminCheck.rows.length === 0 || adminCheck.rows[0].role !== 'admin') {
             return res.status(403).json({
                 success: false,
@@ -99,16 +99,16 @@ router.post('/add', auth_1.requireAuth, async (req, res) => {
                 error: 'Valid userId, amount, and description are required'
             });
         }
-        await index_1.pool.query('BEGIN');
+        await db_1.default.query('BEGIN');
         try {
-            const updateResult = await index_1.pool.query('UPDATE users SET credit_balance = credit_balance + $1 WHERE id = $2 RETURNING credit_balance', [amount, userId]);
+            const updateResult = await db_1.default.query('UPDATE users SET credit_balance = credit_balance + $1 WHERE id = $2 RETURNING credit_balance', [amount, userId]);
             if (updateResult.rows.length === 0) {
                 throw new Error('User not found');
             }
             const newBalance = updateResult.rows[0].credit_balance;
-            await index_1.pool.query(`INSERT INTO credit_transactions (user_id, amount, transaction_type, description) 
+            await db_1.default.query(`INSERT INTO credit_transactions (user_id, amount, transaction_type, description) 
          VALUES ($1, $2, 'ADMIN_ADD', $3)`, [userId, amount, description]);
-            await index_1.pool.query('COMMIT');
+            await db_1.default.query('COMMIT');
             res.json({
                 success: true,
                 message: 'Credits added successfully',
@@ -116,7 +116,7 @@ router.post('/add', auth_1.requireAuth, async (req, res) => {
             });
         }
         catch (error) {
-            await index_1.pool.query('ROLLBACK');
+            await db_1.default.query('ROLLBACK');
             throw error;
         }
     }
@@ -130,8 +130,8 @@ router.post('/add', auth_1.requireAuth, async (req, res) => {
 });
 const deductCredits = async (userId, amount, description) => {
     try {
-        await index_1.pool.query('BEGIN');
-        const balanceResult = await index_1.pool.query('SELECT credit_balance FROM users WHERE id = $1', [userId]);
+        await db_1.default.query('BEGIN');
+        const balanceResult = await db_1.default.query('SELECT credit_balance FROM users WHERE id = $1', [userId]);
         if (balanceResult.rows.length === 0) {
             throw new Error('User not found');
         }
@@ -139,15 +139,15 @@ const deductCredits = async (userId, amount, description) => {
         if (currentBalance < amount) {
             throw new Error('Insufficient credits');
         }
-        const updateResult = await index_1.pool.query('UPDATE users SET credit_balance = credit_balance - $1 WHERE id = $2 RETURNING credit_balance', [amount, userId]);
+        const updateResult = await db_1.default.query('UPDATE users SET credit_balance = credit_balance - $1 WHERE id = $2 RETURNING credit_balance', [amount, userId]);
         const newBalance = updateResult.rows[0].credit_balance;
-        await index_1.pool.query(`INSERT INTO credit_transactions (user_id, amount, transaction_type, description) 
+        await db_1.default.query(`INSERT INTO credit_transactions (user_id, amount, transaction_type, description) 
        VALUES ($1, $2, 'ADMIN_DEDUCT', $3)`, [userId, -amount, description]);
-        await index_1.pool.query('COMMIT');
+        await db_1.default.query('COMMIT');
         return { success: true, newBalance };
     }
     catch (error) {
-        await index_1.pool.query('ROLLBACK');
+        await db_1.default.query('ROLLBACK');
         throw error;
     }
 };

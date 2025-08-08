@@ -1,7 +1,7 @@
 import NodeCache from 'node-cache';
 import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
-import { pool } from '../index';
+import pool from '../db';
 
 // In-memory cache with 5 minute TTL for duplicate detection
 const duplicateCache = new NodeCache({ stdTTL: 300 }); // 5 minutes = 300 seconds

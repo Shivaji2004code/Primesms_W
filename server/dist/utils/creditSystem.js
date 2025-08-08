@@ -1,4 +1,7 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CreditTransactionType = exports.CREDIT_RATES = void 0;
 exports.getCreditRate = getCreditRate;
@@ -8,7 +11,7 @@ exports.addCredits = addCredits;
 exports.getTemplateCategory = getTemplateCategory;
 exports.calculateCreditCost = calculateCreditCost;
 exports.preCheckCreditsForBulk = preCheckCreditsForBulk;
-const index_1 = require("../index");
+const db_1 = __importDefault(require("../db"));
 exports.CREDIT_RATES = {
     MARKETING: 0.80,
     UTILITY: 0.15,
@@ -28,7 +31,7 @@ function getCreditRate(category) {
     return exports.CREDIT_RATES[category];
 }
 async function checkSufficientCredits(userId, requiredAmount) {
-    const result = await index_1.pool.query('SELECT credit_balance FROM users WHERE id = $1', [userId]);
+    const result = await db_1.default.query('SELECT credit_balance FROM users WHERE id = $1', [userId]);
     if (result.rows.length === 0) {
         throw new Error('User not found');
     }
@@ -39,7 +42,7 @@ async function checkSufficientCredits(userId, requiredAmount) {
     };
 }
 async function deductCredits(transaction) {
-    const client = await index_1.pool.connect();
+    const client = await db_1.default.connect();
     try {
         await client.query('BEGIN');
         const balanceResult = await client.query('SELECT credit_balance FROM users WHERE id = $1 FOR UPDATE', [transaction.userId]);
@@ -87,7 +90,7 @@ async function deductCredits(transaction) {
     }
 }
 async function addCredits(transaction) {
-    const client = await index_1.pool.connect();
+    const client = await db_1.default.connect();
     try {
         await client.query('BEGIN');
         const balanceResult = await client.query('SELECT credit_balance FROM users WHERE id = $1 FOR UPDATE', [transaction.userId]);
@@ -128,7 +131,7 @@ async function addCredits(transaction) {
     }
 }
 async function getTemplateCategory(userId, templateName) {
-    const result = await index_1.pool.query('SELECT category FROM templates WHERE user_id = $1 AND name = $2', [userId, templateName]);
+    const result = await db_1.default.query('SELECT category FROM templates WHERE user_id = $1 AND name = $2', [userId, templateName]);
     if (result.rows.length === 0) {
         return null;
     }

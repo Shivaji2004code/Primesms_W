@@ -1,5 +1,5 @@
 import express from 'express';
-import { pool } from '../index';
+import pool from '../db';
 import { requireAuth, requireAdmin } from '../middleware/auth';
 import { logCleanupService } from '../services/logCleanup';
 

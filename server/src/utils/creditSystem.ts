@@ -1,5 +1,5 @@
 // [Claude AI] Credit System Enhancement — Aug 2025
-import { pool } from '../index';
+import pool from '../db';
 
 // Credit deduction rates by template category (in Rupees)
 export const CREDIT_RATES = {

@@ -1,22 +1,20 @@
 {
+  "root": true,
+  "env": { "node": true, "es2021": true },
+  "parserOptions": { "ecmaVersion": "latest", "sourceType": "module" },
   "rules": {
-    "no-restricted-imports": [
-      "error",
-      {
-        "paths": [
-          {
-            "name": "pg",
-            "importNames": ["Pool"],
-            "message": "Use the shared pool from server/src/db.ts"
-          }
-        ]
-      }
-    ],
+    "no-restricted-imports": ["error", {
+      "paths": [{
+        "name": "pg",
+        "importNames": ["Pool"],
+        "message": "Use the shared pool from server/src/db/index.ts"
+      }]
+    }],
     "no-restricted-syntax": [
       "error",
       {
         "selector": "NewExpression[callee.name='Pool']",
-        "message": "Do not instantiate Pool directly. Import { pool } from server/src/db.ts"
+        "message": "Do not instantiate Pool directly. Import default from server/src/db"
       }
     ]
   }

@@ -3,7 +3,7 @@ import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-import { pool } from '../index';
+import pool from '../db';
 import { requireAuth } from '../middleware/auth';
 import { 
   Template, 

@@ -1,5 +1,5 @@
 import express from 'express';
-import { pool } from '../index';
+import pool from '../db';
 import { requireAdmin } from '../middleware/auth';
 import type { User, UserBusinessInfo, UserWithBusinessInfo, CreateBusinessInfoRequest } from '../types';
 

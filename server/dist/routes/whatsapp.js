@@ -10,7 +10,7 @@ const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const axios_1 = __importDefault(require("axios"));
 const form_data_1 = __importDefault(require("form-data"));
-const index_1 = require("../index");
+const db_1 = __importDefault(require("../db"));
 const auth_1 = require("../middleware/auth");
 const creditSystem_1 = require("../utils/creditSystem");
 const duplicateDetection_1 = require("../middleware/duplicateDetection");
@@ -110,7 +110,7 @@ const formatPhoneNumber = (phone) => {
 router.get('/numbers', auth_1.requireAuth, async (req, res) => {
     try {
         const userId = req.session.user.id;
-        const result = await index_1.pool.query(`SELECT 
+        const result = await db_1.default.query(`SELECT 
         id,
         whatsapp_number_id as phone_number_id,
         whatsapp_number as phone_number,
@@ -165,7 +165,7 @@ router.get('/templates', auth_1.requireAuth, async (req, res) => {
             query += ` AND category != 'AUTHENTICATION'`;
         }
         query += ` ORDER BY name, language`;
-        const result = await index_1.pool.query(query, params);
+        const result = await db_1.default.query(query, params);
         const templates = result.rows.map(row => ({
             id: row.id,
             name: row.name,
@@ -282,7 +282,7 @@ router.post('/template-details', auth_1.requireAuth, async (req, res) => {
                 error: 'template_name is required'
             });
         }
-        const result = await index_1.pool.query(`SELECT 
+        const result = await db_1.default.query(`SELECT 
         id,
         name,
         language,
@@ -825,7 +825,7 @@ router.post('/preview-campaign', auth_1.requireAuth, async (req, res) => {
                 error: 'template_name is required'
             });
         }
-        const templateResult = await index_1.pool.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, template_name, language]);
+        const templateResult = await db_1.default.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, template_name, language]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({
                 success: false,
@@ -972,7 +972,7 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
                 error: 'Failed to check credit balance'
             });
         }
-        const numberResult = await index_1.pool.query('SELECT access_token, business_name FROM user_business_info WHERE user_id = $1 AND whatsapp_number_id = $2 AND is_active = true', [userId, phone_number_id]);
+        const numberResult = await db_1.default.query('SELECT access_token, business_name FROM user_business_info WHERE user_id = $1 AND whatsapp_number_id = $2 AND is_active = true', [userId, phone_number_id]);
         if (numberResult.rows.length === 0) {
             return res.status(403).json({
                 success: false,
@@ -980,7 +980,7 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
             });
         }
         const { access_token } = numberResult.rows[0];
-        const templateResult = await index_1.pool.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, template_name, language]);
+        const templateResult = await db_1.default.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, template_name, language]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({
                 success: false,
@@ -1084,7 +1084,7 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
                 error: `Template "${template_name}" requires variables [${requiredVariablesList.join(', ')}], but unexpected variables were provided: [${unexpectedVariables.join(', ')}]`
             });
         }
-        const campaignResult = await index_1.pool.query(`INSERT INTO campaign_logs 
+        const campaignResult = await db_1.default.query(`INSERT INTO campaign_logs 
        (user_id, campaign_name, template_used, phone_number_id, language_code, total_recipients, status, campaign_data)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id`, [
@@ -1122,7 +1122,7 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
         }
         catch (creditError) {
             console.error('Credit deduction error for Quicksend:', creditError);
-            await index_1.pool.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3', ['failed', 'Credit deduction failed', campaignId]);
+            await db_1.default.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3', ['failed', 'Credit deduction failed', campaignId]);
             return res.status(400).json({
                 success: false,
                 error: 'Credit deduction failed',
@@ -1145,7 +1145,7 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
             });
         });
         await Promise.allSettled(messagePromises);
-        await index_1.pool.query('UPDATE campaign_logs SET status = $1, successful_sends = $2, failed_sends = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4', ['completed', successCount, failCount, campaignId]);
+        await db_1.default.query('UPDATE campaign_logs SET status = $1, successful_sends = $2, failed_sends = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4', ['completed', successCount, failCount, campaignId]);
         res.json({
             success: true,
             data: {
@@ -1209,7 +1209,7 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
                 error: 'Failed to check credit balance'
             });
         }
-        const numberResult = await index_1.pool.query('SELECT access_token, business_name FROM user_business_info WHERE user_id = $1 AND whatsapp_number_id = $2 AND is_active = true', [userId, phone_number_id]);
+        const numberResult = await db_1.default.query('SELECT access_token, business_name FROM user_business_info WHERE user_id = $1 AND whatsapp_number_id = $2 AND is_active = true', [userId, phone_number_id]);
         if (numberResult.rows.length === 0) {
             return res.status(403).json({
                 success: false,
@@ -1217,7 +1217,7 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
             });
         }
         const { access_token } = numberResult.rows[0];
-        const templateResult = await index_1.pool.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, template_name, language]);
+        const templateResult = await db_1.default.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, template_name, language]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({
                 success: false,
@@ -1281,7 +1281,7 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
                 error: `Template "${template_name}" requires variables [${requiredVariablesList.join(', ')}], but unexpected variables were provided: [${unexpectedVariables.join(', ')}]`
             });
         }
-        const campaignResult = await index_1.pool.query(`INSERT INTO campaign_logs 
+        const campaignResult = await db_1.default.query(`INSERT INTO campaign_logs 
        (user_id, campaign_name, template_used, phone_number_id, language_code, total_recipients, status, campaign_data)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id`, [
@@ -1319,7 +1319,7 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
         }
         catch (creditError) {
             console.error('Credit deduction error for Customise SMS:', creditError);
-            await index_1.pool.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3', ['failed', 'Credit deduction failed', campaignId]);
+            await db_1.default.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3', ['failed', 'Credit deduction failed', campaignId]);
             return res.status(400).json({
                 success: false,
                 error: 'Credit deduction failed',
@@ -1352,7 +1352,7 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
                 failCount++;
             }
         });
-        await index_1.pool.query('UPDATE campaign_logs SET status = $1, successful_sends = $2, failed_sends = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4', ['completed', successCount, failCount, campaignId]);
+        await db_1.default.query('UPDATE campaign_logs SET status = $1, successful_sends = $2, failed_sends = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4', ['completed', successCount, failCount, campaignId]);
         res.json({
             success: true,
             data: {
@@ -1563,21 +1563,21 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
         if (responseData.messages && responseData.messages[0]) {
             const messageId = responseData.messages[0].id;
             console.log(`✅ Message sent successfully to ${recipient}, ID: ${messageId}`);
-            await index_1.pool.query(`INSERT INTO message_logs (campaign_id, recipient_number, message_id, status, api_response, sent_at)
+            await db_1.default.query(`INSERT INTO message_logs (campaign_id, recipient_number, message_id, status, api_response, sent_at)
          VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`, [campaignId, recipient, messageId, 'sent', JSON.stringify(responseData)]);
             return { success: true, messageId, recipient };
         }
         else {
             const errorMessage = responseData.error?.message || responseData.error?.error_data?.details || JSON.stringify(responseData);
             console.error(`❌ Message failed to ${recipient}:`, errorMessage);
-            await index_1.pool.query(`INSERT INTO message_logs (campaign_id, recipient_number, status, error_message, api_response)
+            await db_1.default.query(`INSERT INTO message_logs (campaign_id, recipient_number, status, error_message, api_response)
          VALUES ($1, $2, $3, $4, $5)`, [campaignId, recipient, 'failed', errorMessage, JSON.stringify(responseData)]);
             throw new Error(errorMessage);
         }
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        await index_1.pool.query(`INSERT INTO message_logs (campaign_id, recipient_number, status, error_message)
+        await db_1.default.query(`INSERT INTO message_logs (campaign_id, recipient_number, status, error_message)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (campaign_id, recipient_number) DO NOTHING`, [campaignId, recipient, 'failed', errorMessage]);
         throw error;
@@ -1662,7 +1662,7 @@ router.post('/preview-custom', auth_1.requireAuth, async (req, res) => {
                 error: 'Missing required fields: templateName, recipientColumn, sampleData'
             });
         }
-        const templateResult = await index_1.pool.query('SELECT components, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, templateName, language]);
+        const templateResult = await db_1.default.query('SELECT components, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, templateName, language]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({
                 success: false,
@@ -1767,21 +1767,21 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
                     error: 'Failed to check credit balance'
                 });
             }
-            const numberResult = await index_1.pool.query('SELECT access_token, business_name FROM user_business_info WHERE user_id = $1 AND whatsapp_number_id = $2 AND is_active = true', [userId, wabaId]);
+            const numberResult = await db_1.default.query('SELECT access_token, business_name FROM user_business_info WHERE user_id = $1 AND whatsapp_number_id = $2 AND is_active = true', [userId, wabaId]);
             if (numberResult.rows.length === 0) {
                 return res.status(403).json({
                     success: false,
                     error: 'WhatsApp number not found or access denied'
                 });
             }
-            const templateResult = await index_1.pool.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, templateName, language]);
+            const templateResult = await db_1.default.query('SELECT components, header_media_id, header_type, header_media_url, header_handle, media_id, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, templateName, language]);
             if (templateResult.rows.length === 0) {
                 return res.status(404).json({
                     success: false,
                     error: 'Template not found'
                 });
             }
-            const campaignResult = await index_1.pool.query(`INSERT INTO campaign_logs 
+            const campaignResult = await db_1.default.query(`INSERT INTO campaign_logs 
          (user_id, campaign_name, template_used, phone_number_id, language_code, total_recipients, status, campaign_data)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING id`, [
@@ -1823,7 +1823,7 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
             }
             catch (creditError) {
                 console.error('Credit deduction error for Custom Send:', creditError);
-                await index_1.pool.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3', ['failed', 'Credit deduction failed', campaignId]);
+                await db_1.default.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3', ['failed', 'Credit deduction failed', campaignId]);
                 return res.status(400).json({
                     success: false,
                     error: 'Credit deduction failed',
@@ -1854,7 +1854,7 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
                 });
             });
             await Promise.allSettled(messagePromises);
-            await index_1.pool.query('UPDATE campaign_logs SET status = $1, successful_sends = $2, failed_sends = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4', ['completed', successCount, failCount, campaignId]);
+            await db_1.default.query('UPDATE campaign_logs SET status = $1, successful_sends = $2, failed_sends = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4', ['completed', successCount, failCount, campaignId]);
             res.status(202).json({
                 success: true,
                 message: 'Campaign has been processed.',
@@ -1984,7 +1984,7 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
         if (!exportFormat || exportFormat === 'false') {
             params.push(Number(limit), offset);
         }
-        const reportsResult = await index_1.pool.query(reportsQuery, params);
+        const reportsResult = await db_1.default.query(reportsQuery, params);
         if (exportFormat && exportFormat !== 'false') {
             const headers = [
                 'Campaign Name',
@@ -2057,7 +2057,7 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
       LEFT JOIN user_business_info ubi ON cl.phone_number_id = ubi.whatsapp_number_id AND cl.user_id = ubi.user_id
       ${whereConditions}
     `;
-        const countResult = await index_1.pool.query(countQuery, params.slice(0, paramCount));
+        const countResult = await db_1.default.query(countQuery, params.slice(0, paramCount));
         const total = parseInt(countResult.rows[0].total);
         res.json({
             success: true,
@@ -2096,7 +2096,7 @@ router.get('/reports/summary', auth_1.requireAuth, async (req, res) => {
       LEFT JOIN message_logs ml ON cl.id = ml.campaign_id
       WHERE cl.user_id = $1
     `;
-        const result = await index_1.pool.query(summaryQuery, [userId]);
+        const result = await db_1.default.query(summaryQuery, [userId]);
         const summary = result.rows[0];
         res.json({
             success: true,
@@ -2122,7 +2122,7 @@ router.get('/campaigns', auth_1.requireAuth, async (req, res) => {
         const userId = req.session.user.id;
         const { page = 1, limit = 10 } = req.query;
         const offset = (Number(page) - 1) * Number(limit);
-        const result = await index_1.pool.query(`SELECT 
+        const result = await db_1.default.query(`SELECT 
         id,
         campaign_name,
         template_used,
@@ -2163,7 +2163,7 @@ router.get('/reports/templates', auth_1.requireAuth, async (req, res) => {
       WHERE cl.user_id = $1
       ORDER BY cl.template_used
     `;
-        const result = await index_1.pool.query(templatesQuery, [userId]);
+        const result = await db_1.default.query(templatesQuery, [userId]);
         const templates = result.rows.map(row => row.template_used);
         res.json({
             success: true,
@@ -2210,7 +2210,7 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
                 error: 'Failed to check credit balance'
             });
         }
-        const businessResult = await index_1.pool.query('SELECT access_token, whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND whatsapp_number_id = $2 AND is_active = true', [userId, phoneNumberId]);
+        const businessResult = await db_1.default.query('SELECT access_token, whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND whatsapp_number_id = $2 AND is_active = true', [userId, phoneNumberId]);
         if (businessResult.rows.length === 0) {
             return res.status(400).json({
                 success: false,
@@ -2218,7 +2218,7 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
             });
         }
         const businessInfo = businessResult.rows[0];
-        const templateResult = await index_1.pool.query('SELECT components, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, templateName, language]);
+        const templateResult = await db_1.default.query('SELECT components, category FROM templates WHERE user_id = $1 AND name = $2 AND language = $3', [userId, templateName, language]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({
                 success: false,
@@ -2226,7 +2226,7 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
             });
         }
         const template = templateResult.rows[0];
-        const campaignResult = await index_1.pool.query(`INSERT INTO campaign_logs 
+        const campaignResult = await db_1.default.query(`INSERT INTO campaign_logs 
        (user_id, campaign_name, template_used, phone_number_id, language_code, total_recipients, status, campaign_data)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id`, [
@@ -2264,7 +2264,7 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
         }
         catch (creditError) {
             console.error('Credit deduction error for Custom Messages:', creditError);
-            await index_1.pool.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3', ['failed', 'Credit deduction failed', campaignId]);
+            await db_1.default.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3', ['failed', 'Credit deduction failed', campaignId]);
             return res.status(400).json({
                 success: false,
                 error: 'Credit deduction failed',
@@ -2305,7 +2305,7 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
                 errors.push(`Failed to send to ${row[recipientColumn]}: ${errorMsg}`);
             }
         }
-        await index_1.pool.query(`UPDATE campaign_logs 
+        await db_1.default.query(`UPDATE campaign_logs 
        SET successful_sends = $1, failed_sends = $2, status = $3, updated_at = CURRENT_TIMESTAMP
        WHERE id = $4`, [successfulSends, failedSends, 'completed', campaignId]);
         res.json({

@@ -8,7 +8,7 @@ const multer_1 = __importDefault(require("multer"));
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const axios_1 = __importDefault(require("axios"));
-const index_1 = require("../index");
+const db_1 = __importDefault(require("../db"));
 const auth_1 = require("../middleware/auth");
 const storage = multer_1.default.diskStorage({
     destination: (req, file, cb) => {
@@ -470,7 +470,7 @@ router.get('/', async (req, res) => {
             params.push(language);
         }
         const countQuery = `SELECT COUNT(*) FROM templates ${whereClause}`;
-        const countResult = await index_1.pool.query(countQuery, params);
+        const countResult = await db_1.default.query(countQuery, params);
         const totalTemplates = parseInt(countResult.rows[0].count);
         const templatesQuery = `
       SELECT id, user_id, name, category, language, status, components, 
@@ -481,7 +481,7 @@ router.get('/', async (req, res) => {
       ORDER BY created_at DESC 
       LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}
     `;
-        const result = await index_1.pool.query(templatesQuery, [...params, limit, offset]);
+        const result = await db_1.default.query(templatesQuery, [...params, limit, offset]);
         const templates = result.rows.map(row => ({
             id: row.id,
             userId: row.user_id,
@@ -518,7 +518,7 @@ router.get('/:id', async (req, res) => {
     try {
         const userId = req.session.user.id;
         const { id } = req.params;
-        const result = await index_1.pool.query(`SELECT id, user_id, name, category, language, status, components, 
+        const result = await db_1.default.query(`SELECT id, user_id, name, category, language, status, components, 
               template_id, message_send_ttl_seconds, allow_category_change, 
               quality_rating, whatsapp_response, rejection_reason, created_at, updated_at
        FROM templates 
@@ -600,7 +600,7 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
                 error: 'Template name must be 1-512 lowercase characters (a-z), numbers, or underscores'
             });
         }
-        const existingTemplate = await index_1.pool.query('SELECT id FROM templates WHERE user_id = $1 AND name = $2', [userId, templateData.name]);
+        const existingTemplate = await db_1.default.query('SELECT id FROM templates WHERE user_id = $1 AND name = $2', [userId, templateData.name]);
         if (existingTemplate.rows.length > 0) {
             return res.status(409).json({
                 error: 'A template with this name already exists'
@@ -618,7 +618,7 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
         let rejection_reason = null;
         if (req.file) {
             console.log('📄 Processing uploaded header media...');
-            const businessResult = await index_1.pool.query('SELECT waba_id, access_token, whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
+            const businessResult = await db_1.default.query('SELECT waba_id, access_token, whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
             if (businessResult.rows.length === 0) {
                 fs_1.default.unlinkSync(req.file.path);
                 return res.status(400).json({
@@ -670,7 +670,7 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
         }
         if (req.body.submit_to_whatsapp || req.body.submit_to_whatsapp) {
             try {
-                const businessResult = await index_1.pool.query('SELECT waba_id, access_token FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
+                const businessResult = await db_1.default.query('SELECT waba_id, access_token FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
                 if (businessResult.rows.length === 0) {
                     return res.status(400).json({
                         error: 'WhatsApp Business API credentials not configured. Please set up your business information first.'
@@ -722,7 +722,7 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
                 break;
             }
         }
-        const result = await index_1.pool.query(`INSERT INTO templates 
+        const result = await db_1.default.query(`INSERT INTO templates 
        (user_id, name, category, language, status, components, template_id, 
         message_send_ttl_seconds, allow_category_change, whatsapp_response, rejection_reason, 
         header_media_id, header_type, header_handle, media_id)
@@ -798,7 +798,7 @@ router.post('/authentication', async (req, res) => {
                 error: 'code_expiration_minutes must be between 1 and 90'
             });
         }
-        const existingTemplate = await index_1.pool.query('SELECT id FROM templates WHERE user_id = $1 AND name = $2', [userId, name]);
+        const existingTemplate = await db_1.default.query('SELECT id FROM templates WHERE user_id = $1 AND name = $2', [userId, name]);
         if (existingTemplate.rows.length > 0) {
             return res.status(409).json({
                 error: 'A template with this name already exists'
@@ -820,7 +820,7 @@ router.post('/authentication', async (req, res) => {
         let whatsapp_response = null;
         let status = 'DRAFT';
         let rejection_reason = null;
-        const businessResult = await index_1.pool.query('SELECT waba_id, access_token FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
+        const businessResult = await db_1.default.query('SELECT waba_id, access_token FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
         if (businessResult.rows.length === 0) {
             return res.status(400).json({
                 error: 'WhatsApp Business API credentials not configured. Please set up your business information first.'
@@ -859,7 +859,7 @@ router.post('/authentication', async (req, res) => {
             rejection_reason = whatsappError.response?.data?.error?.message || whatsappError.message;
             status = 'REJECTED';
         }
-        const result = await index_1.pool.query(`INSERT INTO templates 
+        const result = await db_1.default.query(`INSERT INTO templates 
        (user_id, name, category, language, status, components, template_id, 
         allow_category_change, whatsapp_response, rejection_reason, header_type)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -906,7 +906,7 @@ router.put('/:id', async (req, res) => {
         const userId = req.session.user.id;
         const { id } = req.params;
         const updateData = req.body;
-        const existingTemplate = await index_1.pool.query('SELECT * FROM templates WHERE id = $1 AND user_id = $2', [id, userId]);
+        const existingTemplate = await db_1.default.query('SELECT * FROM templates WHERE id = $1 AND user_id = $2', [id, userId]);
         if (existingTemplate.rows.length === 0) {
             return res.status(404).json({ error: 'Template not found' });
         }
@@ -925,7 +925,7 @@ router.put('/:id', async (req, res) => {
                     error: 'Template name must be 1-512 lowercase characters (a-z), numbers, or underscores'
                 });
             }
-            const duplicateCheck = await index_1.pool.query('SELECT id FROM templates WHERE user_id = $1 AND name = $2 AND id != $3', [userId, updateData.name, id]);
+            const duplicateCheck = await db_1.default.query('SELECT id FROM templates WHERE user_id = $1 AND name = $2 AND id != $3', [userId, updateData.name, id]);
             if (duplicateCheck.rows.length > 0) {
                 return res.status(409).json({
                     error: 'A template with this name already exists'
@@ -1016,7 +1016,7 @@ router.put('/:id', async (req, res) => {
                 template_id, message_send_ttl_seconds, allow_category_change, 
                 quality_rating, rejection_reason, created_at, updated_at
     `;
-        const result = await index_1.pool.query(query, values);
+        const result = await db_1.default.query(query, values);
         const updatedTemplate = result.rows[0];
         res.json({
             message: 'Template updated successfully',
@@ -1047,7 +1047,7 @@ router.post('/:id/submit', async (req, res) => {
     try {
         const userId = req.session.user.id;
         const { id } = req.params;
-        const templateResult = await index_1.pool.query('SELECT * FROM templates WHERE id = $1 AND user_id = $2', [id, userId]);
+        const templateResult = await db_1.default.query('SELECT * FROM templates WHERE id = $1 AND user_id = $2', [id, userId]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({ error: 'Template not found' });
         }
@@ -1057,7 +1057,7 @@ router.post('/:id/submit', async (req, res) => {
                 error: 'Can only submit draft or rejected templates'
             });
         }
-        const businessResult = await index_1.pool.query('SELECT waba_id, access_token FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
+        const businessResult = await db_1.default.query('SELECT waba_id, access_token FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
         if (businessResult.rows.length === 0) {
             return res.status(400).json({
                 error: 'WhatsApp Business API credentials not configured. Please set up your business information first.'
@@ -1077,7 +1077,7 @@ router.post('/:id/submit', async (req, res) => {
                 allow_category_change: template.allow_category_change
             };
             const whatsappResult = await createWhatsAppTemplate(templateData, businessInfo, {});
-            await index_1.pool.query(`UPDATE templates 
+            await db_1.default.query(`UPDATE templates 
          SET status = 'PENDING', template_id = $1, whatsapp_response = $2, 
              rejection_reason = NULL, updated_at = CURRENT_TIMESTAMP
          WHERE id = $3`, [whatsappResult.id, JSON.stringify(whatsappResult), id]);
@@ -1089,7 +1089,7 @@ router.post('/:id/submit', async (req, res) => {
         }
         catch (whatsappError) {
             console.error('WhatsApp submission error:', whatsappError);
-            await index_1.pool.query(`UPDATE templates 
+            await db_1.default.query(`UPDATE templates 
          SET status = 'REJECTED', rejection_reason = $1, updated_at = CURRENT_TIMESTAMP
          WHERE id = $2`, [whatsappError.message, id]);
             res.status(400).json({
@@ -1107,7 +1107,7 @@ router.delete('/:id', async (req, res) => {
     try {
         const userId = req.session.user.id;
         const { id } = req.params;
-        const result = await index_1.pool.query('DELETE FROM templates WHERE id = $1 AND user_id = $2 RETURNING id, name', [id, userId]);
+        const result = await db_1.default.query('DELETE FROM templates WHERE id = $1 AND user_id = $2 RETURNING id, name', [id, userId]);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Template not found' });
         }
@@ -1153,7 +1153,7 @@ router.post('/upload-template-media', upload.single('media'), async (req, res) =
         if (!req.file) {
             return res.status(400).json({ error: 'No file uploaded' });
         }
-        const businessResult = await index_1.pool.query('SELECT waba_id, access_token, whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
+        const businessResult = await db_1.default.query('SELECT waba_id, access_token, whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
         if (businessResult.rows.length === 0) {
             fs_1.default.unlinkSync(req.file.path);
             return res.status(400).json({
@@ -1204,7 +1204,7 @@ router.post('/upload-media', upload.single('media'), async (req, res) => {
         if (!req.file) {
             return res.status(400).json({ error: 'No file uploaded' });
         }
-        const businessResult = await index_1.pool.query('SELECT waba_id, access_token, whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
+        const businessResult = await db_1.default.query('SELECT waba_id, access_token, whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
         if (businessResult.rows.length === 0) {
             fs_1.default.unlinkSync(req.file.path);
             return res.status(400).json({
@@ -1251,7 +1251,7 @@ router.post('/:id/refresh-status', async (req, res) => {
     try {
         const userId = req.session.user.id;
         const { id } = req.params;
-        const templateResult = await index_1.pool.query('SELECT * FROM templates WHERE id = $1 AND user_id = $2', [id, userId]);
+        const templateResult = await db_1.default.query('SELECT * FROM templates WHERE id = $1 AND user_id = $2', [id, userId]);
         if (templateResult.rows.length === 0) {
             return res.status(404).json({ error: 'Template not found' });
         }
@@ -1261,7 +1261,7 @@ router.post('/:id/refresh-status', async (req, res) => {
                 error: 'Template does not have a WhatsApp template ID - cannot refresh status'
             });
         }
-        const businessResult = await index_1.pool.query('SELECT access_token FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
+        const businessResult = await db_1.default.query('SELECT access_token FROM user_business_info WHERE user_id = $1 AND is_active = true', [userId]);
         if (businessResult.rows.length === 0) {
             return res.status(400).json({
                 error: 'WhatsApp Business API credentials not configured'
@@ -1273,7 +1273,7 @@ router.post('/:id/refresh-status', async (req, res) => {
         if (currentStatus) {
             const normalizedStatus = currentStatus.toUpperCase();
             if (normalizedStatus !== template.status) {
-                await index_1.pool.query('UPDATE templates SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [normalizedStatus, id]);
+                await db_1.default.query('UPDATE templates SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [normalizedStatus, id]);
                 console.log(`✅ Template status updated: ${template.status} → ${normalizedStatus}`);
                 res.json({
                     message: 'Template status refreshed successfully',

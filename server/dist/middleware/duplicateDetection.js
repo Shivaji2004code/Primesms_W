@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getDuplicateCacheStats = exports.checkAndHandleDuplicate = exports.getDuplicateResponse = exports.isDuplicateRequest = exports.duplicateDetectionMiddleware = void 0;
 const node_cache_1 = __importDefault(require("node-cache"));
 const crypto_1 = __importDefault(require("crypto"));
-const index_1 = require("../index");
+const db_1 = __importDefault(require("../db"));
 const duplicateCache = new node_cache_1.default({ stdTTL: 300 });
 function generateMessageHash(templateName, phone, variables) {
     const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`;
@@ -18,19 +18,19 @@ async function logDuplicateAttempt(userId, templateName, phone, variables, messa
     try {
         const variablesJson = variables ? JSON.stringify(variables) : null;
         if (campaignId) {
-            await index_1.pool.query(`UPDATE campaign_logs 
+            await db_1.default.query(`UPDATE campaign_logs 
          SET failed_sends = failed_sends + 1, 
              total_recipients = total_recipients + 1,
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $1`, [campaignId]);
-            await index_1.pool.query(`INSERT INTO message_logs (campaign_id, recipient_number, message_id, status, error_message, variables_used, sent_at) 
+            await db_1.default.query(`INSERT INTO message_logs (campaign_id, recipient_number, message_id, status, error_message, variables_used, sent_at) 
          VALUES ($1, $2, $3, 'duplicate', $4, $5, CURRENT_TIMESTAMP)`, [campaignId, phone, `duplicate_${messageHash.substring(0, 8)}`, `Duplicate message blocked - hash: ${messageHash}`, variablesJson]);
         }
         else {
-            const campaignResult = await index_1.pool.query(`INSERT INTO campaign_logs (user_id, campaign_name, template_used, total_recipients, successful_sends, failed_sends, status, error_message) 
+            const campaignResult = await db_1.default.query(`INSERT INTO campaign_logs (user_id, campaign_name, template_used, total_recipients, successful_sends, failed_sends, status, error_message) 
          VALUES ($1, $2, $3, 1, 0, 1, 'failed', $4) RETURNING id`, [userId, `Duplicate Block: ${templateName}`, templateName, `Duplicate blocked - Variables: ${variablesJson || 'none'}`]);
             const newCampaignId = campaignResult.rows[0].id;
-            await index_1.pool.query(`INSERT INTO message_logs (campaign_id, recipient_number, message_id, status, error_message, variables_used, sent_at) 
+            await db_1.default.query(`INSERT INTO message_logs (campaign_id, recipient_number, message_id, status, error_message, variables_used, sent_at) 
          VALUES ($1, $2, $3, 'duplicate', $4, $5, CURRENT_TIMESTAMP)`, [newCampaignId, phone, `duplicate_${messageHash.substring(0, 8)}`, `Duplicate message blocked - hash: ${messageHash}`, variablesJson]);
         }
         console.log(`[DUPLICATE DETECTION] Blocked duplicate message for user ${userId}, template ${templateName}, phone ${phone}, variables: ${variablesJson}, hash: ${messageHash}`);

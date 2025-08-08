@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const index_1 = require("../index");
+const db_1 = __importDefault(require("../db"));
 const env_1 = require("../utils/env");
 const logger_1 = require("../utils/logger");
 const router = express_1.default.Router();
@@ -44,7 +44,7 @@ router.get('/ready', async (req, res) => {
         const envCheck = env_1.env.isReady();
         checks.environment = envCheck.ready;
         try {
-            const client = await index_1.pool.connect();
+            const client = await db_1.default.connect();
             await client.query('SELECT 1');
             client.release();
             checks.database = true;

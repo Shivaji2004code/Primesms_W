@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const index_1 = require("../index");
+const db_1 = __importDefault(require("../db"));
 const auth_1 = require("../middleware/auth");
 const otpStore = new Map();
 setInterval(() => {
@@ -71,11 +71,11 @@ router.post('/signup', async (req, res) => {
                 return res.status(400).json({ error: 'Invalid phone number format' });
             }
         }
-        const existingUser = await index_1.pool.query('SELECT id FROM users WHERE email = $1 OR username = $2', [email, username]);
+        const existingUser = await db_1.default.query('SELECT id FROM users WHERE email = $1 OR username = $2', [email, username]);
         if (existingUser.rows.length > 0) {
             return res.status(409).json({ error: 'User with this email or username already exists' });
         }
-        const result = await index_1.pool.query('INSERT INTO users (name, email, username, password, phone_number, credit_balance) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, username, role, credit_balance, created_at', [name, email, username, password, phoneNumber, 1000]);
+        const result = await db_1.default.query('INSERT INTO users (name, email, username, password, phone_number, credit_balance) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, username, role, credit_balance, created_at', [name, email, username, password, phoneNumber, 1000]);
         const newUser = result.rows[0];
         res.status(201).json({
             message: 'User created successfully',
@@ -101,7 +101,7 @@ router.post('/login', async (req, res) => {
         if (!username || !password) {
             return res.status(400).json({ error: 'Username and password are required' });
         }
-        const result = await index_1.pool.query('SELECT id, name, email, username, password, role, credit_balance FROM users WHERE username = $1', [username]);
+        const result = await db_1.default.query('SELECT id, name, email, username, password, role, credit_balance FROM users WHERE username = $1', [username]);
         if (result.rows.length === 0) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
@@ -137,7 +137,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', auth_1.requireAuth, async (req, res) => {
     try {
         const userId = req.session.user.id;
-        const result = await index_1.pool.query('SELECT id, name, email, username, role, credit_balance, created_at FROM users WHERE id = $1', [userId]);
+        const result = await db_1.default.query('SELECT id, name, email, username, role, credit_balance, created_at FROM users WHERE id = $1', [userId]);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -185,7 +185,7 @@ router.post('/forgot-password', async (req, res) => {
                 error: 'Invalid phone number format. Use international format (e.g., +911234567890)'
             });
         }
-        const result = await index_1.pool.query('SELECT id, username, phone_number FROM users WHERE username = $1', [username]);
+        const result = await db_1.default.query('SELECT id, username, phone_number FROM users WHERE username = $1', [username]);
         if (result.rows.length === 0) {
             return res.status(404).json({
                 success: false,
@@ -306,14 +306,14 @@ router.put('/update-profile', auth_1.requireAuth, async (req, res) => {
                 error: 'Invalid email format'
             });
         }
-        const existingUser = await index_1.pool.query('SELECT id FROM users WHERE email = $1 AND id != $2', [email, userId]);
+        const existingUser = await db_1.default.query('SELECT id FROM users WHERE email = $1 AND id != $2', [email, userId]);
         if (existingUser.rows.length > 0) {
             return res.status(409).json({
                 success: false,
                 error: 'Email is already in use'
             });
         }
-        const result = await index_1.pool.query('UPDATE users SET name = $1, email = $2 WHERE id = $3 RETURNING id, name, email, username, role, credit_balance, created_at', [name, email, userId]);
+        const result = await db_1.default.query('UPDATE users SET name = $1, email = $2 WHERE id = $3 RETURNING id, name, email, username, role, credit_balance, created_at', [name, email, userId]);
         if (result.rows.length === 0) {
             return res.status(404).json({
                 success: false,
@@ -366,7 +366,7 @@ router.post('/reset-password', async (req, res) => {
                 error: 'OTP verification required or expired. Please start the process again.'
             });
         }
-        const result = await index_1.pool.query('UPDATE users SET password = $1 WHERE username = $2 RETURNING id, username', [newPassword, username]);
+        const result = await db_1.default.query('UPDATE users SET password = $1 WHERE username = $2 RETURNING id, username', [newPassword, username]);
         if (result.rows.length === 0) {
             return res.status(404).json({
                 success: false,

@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const index_1 = require("../index");
+const db_1 = __importDefault(require("../db"));
 const auth_1 = require("../middleware/auth");
 const router = express_1.default.Router();
 router.use(auth_1.requireAdmin);
@@ -13,9 +13,9 @@ router.get('/users', async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const offset = (page - 1) * limit;
-        const countResult = await index_1.pool.query('SELECT COUNT(*) FROM users');
+        const countResult = await db_1.default.query('SELECT COUNT(*) FROM users');
         const totalUsers = parseInt(countResult.rows[0].count);
-        const result = await index_1.pool.query('SELECT id, name, email, username, phone_number, role, credit_balance, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2', [limit, offset]);
+        const result = await db_1.default.query('SELECT id, name, email, username, phone_number, role, credit_balance, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2', [limit, offset]);
         const users = result.rows.map(user => ({
             id: user.id,
             name: user.name,
@@ -46,7 +46,7 @@ router.get('/users', async (req, res) => {
 router.get('/users/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const result = await index_1.pool.query('SELECT id, name, email, username, phone_number, role, credit_balance, created_at, updated_at FROM users WHERE id = $1', [id]);
+        const result = await db_1.default.query('SELECT id, name, email, username, phone_number, role, credit_balance, created_at, updated_at FROM users WHERE id = $1', [id]);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -86,11 +86,11 @@ router.post('/users', async (req, res) => {
         if (role && !['user', 'admin'].includes(role)) {
             return res.status(400).json({ error: 'Role must be either "user" or "admin"' });
         }
-        const existingUser = await index_1.pool.query('SELECT id FROM users WHERE email = $1 OR username = $2', [email, username]);
+        const existingUser = await db_1.default.query('SELECT id FROM users WHERE email = $1 OR username = $2', [email, username]);
         if (existingUser.rows.length > 0) {
             return res.status(409).json({ error: 'User with this email or username already exists' });
         }
-        const result = await index_1.pool.query('INSERT INTO users (name, email, username, password, phone_number, role, credit_balance) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, email, username, phone_number, role, credit_balance, created_at', [name, email, username, password, phoneNumber, role || 'user', creditBalance || 1000]);
+        const result = await db_1.default.query('INSERT INTO users (name, email, username, password, phone_number, role, credit_balance) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, email, username, phone_number, role, credit_balance, created_at', [name, email, username, password, phoneNumber, role || 'user', creditBalance || 1000]);
         const newUser = result.rows[0];
         res.status(201).json({
             message: 'User created successfully',
@@ -115,7 +115,7 @@ router.put('/users/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { name, email, username, password, phoneNumber, role, creditBalance } = req.body;
-        const existingUser = await index_1.pool.query('SELECT id FROM users WHERE id = $1', [id]);
+        const existingUser = await db_1.default.query('SELECT id FROM users WHERE id = $1', [id]);
         if (existingUser.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -131,7 +131,7 @@ router.put('/users/:id', async (req, res) => {
             if (!emailRegex.test(email)) {
                 return res.status(400).json({ error: 'Invalid email format' });
             }
-            const emailCheck = await index_1.pool.query('SELECT id FROM users WHERE email = $1 AND id != $2', [email, id]);
+            const emailCheck = await db_1.default.query('SELECT id FROM users WHERE email = $1 AND id != $2', [email, id]);
             if (emailCheck.rows.length > 0) {
                 return res.status(409).json({ error: 'Email is already taken by another user' });
             }
@@ -139,7 +139,7 @@ router.put('/users/:id', async (req, res) => {
             values.push(email);
         }
         if (username !== undefined) {
-            const usernameCheck = await index_1.pool.query('SELECT id FROM users WHERE username = $1 AND id != $2', [username, id]);
+            const usernameCheck = await db_1.default.query('SELECT id FROM users WHERE username = $1 AND id != $2', [username, id]);
             if (usernameCheck.rows.length > 0) {
                 return res.status(409).json({ error: 'Username is already taken by another user' });
             }
@@ -182,7 +182,7 @@ router.put('/users/:id', async (req, res) => {
       WHERE id = $${paramCount} 
       RETURNING id, name, email, username, phone_number, role, credit_balance, created_at, updated_at
     `;
-        const result = await index_1.pool.query(query, values);
+        const result = await db_1.default.query(query, values);
         const updatedUser = result.rows[0];
         res.json({
             message: 'User updated successfully',
@@ -210,7 +210,7 @@ router.delete('/users/:id', async (req, res) => {
         if (req.session.user.id === id) {
             return res.status(400).json({ error: 'Cannot delete your own account' });
         }
-        const result = await index_1.pool.query('DELETE FROM users WHERE id = $1 RETURNING id, name, username', [id]);
+        const result = await db_1.default.query('DELETE FROM users WHERE id = $1 RETURNING id, name, username', [id]);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -232,11 +232,11 @@ router.delete('/users/:id', async (req, res) => {
 router.get('/stats', async (req, res) => {
     try {
         const queries = await Promise.all([
-            index_1.pool.query('SELECT COUNT(*) as total FROM users'),
-            index_1.pool.query('SELECT COUNT(*) as admins FROM users WHERE role = $1', ['admin']),
-            index_1.pool.query('SELECT COUNT(*) as regular_users FROM users WHERE role = $1', ['user']),
-            index_1.pool.query('SELECT SUM(credit_balance) as total_credits FROM users'),
-            index_1.pool.query('SELECT COUNT(*) as new_users_today FROM users WHERE created_at >= CURRENT_DATE'),
+            db_1.default.query('SELECT COUNT(*) as total FROM users'),
+            db_1.default.query('SELECT COUNT(*) as admins FROM users WHERE role = $1', ['admin']),
+            db_1.default.query('SELECT COUNT(*) as regular_users FROM users WHERE role = $1', ['user']),
+            db_1.default.query('SELECT SUM(credit_balance) as total_credits FROM users'),
+            db_1.default.query('SELECT COUNT(*) as new_users_today FROM users WHERE created_at >= CURRENT_DATE'),
         ]);
         const stats = {
             totalUsers: parseInt(queries[0].rows[0].total),
@@ -255,12 +255,12 @@ router.get('/stats', async (req, res) => {
 router.get('/users/:id/details', async (req, res) => {
     try {
         const { id } = req.params;
-        const userResult = await index_1.pool.query('SELECT id, name, email, username, phone_number, role, credit_balance, created_at, updated_at FROM users WHERE id = $1', [id]);
+        const userResult = await db_1.default.query('SELECT id, name, email, username, phone_number, role, credit_balance, created_at, updated_at FROM users WHERE id = $1', [id]);
         if (userResult.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
         const user = userResult.rows[0];
-        const businessResult = await index_1.pool.query(`SELECT id, user_id, business_name, whatsapp_number, whatsapp_number_id, 
+        const businessResult = await db_1.default.query(`SELECT id, user_id, business_name, whatsapp_number, whatsapp_number_id, 
        waba_id, access_token, webhook_url, webhook_verify_token, is_active, 
        created_at, updated_at 
        FROM user_business_info WHERE user_id = $1`, [id]);
@@ -328,11 +328,11 @@ router.get('/users/:id/details', async (req, res) => {
 router.get('/users/:id/business-info', async (req, res) => {
     try {
         const { id } = req.params;
-        const userCheck = await index_1.pool.query('SELECT id FROM users WHERE id = $1', [id]);
+        const userCheck = await db_1.default.query('SELECT id FROM users WHERE id = $1', [id]);
         if (userCheck.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
-        const result = await index_1.pool.query(`SELECT id, user_id, business_name, whatsapp_number, whatsapp_number_id, 
+        const result = await db_1.default.query(`SELECT id, user_id, business_name, whatsapp_number, whatsapp_number_id, 
        waba_id, access_token, webhook_url, webhook_verify_token, is_active, 
        created_at, updated_at 
        FROM user_business_info WHERE user_id = $1`, [id]);
@@ -365,7 +365,7 @@ router.put('/users/:id/business-info', async (req, res) => {
     try {
         const { id } = req.params;
         const { businessName, whatsappNumber, whatsappNumberId, wabaId, accessToken, webhookUrl, webhookVerifyToken, isActive } = req.body;
-        const userCheck = await index_1.pool.query('SELECT id FROM users WHERE id = $1', [id]);
+        const userCheck = await db_1.default.query('SELECT id FROM users WHERE id = $1', [id]);
         if (userCheck.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -375,10 +375,10 @@ router.put('/users/:id/business-info', async (req, res) => {
         if (webhookUrl && !/^https?:\/\/.+/.test(webhookUrl)) {
             return res.status(400).json({ error: 'Webhook URL must be a valid HTTP/HTTPS URL' });
         }
-        const existingResult = await index_1.pool.query('SELECT id FROM user_business_info WHERE user_id = $1', [id]);
+        const existingResult = await db_1.default.query('SELECT id FROM user_business_info WHERE user_id = $1', [id]);
         let result;
         if (existingResult.rows.length > 0) {
-            result = await index_1.pool.query(`UPDATE user_business_info 
+            result = await db_1.default.query(`UPDATE user_business_info 
          SET business_name = $2, whatsapp_number = $3, whatsapp_number_id = $4,
              waba_id = $5, access_token = $6, webhook_url = $7, 
              webhook_verify_token = $8, is_active = $9, updated_at = CURRENT_TIMESTAMP
@@ -389,7 +389,7 @@ router.put('/users/:id/business-info', async (req, res) => {
                 webhookUrl, webhookVerifyToken, isActive ?? true]);
         }
         else {
-            result = await index_1.pool.query(`INSERT INTO user_business_info 
+            result = await db_1.default.query(`INSERT INTO user_business_info 
          (user_id, business_name, whatsapp_number, whatsapp_number_id, waba_id, 
           access_token, webhook_url, webhook_verify_token, is_active)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -426,13 +426,13 @@ router.put('/users/:id/business-info', async (req, res) => {
 router.get('/users/:id/templates', async (req, res) => {
     try {
         const { id } = req.params;
-        const userCheck = await index_1.pool.query('SELECT id FROM users WHERE id = $1', [id]);
+        const userCheck = await db_1.default.query('SELECT id FROM users WHERE id = $1', [id]);
         if (userCheck.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
-        const templatesResult = await index_1.pool.query(`SELECT id, name, category, language, status, components, created_at, updated_at 
+        const templatesResult = await db_1.default.query(`SELECT id, name, category, language, status, components, created_at, updated_at 
        FROM templates WHERE user_id = $1 ORDER BY created_at DESC`, [id]);
-        const statsResult = await index_1.pool.query(`SELECT 
+        const statsResult = await db_1.default.query(`SELECT 
          COUNT(*) as total,
          COUNT(CASE WHEN status = 'PENDING' THEN 1 END) as pending,
          COUNT(CASE WHEN status = 'APPROVED' THEN 1 END) as approved,
@@ -468,19 +468,19 @@ router.put('/templates/:templateId/status', async (req, res) => {
         if (!['APPROVED', 'REJECTED', 'PENDING'].includes(status)) {
             return res.status(400).json({ error: 'Invalid status. Must be APPROVED, REJECTED, or PENDING' });
         }
-        const templateCheck = await index_1.pool.query('SELECT id, name, user_id FROM templates WHERE id = $1', [templateId]);
+        const templateCheck = await db_1.default.query('SELECT id, name, user_id FROM templates WHERE id = $1', [templateId]);
         if (templateCheck.rows.length === 0) {
             return res.status(404).json({ error: 'Template not found' });
         }
         const template = templateCheck.rows[0];
-        const updateResult = await index_1.pool.query('UPDATE templates SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *', [status, templateId]);
+        const updateResult = await db_1.default.query('UPDATE templates SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *', [status, templateId]);
         if (updateResult.rows.length === 0) {
             return res.status(500).json({ error: 'Failed to update template status' });
         }
         const adminUserId = req.user?.id;
         if (adminUserId) {
             try {
-                await index_1.pool.query(`INSERT INTO admin_actions (admin_user_id, action_type, target_type, target_id, details, created_at) 
+                await db_1.default.query(`INSERT INTO admin_actions (admin_user_id, action_type, target_type, target_id, details, created_at) 
            VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`, [
                     adminUserId,
                     'template_status_update',
@@ -516,7 +516,7 @@ router.put('/templates/:templateId/status', async (req, res) => {
 });
 router.get('/templates/pending', async (req, res) => {
     try {
-        const result = await index_1.pool.query(`SELECT t.id, t.name, t.category, t.language, t.status, t.created_at,
+        const result = await db_1.default.query(`SELECT t.id, t.name, t.category, t.language, t.status, t.created_at,
               u.name as user_name, u.username, u.id as user_id
        FROM templates t
        JOIN users u ON t.user_id = u.id

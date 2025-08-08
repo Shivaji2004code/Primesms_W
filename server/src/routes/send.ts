@@ -2,7 +2,7 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import axios from 'axios';
-import { pool } from '../index';
+import pool from '../db';
 import { validatePhoneNumber, sanitizeInput, extractVariables } from '../utils/sendApiHelpers';
 import { 
   deductCredits, 

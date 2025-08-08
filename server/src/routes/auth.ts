@@ -1,5 +1,5 @@
 import express from 'express';
-import { pool } from '../index';
+import pool from '../db';
 import { CreateUserRequest, LoginRequest, User, SessionUser } from '../types';
 import { requireAuth } from '../middleware/auth';
 

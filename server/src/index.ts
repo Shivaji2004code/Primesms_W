@@ -9,8 +9,8 @@ import compression from 'compression';
 import hpp from 'hpp';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
-import { Pool } from 'pg';
 import connectPgSimple from 'connect-pg-simple';
+import pool from './db';
 
 // Import utilities and configuration
 import { env } from './utils/env';
@@ -137,24 +137,6 @@ app.use(express.urlencoded({
 
 // HTTP request logging
 app.use(createHttpLogger());
-
-// ============================================================================
-// DATABASE CONNECTION
-// ============================================================================
-
-export const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME || 'PrimeSMS_W',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || '',
-  max: 20,
-  min: 2,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
-  maxUses: 7500,
-  application_name: 'prime-sms-api'
-});
 
 // Database connection with retry logic
 const connectDatabase = async (retries = 5): Promise<void> => {

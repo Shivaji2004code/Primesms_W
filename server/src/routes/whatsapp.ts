@@ -6,7 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import axios from 'axios';
 import FormData from 'form-data';
-import { pool } from '../index';
+import pool from '../db';
 import { requireAuth } from '../middleware/auth';
 import { analyzeTemplate, buildTemplatePayload, validateTemplateVariables } from '../utils/template-helper';
 import { 

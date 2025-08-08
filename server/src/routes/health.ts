@@ -1,6 +1,6 @@
 // src/routes/health.ts
 import express, { Request, Response } from 'express';
-import { pool } from '../index';
+import pool from '../db';
 import { env } from '../utils/env';
 import { logInfo, logError } from '../utils/logger';
 

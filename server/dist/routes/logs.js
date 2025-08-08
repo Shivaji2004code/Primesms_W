@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const index_1 = require("../index");
+const db_1 = __importDefault(require("../db"));
 const auth_1 = require("../middleware/auth");
 const logCleanup_1 = require("../services/logCleanup");
 const router = express_1.default.Router();
@@ -13,9 +13,9 @@ router.get('/', auth_1.requireAuth, async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20;
         const offset = (page - 1) * limit;
-        const countResult = await index_1.pool.query('SELECT COUNT(*) as total FROM message_logs');
+        const countResult = await db_1.default.query('SELECT COUNT(*) as total FROM message_logs');
         const total = parseInt(countResult.rows[0].total);
-        const logsResult = await index_1.pool.query(`SELECT 
+        const logsResult = await db_1.default.query(`SELECT 
         id,
         recipient_number,
         status,

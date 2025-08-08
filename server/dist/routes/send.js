@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const axios_1 = __importDefault(require("axios"));
-const index_1 = require("../index");
+const db_1 = __importDefault(require("../db"));
 const sendApiHelpers_1 = require("../utils/sendApiHelpers");
 const creditSystem_1 = require("../utils/creditSystem");
 const duplicateDetection_1 = require("../middleware/duplicateDetection");
@@ -227,7 +227,7 @@ async function authenticateAndFetchCredentials(username) {
       INNER JOIN user_business_info ubi ON u.id = ubi.user_id
       WHERE u.username = $1 AND ubi.is_active = true
     `;
-        const result = await index_1.pool.query(query, [username]);
+        const result = await db_1.default.query(query, [username]);
         if (result.rows.length === 0) {
             return {
                 success: false,
@@ -284,7 +284,7 @@ async function fetchTemplate(userId, templateName) {
       FROM templates 
       WHERE user_id = $1 AND name = $2 AND status IN ('APPROVED', 'ACTIVE')
     `;
-        const result = await index_1.pool.query(query, [userId, templateName]);
+        const result = await db_1.default.query(query, [userId, templateName]);
         if (result.rows.length === 0) {
             return {
                 success: false,
@@ -535,13 +535,13 @@ async function logMessageSend(userId, templateId, recipient, messageId, template
     try {
         const campaignName = `API_SEND_${templateName}_${new Date().toISOString().split('T')[0]}`;
         let campaignId;
-        const existingCampaign = await index_1.pool.query(`
+        const existingCampaign = await db_1.default.query(`
       SELECT id FROM campaign_logs 
       WHERE user_id = $1 AND campaign_name = $2 AND DATE(created_at) = CURRENT_DATE
     `, [userId, campaignName]);
         if (existingCampaign.rows.length > 0) {
             campaignId = existingCampaign.rows[0].id;
-            await index_1.pool.query(`
+            await db_1.default.query(`
         UPDATE campaign_logs 
         SET successful_sends = successful_sends + 1,
             total_recipients = total_recipients + 1,
@@ -550,7 +550,7 @@ async function logMessageSend(userId, templateId, recipient, messageId, template
       `, [campaignId]);
         }
         else {
-            const campaignResult = await index_1.pool.query(`
+            const campaignResult = await db_1.default.query(`
         INSERT INTO campaign_logs (
           user_id, campaign_name, template_used, total_recipients, 
           successful_sends, failed_sends, status
@@ -560,7 +560,7 @@ async function logMessageSend(userId, templateId, recipient, messageId, template
       `, [userId, campaignName, templateName]);
             campaignId = campaignResult.rows[0].id;
         }
-        await index_1.pool.query(`
+        await db_1.default.query(`
       INSERT INTO message_logs (
         campaign_id, recipient_number, message_id, status, sent_at
       )

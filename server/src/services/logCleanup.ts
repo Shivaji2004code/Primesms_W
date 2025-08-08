@@ -1,4 +1,4 @@
-import { pool } from '../db';
+import pool from '../db';
 import * as cron from 'node-cron';
 
 export class LogCleanupService {

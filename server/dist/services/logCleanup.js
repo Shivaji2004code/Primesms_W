@@ -32,9 +32,12 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.logCleanupService = exports.LogCleanupService = void 0;
-const index_1 = require("../index");
+const db_1 = __importDefault(require("../db"));
 const cron = __importStar(require("node-cron"));
 class LogCleanupService {
     constructor() {
@@ -47,7 +50,7 @@ class LogCleanupService {
         return LogCleanupService.instance;
     }
     async cleanupOldLogs() {
-        const client = await index_1.pool.connect();
+        const client = await db_1.default.connect();
         try {
             const threshold = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
             const thresholdISO = threshold.toISOString();
@@ -99,7 +102,7 @@ class LogCleanupService {
         }
     }
     async getOldLogsStats() {
-        const client = await index_1.pool.connect();
+        const client = await db_1.default.connect();
         try {
             const threshold = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
             const thresholdISO = threshold.toISOString();
