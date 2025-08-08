@@ -1,5 +1,5 @@
 // server/src/config/rateLimit.ts
-import rateLimit, { RateLimitRequestHandler } from 'express-rate-limit';
+import rateLimit, { RateLimitRequestHandler, ipKeyGenerator } from 'express-rate-limit';
 import type { Request } from 'express';
 
 type Num = number | undefined;
@@ -35,7 +35,7 @@ const READ_MAX = envN('RL_READ_MAX', 5000);                  // 5k reads per 15m
 // Helpers
 const keyByUserOrIp = (req: Request) => {
   const userId = (req.session as any)?.userId;
-  return userId ? `user:${userId}` : `ip:${req.ip}`;
+  return userId ? `user:${userId}` : ipKeyGenerator(req.ip || '127.0.0.1');
 };
 
 // Health path detection - CRITICAL for Coolify
@@ -100,7 +100,7 @@ export const adminLimiter: RateLimitRequestHandler = rateLimit({
 export const loginLimiter: RateLimitRequestHandler = rateLimit({
   ...stdOpts,
   max: LOGIN_MAX,
-  keyGenerator: (req) => `ip:${req.ip}`,
+  keyGenerator: (req) => ipKeyGenerator(req.ip || '127.0.0.1'),
   skipSuccessfulRequests: false, // Count all login attempts
   message: { error: 'TOO_MANY_LOGIN_ATTEMPTS', retryAfter: Math.ceil(WINDOW_MS / 1000) }
 });
@@ -108,14 +108,14 @@ export const loginLimiter: RateLimitRequestHandler = rateLimit({
 export const otpLimiter: RateLimitRequestHandler = rateLimit({
   ...stdOpts,
   max: OTP_MAX,
-  keyGenerator: (req) => `ip:${req.ip}`,
+  keyGenerator: (req) => ipKeyGenerator(req.ip || '127.0.0.1'),
   message: { error: 'TOO_MANY_OTP_REQUESTS', retryAfter: Math.ceil(WINDOW_MS / 1000) }
 });
 
 export const resetLimiter: RateLimitRequestHandler = rateLimit({
   ...stdOpts,
   max: RESET_MAX,
-  keyGenerator: (req) => `ip:${req.ip}`,
+  keyGenerator: (req) => ipKeyGenerator(req.ip || '127.0.0.1'),
   message: { error: 'TOO_MANY_PASSWORD_RESETS', retryAfter: Math.ceil(WINDOW_MS / 1000) }
 });
 
