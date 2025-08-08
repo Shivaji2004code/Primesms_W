@@ -6,8 +6,29 @@ import { logInfo, logError } from '../utils/logger';
 
 const router = express.Router();
 
-// Basic health check endpoint
-router.get('/health', async (req: Request, res: Response): Promise<void> => {
+// Simple database ping function
+async function dbPing(): Promise<boolean> {
+  try {
+    await pool.query('SELECT 1');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Root level health checks for /health and /healthz (lightweight)
+router.get(['/health', '/healthz'], async (_req, res) => {
+  const ok = await dbPing();
+  if (ok) {
+    // lightweight, cache-safe response
+    res.status(200).json({ status: 'ok' });
+  } else {
+    res.status(503).json({ status: 'db_unreachable' });
+  }
+});
+
+// Detailed health check endpoint (for /api/health)
+router.get('/api/health', async (req: Request, res: Response): Promise<void> => {
   try {
     const healthStatus = {
       status: 'healthy',

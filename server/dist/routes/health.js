@@ -8,7 +8,25 @@ const db_1 = __importDefault(require("../db"));
 const env_1 = require("../utils/env");
 const logger_1 = require("../utils/logger");
 const router = express_1.default.Router();
-router.get('/health', async (req, res) => {
+async function dbPing() {
+    try {
+        await db_1.default.query('SELECT 1');
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+router.get(['/health', '/healthz'], async (_req, res) => {
+    const ok = await dbPing();
+    if (ok) {
+        res.status(200).json({ status: 'ok' });
+    }
+    else {
+        res.status(503).json({ status: 'db_unreachable' });
+    }
+});
+router.get('/api/health', async (req, res) => {
     try {
         const healthStatus = {
             status: 'healthy',

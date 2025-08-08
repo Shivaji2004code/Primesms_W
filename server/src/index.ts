@@ -192,7 +192,9 @@ app.use(session({
 // ============================================================================
 
 // Health check routes (no authentication required)
-app.use('/api', healthRoutes);
+app.use(healthRoutes); // Mount at root level for /health and /healthz
+app.use('/api', healthRoutes); // Also mount under /api for existing /api/health
+console.log('[HEALTH] routes /health & /healthz ready');
 
 // Authentication routes
 app.use('/api/auth', authRoutes);

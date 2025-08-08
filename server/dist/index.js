@@ -145,7 +145,9 @@ app.use((0, express_session_1.default)({
         maxAge: 7 * 24 * 60 * 60 * 1000,
     },
 }));
+app.use(health_1.default);
 app.use('/api', health_1.default);
+console.log('[HEALTH] routes /health & /healthz ready');
 app.use('/api/auth', auth_1.default);
 app.use('/api/admin', admin_1.default);
 app.use('/api/templates', templates_1.default);

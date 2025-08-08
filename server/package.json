@@ -10,6 +10,7 @@
     "dev": "nodemon src/index.ts",
     "lint": "tsc --noEmit",
     "db:smoke": "ts-node scripts/db-smoke.ts",
+    "health:smoke": "ts-node scripts/health-smoke.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
