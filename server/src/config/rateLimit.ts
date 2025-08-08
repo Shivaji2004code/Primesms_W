@@ -38,6 +38,15 @@ const keyByUserOrIp = (req: Request) => {
   return userId ? `user:${userId}` : `ip:${req.ip}`;
 };
 
+// Health path detection - CRITICAL for Coolify
+const isHealthPath = (path: string): boolean => {
+  return path === '/health' || 
+         path === '/healthz' || 
+         path === '/api/health' || 
+         path === '/api/healthz' ||
+         path.startsWith('/api/health/'); // Includes /api/health/db, /api/health/version
+};
+
 const stdOpts = {
   windowMs: WINDOW_MS,
   standardHeaders: true,
@@ -53,10 +62,9 @@ export const globalLimiter: RateLimitRequestHandler = rateLimit({
   // Never rate-limit health, static assets, or successful GETs
   skip: (req) => {
     const p = req.path;
-    // Health endpoints
-    if (p.startsWith('/health') || 
-        p.startsWith('/api/health') || 
-        p.startsWith('/api/healthz')) return true;
+    
+    // Health endpoints - CRITICAL for Coolify health checks
+    if (isHealthPath(p)) return true;
     
     // Static assets
     if (p.startsWith('/assets') || 

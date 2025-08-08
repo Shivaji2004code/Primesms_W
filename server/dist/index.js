@@ -18,7 +18,7 @@ const db_1 = __importDefault(require("./db"));
 const env_1 = require("./utils/env");
 const logger_1 = require("./utils/logger");
 const errorHandler_1 = require("./middleware/errorHandler");
-const health_1 = __importDefault(require("./routes/health"));
+const health_1 = __importDefault(require("./health"));
 const auth_1 = __importDefault(require("./routes/auth"));
 const admin_1 = __importDefault(require("./routes/admin"));
 const templates_1 = __importDefault(require("./routes/templates"));
@@ -32,6 +32,8 @@ const rateLimit_1 = require("./config/rateLimit");
 const app = (0, express_1.default)();
 exports.app = app;
 app.set('trust proxy', 1);
+app.use(health_1.default);
+console.log('[HEALTH] Health endpoints mounted FIRST - always accessible');
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
 const allowedOrigins = [
@@ -132,9 +134,6 @@ app.use((0, express_session_1.default)({
         maxAge: 7 * 24 * 60 * 60 * 1000
     }
 }));
-app.use(rateLimit_1.noLimiter, health_1.default);
-app.use('/api', rateLimit_1.noLimiter, health_1.default);
-console.log('[HEALTH] routes /health & /healthz ready');
 app.use('/api/auth/login', rateLimit_1.loginLimiter);
 app.use('/api/auth/forgot-password', rateLimit_1.otpLimiter);
 app.use('/api/auth/verify-otp', rateLimit_1.otpLimiter);
@@ -182,8 +181,10 @@ app.use(express_1.default.static(clientDir, {
     }
 }));
 app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api'))
+    if (req.path.startsWith('/api') ||
+        req.path.startsWith('/health')) {
         return next();
+    }
     res.sendFile(path_1.default.join(clientDir, 'index.html'));
 });
 app.use('*', errorHandler_1.notFoundHandler);
@@ -251,16 +252,24 @@ const startServer = async () => {
         catch (error) {
             (0, logger_1.logError)('Error starting cleanup service', error);
         }
-        const server = app.listen(env_1.env.port, () => {
+        const server = app.listen(env_1.env.port, '0.0.0.0', () => {
             (0, logger_1.logStartup)(`Server started successfully`, {
+                host: '0.0.0.0',
                 port: env_1.env.port,
                 environment: env_1.env.nodeEnv,
                 processId: process.pid,
                 nodeVersion: process.version,
                 memory: process.memoryUsage(),
                 corsOrigins: env_1.env.corsOrigins,
-                rateLimit: env_1.env.rateLimit
+                rateLimit: env_1.env.rateLimit,
+                healthEndpoints: ['GET /health', 'GET /healthz', 'GET /api/health', 'GET /api/healthz', 'GET /api/health/db']
             });
+            console.log(`🏥 Health endpoints available at:`);
+            console.log(`   http://0.0.0.0:${env_1.env.port}/health`);
+            console.log(`   http://0.0.0.0:${env_1.env.port}/healthz`);
+            console.log(`   http://0.0.0.0:${env_1.env.port}/api/health`);
+            console.log(`   http://0.0.0.0:${env_1.env.port}/api/healthz`);
+            console.log(`   http://0.0.0.0:${env_1.env.port}/api/health/db (deep check)`);
             printRoutes();
         });
         server.on('error', (error) => {

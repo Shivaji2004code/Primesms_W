@@ -25,6 +25,13 @@ const keyByUserOrIp = (req) => {
     const userId = req.session?.userId;
     return userId ? `user:${userId}` : `ip:${req.ip}`;
 };
+const isHealthPath = (path) => {
+    return path === '/health' ||
+        path === '/healthz' ||
+        path === '/api/health' ||
+        path === '/api/healthz' ||
+        path.startsWith('/api/health/');
+};
 const stdOpts = {
     windowMs: WINDOW_MS,
     standardHeaders: true,
@@ -37,9 +44,7 @@ exports.globalLimiter = (0, express_rate_limit_1.default)({
     keyGenerator: keyByUserOrIp,
     skip: (req) => {
         const p = req.path;
-        if (p.startsWith('/health') ||
-            p.startsWith('/api/health') ||
-            p.startsWith('/api/healthz'))
+        if (isHealthPath(p))
             return true;
         if (p.startsWith('/assets') ||
             p.startsWith('/static') ||

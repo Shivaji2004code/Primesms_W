@@ -21,6 +21,9 @@ import {
   setupGlobalErrorHandlers
 } from './middleware/errorHandler';
 
+// Import health module (must be FIRST)
+import healthRouter from './health';
+
 // Import routes
 import healthRoutes from './routes/health';
 import authRoutes from './routes/auth';
@@ -56,11 +59,21 @@ setupGlobalErrorHandlers();
 const app: Application = express();
 
 // ============================================================================
-// MIDDLEWARE CONFIGURATION (REQUIRED ORDER)
+// HEALTH ENDPOINTS (MUST BE FIRST - NO DEPENDENCIES)
 // ============================================================================
 
-// 1) Trust proxy for secure cookies behind Coolify/Traefik
+// Trust proxy FIRST (required for health checks behind proxy)
 app.set('trust proxy', 1);
+
+// Mount health endpoints IMMEDIATELY - before parsers, CORS, sessions, rate limiting
+// This ensures Coolify can ALWAYS reach health endpoints regardless of app state
+app.use(healthRouter);
+
+console.log('[HEALTH] Health endpoints mounted FIRST - always accessible');
+
+// ============================================================================
+// MIDDLEWARE CONFIGURATION (REQUIRED ORDER)
+// ============================================================================
 
 // 2) Body parsing
 app.use(express.json());
@@ -201,10 +214,8 @@ app.use(session({
 // API ROUTES
 // ============================================================================
 
-// Health check routes (no rate limiting)
-app.use(noLimiter, healthRoutes); // Mount at root level for /health and /healthz
-app.use('/api', noLimiter, healthRoutes); // Also mount under /api for existing /api/health
-console.log('[HEALTH] routes /health & /healthz ready');
+// Legacy health routes (now redundant - new health module mounted first)
+// Keep for backward compatibility but they won't be reached due to mounting order
 
 // Authentication routes with specific limiters
 app.use('/api/auth/login', loginLimiter);
@@ -275,9 +286,13 @@ app.use(express.static(clientDir, {
   }
 }));
 
-// SPA fallback: everything NOT starting with /api goes to index.html
+// SPA fallback: everything NOT starting with /api or /health goes to index.html
 app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api')) return next();
+  // Never intercept API routes or health endpoints
+  if (req.path.startsWith('/api') || 
+      req.path.startsWith('/health')) {
+    return next();
+  }
   res.sendFile(path.join(clientDir, 'index.html'));
 });
 
@@ -379,17 +394,26 @@ const startServer = async (): Promise<void> => {
       logError('Error starting cleanup service', error);
     }
     
-    // Start HTTP server
-    const server = app.listen(env.port, () => {
+    // Start HTTP server - BIND TO 0.0.0.0 for Docker/Coolify health checks
+    const server = app.listen(env.port, '0.0.0.0', () => {
       logStartup(`Server started successfully`, {
+        host: '0.0.0.0',
         port: env.port,
         environment: env.nodeEnv,
         processId: process.pid,
         nodeVersion: process.version,
         memory: process.memoryUsage(),
         corsOrigins: env.corsOrigins,
-        rateLimit: env.rateLimit
+        rateLimit: env.rateLimit,
+        healthEndpoints: ['GET /health', 'GET /healthz', 'GET /api/health', 'GET /api/healthz', 'GET /api/health/db']
       });
+      
+      console.log(`🏥 Health endpoints available at:`);
+      console.log(`   http://0.0.0.0:${env.port}/health`);
+      console.log(`   http://0.0.0.0:${env.port}/healthz`);
+      console.log(`   http://0.0.0.0:${env.port}/api/health`);
+      console.log(`   http://0.0.0.0:${env.port}/api/healthz`);
+      console.log(`   http://0.0.0.0:${env.port}/api/health/db (deep check)`);
       
       // Print route table for debugging
       printRoutes();
