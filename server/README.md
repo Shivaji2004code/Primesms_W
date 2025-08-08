@@ -11,21 +11,32 @@ This server uses Option A deployment strategy:
 
 ## Build Process
 
-The build process consists of three stages:
+The build process has two modes:
 
+### Production Build (Container/Nixpacks)
 1. **TypeScript Compilation**: `tsc` compiles server source code to `dist/`
-2. **Client Build**: Builds the React client in `../client/dist/`  
-3. **Static Copy**: Copies client build to `server/dist/client-static/`
+2. **Static Copy**: Copies pre-built client files from `client-build/` to `server/dist/client-static/`
 
 ```bash
-npm run build  # Runs all three stages
+npm run build  # Production build (uses embedded client files)
+```
+
+### Development Build (Local)
+1. **TypeScript Compilation**: `tsc` compiles server source code to `dist/`
+2. **Client Build**: Builds the React client from `../client/` directory
+3. **Static Copy**: Copies fresh client build to `server/dist/client-static/`
+
+```bash
+npm run build:dev  # Development build (builds client from source)
 ```
 
 ### Build Scripts
 
-- `build:client` - Builds the React client with npm ci fallback
-- `copy:client` - Copies client build files to server's static directory
-- `build` - Full build pipeline (TypeScript + client + copy)
+- `build` - Production build using pre-built client files (for containers)
+- `build:dev` - Development build with live client compilation
+- `build:client` - Builds the React client from ../client directory
+- `copy:client` - Copies embedded client build files to static directory
+- `copy:client:dev` - Copies fresh client build files to static directory
 
 ## Static File Serving
 
@@ -130,8 +141,12 @@ server/
 │   ├── routes/         # API route handlers
 │   ├── middleware/     # Express middleware
 │   └── utils/          # Utilities (env, logger, etc.)
+├── client-build/       # Pre-built client files (for production builds)
+│   ├── index.html      # Client entry point
+│   ├── assets/         # CSS, JS, images
+│   └── *.svg          # Static assets
 ├── dist/               # Compiled JavaScript (build output)
-│   ├── client-static/  # Built client files (copied during build)
+│   ├── client-static/  # Client files served by Express (copied during build)
 │   └── *.js           # Compiled server files
 ├── package.json        # Build scripts and dependencies
 └── tsconfig.json       # TypeScript configuration
