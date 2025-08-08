@@ -10,6 +10,7 @@ import hpp from 'hpp';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
+import path from 'path';
 import pool from './db';
 
 // Import utilities and configuration
@@ -67,9 +68,18 @@ app.use(helmet({
   }
 }));
 
-// CORS configuration - environment aware
+// CORS configuration - tightened for production
+const allowed = [
+  process.env.APP_ORIGIN || 'https://primesms.app',
+  'http://localhost:5173', // dev
+  'http://localhost:3000'  // dev
+];
+
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' ? 'https://primesms.app' : true,
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    if (!origin || allowed.includes(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -207,8 +217,8 @@ app.use('/api/send', sendRoutes);
 app.use('/api/credits', creditsRoutes);
 app.use('/api/logs', logsRoutes);
 
-// Root endpoint
-app.get('/', (req, res) => {
+// API Root endpoint
+app.get('/api', (req, res) => {
   res.json({
     message: 'Prime SMS API',
     version: '1.0.0',
@@ -221,6 +231,32 @@ app.get('/', (req, res) => {
 // Legacy routes with redirect middleware
 app.get('/templates', requireAuthWithRedirect, (req, res) => {
   res.redirect('/api/templates');
+});
+
+// ============================================================================
+// STATIC CLIENT SERVING & SPA FALLBACK
+// ============================================================================
+
+// Where the built client will be placed by the build step
+const clientDir = path.resolve(__dirname, './client-static');
+
+// Serve static assets with sensible caching (immutable hashed assets cache 1y; html no-cache)
+app.use(express.static(clientDir, {
+  index: false,
+  maxAge: '1y',
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  }
+}));
+
+// SPA fallback: everything NOT starting with /api goes to index.html
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(clientDir, 'index.html'));
 });
 
 // ============================================================================

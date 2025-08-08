@@ -14,6 +14,7 @@ const hpp_1 = __importDefault(require("hpp"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const express_session_1 = __importDefault(require("express-session"));
 const connect_pg_simple_1 = __importDefault(require("connect-pg-simple"));
+const path_1 = __importDefault(require("path"));
 const db_1 = __importDefault(require("./db"));
 const env_1 = require("./utils/env");
 const logger_1 = require("./utils/logger");
@@ -47,8 +48,17 @@ app.use((0, helmet_1.default)({
         preload: true
     }
 }));
+const allowed = [
+    process.env.APP_ORIGIN || 'https://primesms.app',
+    'http://localhost:5173',
+    'http://localhost:3000'
+];
 const corsOptions = {
-    origin: process.env.NODE_ENV === 'production' ? 'https://primesms.app' : true,
+    origin: (origin, callback) => {
+        if (!origin || allowed.includes(origin))
+            return callback(null, true);
+        return callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -155,7 +165,7 @@ app.use('/api/whatsapp', whatsapp_1.default);
 app.use('/api/send', send_1.default);
 app.use('/api/credits', credits_1.default);
 app.use('/api/logs', logs_1.default);
-app.get('/', (req, res) => {
+app.get('/api', (req, res) => {
     res.json({
         message: 'Prime SMS API',
         version: '1.0.0',
@@ -166,6 +176,24 @@ app.get('/', (req, res) => {
 });
 app.get('/templates', auth_2.requireAuthWithRedirect, (req, res) => {
     res.redirect('/api/templates');
+});
+const clientDir = path_1.default.resolve(__dirname, './client-static');
+app.use(express_1.default.static(clientDir, {
+    index: false,
+    maxAge: '1y',
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        }
+        else {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+    }
+}));
+app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api'))
+        return next();
+    res.sendFile(path_1.default.join(clientDir, 'index.html'));
 });
 app.use('*', errorHandler_1.notFoundHandler);
 app.use(errorHandler_1.errorHandler);
