@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const db_1 = __importDefault(require("../db"));
 const auth_1 = require("../middleware/auth");
+const crypto_1 = __importDefault(require("crypto"));
 const otpStore = new Map();
 setInterval(() => {
     const now = Date.now();
@@ -15,6 +16,13 @@ setInterval(() => {
         }
     }
 }, 5 * 60 * 1000);
+function constantTimeEqual(a, b) {
+    const ab = Buffer.from(a ?? '', 'utf8');
+    const bb = Buffer.from(b ?? '', 'utf8');
+    if (ab.length !== bb.length)
+        return false;
+    return crypto_1.default.timingSafeEqual(ab, bb);
+}
 async function sendOtpToUser(phone, otp) {
     try {
         console.log(`🔐 Sending OTP ${otp} to phone: ${phone}`);
@@ -97,46 +105,44 @@ router.post('/signup', async (req, res) => {
 });
 router.post('/login', async (req, res) => {
     try {
-        const { username, password } = req.body;
+        const { username, password } = req.body ?? {};
         if (!username || !password) {
-            return res.status(400).json({ error: 'Username and password are required' });
+            return res.status(400).json({ error: 'Missing credentials' });
         }
-        const result = await db_1.default.query('SELECT id, name, email, username, password, role, credit_balance FROM users WHERE username = $1', [username]);
-        if (result.rows.length === 0) {
+        const { rows } = await db_1.default.query('SELECT id, username, password, name, email, role, credit_balance FROM users WHERE username = $1 LIMIT 1', [username]);
+        const user = rows[0];
+        const ok = !!user && constantTimeEqual(password, user.password);
+        if (!ok) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
-        const user = result.rows[0];
-        if (user.password !== password) {
-            return res.status(401).json({ error: 'Invalid credentials' });
-        }
-        const sessionUser = {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            username: user.username,
-            role: user.role
-        };
-        req.session.user = sessionUser;
-        res.json({
-            message: 'Login successful',
-            user: {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                username: user.username,
-                role: user.role,
-                creditBalance: user.credit_balance
+        req.session.userId = user.id;
+        req.session.save(err => {
+            if (err) {
+                console.error('session.save failed:', err);
+                return res.status(500).json({ error: 'Internal error' });
             }
+            return res.status(200).json({
+                ok: true,
+                user: {
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    username: user.username,
+                    role: user.role,
+                    creditBalance: user.credit_balance
+                }
+            });
         });
     }
-    catch (error) {
-        console.error('Login error:', error);
-        res.status(500).json({ error: 'Internal server error' });
+    catch (err) {
+        console.error('login failed:', err);
+        return res.status(500).json({ error: 'Internal error' });
     }
 });
 router.get('/me', auth_1.requireAuth, async (req, res) => {
     try {
-        const userId = req.session.user.id;
+        const session = req.session;
+        const userId = session.userId;
         const result = await db_1.default.query('SELECT id, name, email, username, role, credit_balance, created_at FROM users WHERE id = $1', [userId]);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
@@ -165,7 +171,7 @@ router.post('/logout', auth_1.requireAuth, (req, res) => {
             console.error('Logout error:', err);
             return res.status(500).json({ error: 'Could not log out' });
         }
-        res.clearCookie('connect.sid');
+        res.clearCookie('psid');
         res.json({ message: 'Logged out successfully' });
     });
 });
@@ -292,7 +298,8 @@ router.post('/verify-otp', (req, res) => {
 router.put('/update-profile', auth_1.requireAuth, async (req, res) => {
     try {
         const { name, email } = req.body;
-        const userId = req.session.user.id;
+        const session = req.session;
+        const userId = session.userId;
         if (!name || !email) {
             return res.status(400).json({
                 success: false,

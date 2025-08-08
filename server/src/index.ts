@@ -44,13 +44,34 @@ setupGlobalErrorHandlers();
 const app: Application = express();
 
 // ============================================================================
-// SECURITY MIDDLEWARE STACK
+// MIDDLEWARE CONFIGURATION (REQUIRED ORDER)
 // ============================================================================
 
-// Trust proxy (important for rate limiting and IP detection)
-app.set('trust proxy', env.trustProxy);
+// 1) Trust proxy for secure cookies behind Coolify/Traefik
+app.set('trust proxy', 1);
 
-// Helmet for security headers
+// 2) Body parsing
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// 3) CORS with credentials
+const allowedOrigins = [
+  'https://primesms.app',
+  'http://localhost:5173',
+  'http://localhost:3000'
+];
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);           // same-origin/curl
+    return cb(null, allowedOrigins.includes(origin));
+  },
+  credentials: true
+}));
+
+// 4) Compression
+app.use(compression());
+
+// Additional security middleware
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -65,39 +86,6 @@ app.use(helmet({
     maxAge: 31536000,
     includeSubDomains: true,
     preload: true
-  }
-}));
-
-// CORS configuration - tightened for production
-const allowed = [
-  process.env.APP_ORIGIN || 'https://primesms.app',
-  'http://localhost:5173', // dev
-  'http://localhost:3000'  // dev
-];
-
-const corsOptions = {
-  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    if (!origin || allowed.includes(origin)) return callback(null, true);
-    return callback(new Error('Not allowed by CORS'));
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['X-Total-Count'],
-  maxAge: 86400 // 24 hours
-};
-
-app.use(cors(corsOptions));
-
-// Compression middleware
-app.use(compression({
-  level: 6,
-  threshold: 1024, // Only compress responses > 1KB
-  filter: (req, res) => {
-    if (req.headers['x-no-compression']) {
-      return false;
-    }
-    return compression.filter(req, res);
   }
 }));
 
@@ -133,18 +121,6 @@ app.use(hpp({
   whitelist: ['tags', 'categories'] // Allow arrays for these parameters
 }));
 
-// Body parsing with size limits
-app.use(express.json({ 
-  limit: env.maxJsonSize,
-  strict: true,
-  type: 'application/json'
-}));
-app.use(express.urlencoded({ 
-  extended: true, 
-  limit: env.maxJsonSize,
-  parameterLimit: 50
-}));
-
 // HTTP request logging
 app.use(createHttpLogger());
 
@@ -159,6 +135,9 @@ const connectDatabase = async (retries = 5): Promise<void> => {
       port: env.database.port,
       database: env.database.database
     });
+    
+    // Create admin user if it doesn't exist
+    await createAdminUser();
   } catch (error) {
     logError('Database connection failed', error, { retries });
     
@@ -172,29 +151,62 @@ const connectDatabase = async (retries = 5): Promise<void> => {
   }
 };
 
+// Create admin user on startup if it doesn't exist
+const createAdminUser = async (): Promise<void> => {
+  try {
+    const client = await pool.connect();
+    
+    // Check if admin user already exists
+    const adminCheck = await client.query(
+      'SELECT id FROM users WHERE username = $1 LIMIT 1',
+      ['primesms']
+    );
+    
+    if (adminCheck.rows.length === 0) {
+      // Create admin user
+      await client.query(
+        'INSERT INTO users (name, email, username, password, role, credit_balance) VALUES ($1, $2, $3, $4, $5, $6)',
+        ['Prime SMS Admin', 'admin@primesms.app', 'primesms', 'Primesms', 'admin', 999999]
+      );
+      logStartup('✅ Admin user created successfully', {
+        username: 'primesms',
+        email: 'admin@primesms.app'
+      });
+    } else {
+      logStartup('ℹ️  Admin user already exists');
+    }
+    
+    client.release();
+  } catch (error) {
+    logError('Failed to create admin user', error);
+    // Don't exit the process, just log the error
+  }
+};
+
 // ============================================================================
 // SESSION CONFIGURATION
 // ============================================================================
 
-// Initialize PostgreSQL session store
-const pgSession = connectPgSimple(session);
+// 5) Sessions (connect-pg-simple)
+const ConnectPgSimple = connectPgSimple(session);
+const isProd = process.env.NODE_ENV === 'production';
 
 app.use(session({
-  store: new pgSession({
-    pool: pool,
+  store: new ConnectPgSimple({
+    pool,
     tableName: 'session',
     createTableIfMissing: true
   }),
-  name: 'connect.sid',
-  secret: process.env.SESSION_SECRET || 'fallback-secret-key-for-development',
+  name: 'psid',
+  secret: process.env.SESSION_SECRET!,
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  },
+    sameSite: isProd ? 'lax' : 'lax',
+    secure: isProd,                               // true on HTTPS
+    maxAge: 7 * 24 * 60 * 60 * 1000
+  }
 }));
 
 // ============================================================================
@@ -208,6 +220,15 @@ console.log('[HEALTH] routes /health & /healthz ready');
 
 // Authentication routes
 app.use('/api/auth', authRoutes);
+
+// Debug routes
+app.get('/api/debug/session', (req, res) => {
+  const s = req.session as any;
+  res.json({
+    hasSession: Boolean(req.session),
+    userId: s?.userId ?? null
+  });
+});
 
 // Protected routes (require authentication)
 app.use('/api/admin', adminRoutes);

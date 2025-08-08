@@ -31,7 +31,23 @@ const auth_2 = require("./middleware/auth");
 (0, errorHandler_1.setupGlobalErrorHandlers)();
 const app = (0, express_1.default)();
 exports.app = app;
-app.set('trust proxy', env_1.env.trustProxy);
+app.set('trust proxy', 1);
+app.use(express_1.default.json());
+app.use(express_1.default.urlencoded({ extended: true }));
+const allowedOrigins = [
+    'https://primesms.app',
+    'http://localhost:5173',
+    'http://localhost:3000'
+];
+app.use((0, cors_1.default)({
+    origin: (origin, cb) => {
+        if (!origin)
+            return cb(null, true);
+        return cb(null, allowedOrigins.includes(origin));
+    },
+    credentials: true
+}));
+app.use((0, compression_1.default)());
 app.use((0, helmet_1.default)({
     contentSecurityPolicy: {
         directives: {
@@ -46,34 +62,6 @@ app.use((0, helmet_1.default)({
         maxAge: 31536000,
         includeSubDomains: true,
         preload: true
-    }
-}));
-const allowed = [
-    process.env.APP_ORIGIN || 'https://primesms.app',
-    'http://localhost:5173',
-    'http://localhost:3000'
-];
-const corsOptions = {
-    origin: (origin, callback) => {
-        if (!origin || allowed.includes(origin))
-            return callback(null, true);
-        return callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    exposedHeaders: ['X-Total-Count'],
-    maxAge: 86400
-};
-app.use((0, cors_1.default)(corsOptions));
-app.use((0, compression_1.default)({
-    level: 6,
-    threshold: 1024,
-    filter: (req, res) => {
-        if (req.headers['x-no-compression']) {
-            return false;
-        }
-        return compression_1.default.filter(req, res);
     }
 }));
 const limiter = (0, express_rate_limit_1.default)({
@@ -103,16 +91,6 @@ app.use(limiter);
 app.use((0, hpp_1.default)({
     whitelist: ['tags', 'categories']
 }));
-app.use(express_1.default.json({
-    limit: env_1.env.maxJsonSize,
-    strict: true,
-    type: 'application/json'
-}));
-app.use(express_1.default.urlencoded({
-    extended: true,
-    limit: env_1.env.maxJsonSize,
-    parameterLimit: 50
-}));
 app.use((0, logger_1.createHttpLogger)());
 const connectDatabase = async (retries = 5) => {
     try {
@@ -124,6 +102,7 @@ const connectDatabase = async (retries = 5) => {
             port: env_1.env.database.port,
             database: env_1.env.database.database
         });
+        await createAdminUser();
     }
     catch (error) {
         (0, logger_1.logError)('Database connection failed', error, { retries });
@@ -137,28 +116,56 @@ const connectDatabase = async (retries = 5) => {
         }
     }
 };
-const pgSession = (0, connect_pg_simple_1.default)(express_session_1.default);
+const createAdminUser = async () => {
+    try {
+        const client = await db_1.default.connect();
+        const adminCheck = await client.query('SELECT id FROM users WHERE username = $1 LIMIT 1', ['primesms']);
+        if (adminCheck.rows.length === 0) {
+            await client.query('INSERT INTO users (name, email, username, password, role, credit_balance) VALUES ($1, $2, $3, $4, $5, $6)', ['Prime SMS Admin', 'admin@primesms.app', 'primesms', 'Primesms', 'admin', 999999]);
+            (0, logger_1.logStartup)('✅ Admin user created successfully', {
+                username: 'primesms',
+                email: 'admin@primesms.app'
+            });
+        }
+        else {
+            (0, logger_1.logStartup)('ℹ️  Admin user already exists');
+        }
+        client.release();
+    }
+    catch (error) {
+        (0, logger_1.logError)('Failed to create admin user', error);
+    }
+};
+const ConnectPgSimple = (0, connect_pg_simple_1.default)(express_session_1.default);
+const isProd = process.env.NODE_ENV === 'production';
 app.use((0, express_session_1.default)({
-    store: new pgSession({
+    store: new ConnectPgSimple({
         pool: db_1.default,
         tableName: 'session',
         createTableIfMissing: true
     }),
-    name: 'connect.sid',
-    secret: process.env.SESSION_SECRET || 'fallback-secret-key-for-development',
+    name: 'psid',
+    secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-    },
+        sameSite: isProd ? 'lax' : 'lax',
+        secure: isProd,
+        maxAge: 7 * 24 * 60 * 60 * 1000
+    }
 }));
 app.use(health_1.default);
 app.use('/api', health_1.default);
 console.log('[HEALTH] routes /health & /healthz ready');
 app.use('/api/auth', auth_1.default);
+app.get('/api/debug/session', (req, res) => {
+    const s = req.session;
+    res.json({
+        hasSession: Boolean(req.session),
+        userId: s?.userId ?? null
+    });
+});
 app.use('/api/admin', admin_1.default);
 app.use('/api/templates', templates_1.default);
 app.use('/api/whatsapp', whatsapp_1.default);

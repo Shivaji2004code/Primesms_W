@@ -2,6 +2,7 @@ import express from 'express';
 import pool from '../db';
 import { CreateUserRequest, LoginRequest, User, SessionUser } from '../types';
 import { requireAuth } from '../middleware/auth';
+import crypto from 'crypto';
 
 // In-memory OTP store (username -> {otp, phone, expires, lastSent})
 interface OtpRecord {
@@ -22,6 +23,14 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000);
+
+// Optional: constant-time compare helper
+function constantTimeEqual(a: string, b: string) {
+  const ab = Buffer.from(a ?? '', 'utf8');
+  const bb = Buffer.from(b ?? '', 'utf8');
+  if (ab.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ab, bb);
+}
 
 // API Response interface
 interface ApiResponse {
@@ -145,62 +154,59 @@ router.post('/signup', async (req, res) => {
 // Login route
 router.post('/login', async (req, res) => {
   try {
-    const { username, password }: LoginRequest = req.body;
-
+    const { username, password } = req.body ?? {};
     if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password are required' });
+      return res.status(400).json({ error: 'Missing credentials' });
     }
 
-    // Find user by username
-    const result = await pool.query(
-      'SELECT id, name, email, username, password, role, credit_balance FROM users WHERE username = $1',
+    // Fetch user first (recommended)
+    const { rows } = await pool.query(
+      'SELECT id, username, password, name, email, role, credit_balance FROM users WHERE username = $1 LIMIT 1',
       [username]
     );
 
-    if (result.rows.length === 0) {
+    const user = rows[0];
+    // Exact match (no hashing), use constant-time to reduce timing leaks
+    const ok = !!user && constantTimeEqual(password, user.password);
+
+    if (!ok) {
+      // NEVER 500 for invalid creds
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const user: User = result.rows[0];
+    // Minimal data in session
+    (req.session as any).userId = user.id;
 
-    // Check password (plain text comparison as per requirements)
-    if (user.password !== password) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    // Create session
-    const sessionUser: SessionUser = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      username: user.username,
-      role: user.role
-    };
-
-    req.session.user = sessionUser;
-
-    res.json({
-      message: 'Login successful',
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        username: user.username,
-        role: user.role,
-        creditBalance: user.credit_balance
+    // Ensure persisted before responding
+    req.session.save(err => {
+      if (err) {
+        console.error('session.save failed:', err);
+        return res.status(500).json({ error: 'Internal error' });
       }
+      return res.status(200).json({ 
+        ok: true,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          username: user.username,
+          role: user.role,
+          creditBalance: user.credit_balance
+        }
+      });
     });
-
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+  } catch (err) {
+    // Any unexpected throw becomes a generic 500
+    console.error('login failed:', err);
+    return res.status(500).json({ error: 'Internal error' });
   }
 });
 
 // Get current user (protected route)
 router.get('/me', requireAuth, async (req, res) => {
   try {
-    const userId = req.session.user!.id;
+    const session = req.session as any;
+    const userId = session.userId;
 
     const result = await pool.query(
       'SELECT id, name, email, username, role, credit_balance, created_at FROM users WHERE id = $1',
@@ -239,7 +245,7 @@ router.post('/logout', requireAuth, (req, res) => {
       return res.status(500).json({ error: 'Could not log out' });
     }
     
-    res.clearCookie('connect.sid');
+    res.clearCookie('psid');
     res.json({ message: 'Logged out successfully' });
   });
 });
@@ -408,7 +414,8 @@ router.post('/verify-otp', (req, res) => {
 router.put('/update-profile', requireAuth, async (req, res) => {
   try {
     const { name, email } = req.body;
-    const userId = req.session.user!.id;
+    const session = req.session as any;
+    const userId = session.userId;
 
     if (!name || !email) {
       return res.status(400).json({ 
