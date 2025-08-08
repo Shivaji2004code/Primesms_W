@@ -7,7 +7,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import hpp from 'hpp';
-import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
 import path from 'path';
@@ -37,6 +36,19 @@ import { requireAuthWithRedirect } from './middleware/auth';
 
 // Import services
 import { logCleanupService } from './services/logCleanup';
+
+// Import rate limiting configuration
+import {
+  globalLimiter,
+  authLimiter,
+  adminLimiter,
+  loginLimiter,
+  otpLimiter,
+  resetLimiter,
+  writeLimiter,
+  readLimiter,
+  noLimiter
+} from './config/rateLimit';
 
 // Setup global error handlers
 setupGlobalErrorHandlers();
@@ -89,32 +101,8 @@ app.use(helmet({
   }
 }));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: env.rateLimit.windowMs,
-  max: env.rateLimit.maxRequests,
-  message: {
-    success: false,
-    error: 'Too many requests, please try again later.',
-    retryAfter: Math.ceil(env.rateLimit.windowMs / 1000)
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: (req, res) => {
-    logger.warn('Rate limit exceeded', {
-      ip: req.ip,
-      userAgent: req.get('User-Agent'),
-      path: req.path
-    });
-    res.status(429).json({
-      success: false,
-      error: 'Too many requests, please try again later.',
-      retryAfter: Math.ceil(env.rateLimit.windowMs / 1000)
-    });
-  }
-});
-
-app.use(limiter);
+// Apply global rate limiter (very generous limits)
+app.use(globalLimiter);
 
 // HTTP Parameter Pollution protection
 app.use(hpp({
@@ -213,16 +201,20 @@ app.use(session({
 // API ROUTES
 // ============================================================================
 
-// Health check routes (no authentication required)
-app.use(healthRoutes); // Mount at root level for /health and /healthz
-app.use('/api', healthRoutes); // Also mount under /api for existing /api/health
+// Health check routes (no rate limiting)
+app.use(noLimiter, healthRoutes); // Mount at root level for /health and /healthz
+app.use('/api', noLimiter, healthRoutes); // Also mount under /api for existing /api/health
 console.log('[HEALTH] routes /health & /healthz ready');
 
-// Authentication routes
-app.use('/api/auth', authRoutes);
+// Authentication routes with specific limiters
+app.use('/api/auth/login', loginLimiter);
+app.use('/api/auth/forgot-password', otpLimiter);
+app.use('/api/auth/verify-otp', otpLimiter);
+app.use('/api/auth/reset-password', resetLimiter);
+app.use('/api/auth', authLimiter, authRoutes);
 
-// Debug routes
-app.get('/api/debug/session', (req, res) => {
+// Debug routes (no additional limiting)
+app.get('/api/debug/session', noLimiter, (req, res) => {
   const s = req.session as any;
   res.json({
     hasSession: Boolean(req.session),
@@ -230,13 +222,17 @@ app.get('/api/debug/session', (req, res) => {
   });
 });
 
-// Protected routes (require authentication)
-app.use('/api/admin', adminRoutes);
-app.use('/api/templates', templateRoutes);
-app.use('/api/whatsapp', whatsappRoutes);
-app.use('/api/send', sendRoutes);
-app.use('/api/credits', creditsRoutes);
-app.use('/api/logs', logsRoutes);
+// Admin routes (high limits to prevent "Too many requests" errors)
+app.use('/api/admin', adminLimiter, adminRoutes);
+
+// Read-heavy routes (generous limits for dashboard functionality)
+app.use('/api/templates', readLimiter, templateRoutes);
+app.use('/api/logs', readLimiter, logsRoutes);
+app.use('/api/credits', readLimiter, creditsRoutes);
+
+// Write-heavy routes (reasonable limits for messaging operations)
+app.use('/api/whatsapp', writeLimiter, whatsappRoutes);
+app.use('/api/send', writeLimiter, sendRoutes);
 
 // API Root endpoint
 app.get('/api', (req, res) => {

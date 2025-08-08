@@ -11,7 +11,6 @@ const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const compression_1 = __importDefault(require("compression"));
 const hpp_1 = __importDefault(require("hpp"));
-const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const express_session_1 = __importDefault(require("express-session"));
 const connect_pg_simple_1 = __importDefault(require("connect-pg-simple"));
 const path_1 = __importDefault(require("path"));
@@ -28,6 +27,7 @@ const send_1 = __importDefault(require("./routes/send"));
 const credits_1 = __importDefault(require("./routes/credits"));
 const logs_1 = __importDefault(require("./routes/logs"));
 const auth_2 = require("./middleware/auth");
+const rateLimit_1 = require("./config/rateLimit");
 (0, errorHandler_1.setupGlobalErrorHandlers)();
 const app = (0, express_1.default)();
 exports.app = app;
@@ -64,30 +64,7 @@ app.use((0, helmet_1.default)({
         preload: true
     }
 }));
-const limiter = (0, express_rate_limit_1.default)({
-    windowMs: env_1.env.rateLimit.windowMs,
-    max: env_1.env.rateLimit.maxRequests,
-    message: {
-        success: false,
-        error: 'Too many requests, please try again later.',
-        retryAfter: Math.ceil(env_1.env.rateLimit.windowMs / 1000)
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
-    handler: (req, res) => {
-        logger_1.logger.warn('Rate limit exceeded', {
-            ip: req.ip,
-            userAgent: req.get('User-Agent'),
-            path: req.path
-        });
-        res.status(429).json({
-            success: false,
-            error: 'Too many requests, please try again later.',
-            retryAfter: Math.ceil(env_1.env.rateLimit.windowMs / 1000)
-        });
-    }
-});
-app.use(limiter);
+app.use(rateLimit_1.globalLimiter);
 app.use((0, hpp_1.default)({
     whitelist: ['tags', 'categories']
 }));
@@ -155,23 +132,27 @@ app.use((0, express_session_1.default)({
         maxAge: 7 * 24 * 60 * 60 * 1000
     }
 }));
-app.use(health_1.default);
-app.use('/api', health_1.default);
+app.use(rateLimit_1.noLimiter, health_1.default);
+app.use('/api', rateLimit_1.noLimiter, health_1.default);
 console.log('[HEALTH] routes /health & /healthz ready');
-app.use('/api/auth', auth_1.default);
-app.get('/api/debug/session', (req, res) => {
+app.use('/api/auth/login', rateLimit_1.loginLimiter);
+app.use('/api/auth/forgot-password', rateLimit_1.otpLimiter);
+app.use('/api/auth/verify-otp', rateLimit_1.otpLimiter);
+app.use('/api/auth/reset-password', rateLimit_1.resetLimiter);
+app.use('/api/auth', rateLimit_1.authLimiter, auth_1.default);
+app.get('/api/debug/session', rateLimit_1.noLimiter, (req, res) => {
     const s = req.session;
     res.json({
         hasSession: Boolean(req.session),
         userId: s?.userId ?? null
     });
 });
-app.use('/api/admin', admin_1.default);
-app.use('/api/templates', templates_1.default);
-app.use('/api/whatsapp', whatsapp_1.default);
-app.use('/api/send', send_1.default);
-app.use('/api/credits', credits_1.default);
-app.use('/api/logs', logs_1.default);
+app.use('/api/admin', rateLimit_1.adminLimiter, admin_1.default);
+app.use('/api/templates', rateLimit_1.readLimiter, templates_1.default);
+app.use('/api/logs', rateLimit_1.readLimiter, logs_1.default);
+app.use('/api/credits', rateLimit_1.readLimiter, credits_1.default);
+app.use('/api/whatsapp', rateLimit_1.writeLimiter, whatsapp_1.default);
+app.use('/api/send', rateLimit_1.writeLimiter, send_1.default);
 app.get('/api', (req, res) => {
     res.json({
         message: 'Prime SMS API',
