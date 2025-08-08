@@ -249,6 +249,11 @@ app.get('/api', (req, res) => {
   });
 });
 
+// API 404 (keep logs clear)
+app.use('/api', (req, res) => {
+  return res.status(404).json({ error: 'ROUTE_NOT_FOUND', path: req.originalUrl });
+});
+
 // Legacy routes with redirect middleware
 app.get('/templates', requireAuthWithRedirect, (req, res) => {
   res.redirect('/api/templates');
@@ -342,6 +347,29 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 // START SERVER
 // ============================================================================
 
+// Print routes for debugging
+function printRoutes() {
+  const out: string[] = [];
+  try {
+    // @ts-ignore
+    (app as any)._router?.stack?.forEach((layer: any) => {
+      if (layer.route?.path) {
+        const methods = Object.keys(layer.route.methods).join(',').toUpperCase();
+        out.push(`${methods} ${layer.route.path}`);
+      } else if (layer.regexp && layer.handle?.stack) {
+        // Router middleware
+        const match = layer.regexp.toString().match(/\/\^\\?\/(.*?)\\?\$\//);
+        if (match) {
+          out.push(`ROUTER ${match[1].replace(/\\\//g, '/')}`);
+        }
+      }
+    });
+    console.log('[ROUTES]', out.slice(0, 20)); // Limit output
+  } catch (error) {
+    console.log('[ROUTES] Error listing routes:', error);
+  }
+}
+
 const startServer = async (): Promise<void> => {
   try {
     // Connect to database first
@@ -366,6 +394,9 @@ const startServer = async (): Promise<void> => {
         corsOrigins: env.corsOrigins,
         rateLimit: env.rateLimit
       });
+      
+      // Print route table for debugging
+      printRoutes();
     });
     
     // Handle server errors

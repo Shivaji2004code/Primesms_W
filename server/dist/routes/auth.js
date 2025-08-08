@@ -103,40 +103,65 @@ router.post('/signup', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+function sendErr(res, status, code, extra = {}) {
+    return res.status(status).json({ error: code, ...extra });
+}
 router.post('/login', async (req, res) => {
+    const started = Date.now();
     try {
         const { username, password } = req.body ?? {};
-        if (!username || !password) {
-            return res.status(400).json({ error: 'Missing credentials' });
+        console.log('[AUTH] input:', { username, hasPassword: Boolean(password) });
+        if (!username || !password)
+            return sendErr(res, 400, 'MISSING_CREDENTIALS');
+        let rows;
+        try {
+            const sql = 'SELECT id, username, password, name, email, role, credit_balance FROM users WHERE username = $1 LIMIT 1';
+            rows = (await db_1.default.query(sql, [username])).rows;
+            console.log('[AUTH] db rows:', { rowsLen: rows.length, keys: rows[0] ? Object.keys(rows[0]) : [] });
         }
-        const { rows } = await db_1.default.query('SELECT id, username, password, name, email, role, credit_balance FROM users WHERE username = $1 LIMIT 1', [username]);
+        catch (dbErr) {
+            console.error('[AUTH] DB_QUERY_FAILED:', dbErr);
+            return sendErr(res, 500, 'DB_QUERY_FAILED');
+        }
         const user = rows[0];
-        const ok = !!user && constantTimeEqual(password, user.password);
-        if (!ok) {
-            return res.status(401).json({ error: 'Invalid credentials' });
+        if (!user)
+            return sendErr(res, 401, 'USER_NOT_FOUND');
+        if (typeof user.password !== 'string') {
+            console.error('[AUTH] PASSWORD_FIELD_INVALID:', { keys: Object.keys(user), passwordType: typeof user.password });
+            return sendErr(res, 500, 'PASSWORD_FIELD_INVALID');
         }
-        req.session.userId = user.id;
-        req.session.save(err => {
-            if (err) {
-                console.error('session.save failed:', err);
-                return res.status(500).json({ error: 'Internal error' });
-            }
-            return res.status(200).json({
-                ok: true,
-                user: {
-                    id: user.id,
-                    name: user.name,
-                    email: user.email,
-                    username: user.username,
-                    role: user.role,
-                    creditBalance: user.credit_balance
+        const passwordMatch = constantTimeEqual(password, user.password);
+        if (!passwordMatch)
+            return sendErr(res, 401, 'INVALID_PASSWORD');
+        try {
+            req.session.userId = user.id;
+            req.session.save((err) => {
+                if (err) {
+                    console.error('[AUTH] SESSION_SAVE_FAILED:', err);
+                    return sendErr(res, 500, 'SESSION_SAVE_FAILED');
                 }
+                console.log('[AUTH] login ok:', { userId: user.id, ms: Date.now() - started });
+                return res.status(200).json({
+                    ok: true,
+                    user: {
+                        id: user.id,
+                        name: user.name,
+                        email: user.email,
+                        username: user.username,
+                        role: user.role,
+                        creditBalance: user.credit_balance
+                    }
+                });
             });
-        });
+        }
+        catch (sessErr) {
+            console.error('[AUTH] SESSION_BLOCK_THROW:', sessErr);
+            return sendErr(res, 500, 'SESSION_BLOCK_THROW');
+        }
     }
     catch (err) {
-        console.error('login failed:', err);
-        return res.status(500).json({ error: 'Internal error' });
+        console.error('[AUTH] UNCAUGHT:', err);
+        return sendErr(res, 500, 'UNCAUGHT');
     }
 });
 router.get('/me', auth_1.requireAuth, async (req, res) => {

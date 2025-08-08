@@ -181,6 +181,9 @@ app.get('/api', (req, res) => {
         documentation: '/api/health'
     });
 });
+app.use('/api', (req, res) => {
+    return res.status(404).json({ error: 'ROUTE_NOT_FOUND', path: req.originalUrl });
+});
 app.get('/templates', auth_2.requireAuthWithRedirect, (req, res) => {
     res.redirect('/api/templates');
 });
@@ -237,6 +240,27 @@ const gracefulShutdown = async (signal) => {
 };
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+function printRoutes() {
+    const out = [];
+    try {
+        app._router?.stack?.forEach((layer) => {
+            if (layer.route?.path) {
+                const methods = Object.keys(layer.route.methods).join(',').toUpperCase();
+                out.push(`${methods} ${layer.route.path}`);
+            }
+            else if (layer.regexp && layer.handle?.stack) {
+                const match = layer.regexp.toString().match(/\/\^\\?\/(.*?)\\?\$\//);
+                if (match) {
+                    out.push(`ROUTER ${match[1].replace(/\\\//g, '/')}`);
+                }
+            }
+        });
+        console.log('[ROUTES]', out.slice(0, 20));
+    }
+    catch (error) {
+        console.log('[ROUTES] Error listing routes:', error);
+    }
+}
 const startServer = async () => {
     try {
         await connectDatabase();
@@ -256,6 +280,7 @@ const startServer = async () => {
                 corsOrigins: env_1.env.corsOrigins,
                 rateLimit: env_1.env.rateLimit
             });
+            printRoutes();
         });
         server.on('error', (error) => {
             if (error.code === 'EADDRINUSE') {

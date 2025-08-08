@@ -151,54 +151,71 @@ router.post('/signup', async (req, res) => {
   }
 });
 
-// Login route
+// TEMP: narrow helper to send errors with a code (remove later)
+function sendErr(res: any, status: number, code: string, extra: any = {}) {
+  return res.status(status).json({ error: code, ...extra });
+}
+
+// Login route - DIAGNOSTIC VERSION
 router.post('/login', async (req, res) => {
+  const started = Date.now();
   try {
+    // 1) Input
     const { username, password } = req.body ?? {};
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Missing credentials' });
+    console.log('[AUTH] input:', { username, hasPassword: Boolean(password) });
+    if (!username || !password) return sendErr(res, 400, 'MISSING_CREDENTIALS');
+
+    // 2) DB query
+    let rows;
+    try {
+      const sql = 'SELECT id, username, password, name, email, role, credit_balance FROM users WHERE username = $1 LIMIT 1';
+      rows = (await pool.query(sql, [username])).rows;
+      console.log('[AUTH] db rows:', { rowsLen: rows.length, keys: rows[0] ? Object.keys(rows[0]) : [] });
+    } catch (dbErr) {
+      console.error('[AUTH] DB_QUERY_FAILED:', dbErr);
+      return sendErr(res, 500, 'DB_QUERY_FAILED');
     }
 
-    // Fetch user first (recommended)
-    const { rows } = await pool.query(
-      'SELECT id, username, password, name, email, role, credit_balance FROM users WHERE username = $1 LIMIT 1',
-      [username]
-    );
-
+    // 3) Direct compare (no hashing)
     const user = rows[0];
-    // Exact match (no hashing), use constant-time to reduce timing leaks
-    const ok = !!user && constantTimeEqual(password, user.password);
-
-    if (!ok) {
-      // NEVER 500 for invalid creds
-      return res.status(401).json({ error: 'Invalid credentials' });
+    if (!user) return sendErr(res, 401, 'USER_NOT_FOUND');
+    if (typeof user.password !== 'string') {
+      console.error('[AUTH] PASSWORD_FIELD_INVALID:', { keys: Object.keys(user), passwordType: typeof user.password });
+      return sendErr(res, 500, 'PASSWORD_FIELD_INVALID');
     }
+    
+    // Use constant-time comparison
+    const passwordMatch = constantTimeEqual(password, user.password);
+    if (!passwordMatch) return sendErr(res, 401, 'INVALID_PASSWORD');
 
-    // Minimal data in session
-    (req.session as any).userId = user.id;
-
-    // Ensure persisted before responding
-    req.session.save(err => {
-      if (err) {
-        console.error('session.save failed:', err);
-        return res.status(500).json({ error: 'Internal error' });
-      }
-      return res.status(200).json({ 
-        ok: true,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          username: user.username,
-          role: user.role,
-          creditBalance: user.credit_balance
+    // 4) Session save
+    try {
+      (req.session as any).userId = user.id;
+      req.session.save((err: any) => {
+        if (err) {
+          console.error('[AUTH] SESSION_SAVE_FAILED:', err);
+          return sendErr(res, 500, 'SESSION_SAVE_FAILED');
         }
+        console.log('[AUTH] login ok:', { userId: user.id, ms: Date.now() - started });
+        return res.status(200).json({ 
+          ok: true,
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            username: user.username,
+            role: user.role,
+            creditBalance: user.credit_balance
+          }
+        });
       });
-    });
+    } catch (sessErr) {
+      console.error('[AUTH] SESSION_BLOCK_THROW:', sessErr);
+      return sendErr(res, 500, 'SESSION_BLOCK_THROW');
+    }
   } catch (err) {
-    // Any unexpected throw becomes a generic 500
-    console.error('login failed:', err);
-    return res.status(500).json({ error: 'Internal error' });
+    console.error('[AUTH] UNCAUGHT:', err);
+    return sendErr(res, 500, 'UNCAUGHT');
   }
 });
 
