@@ -951,7 +951,14 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
         }
         console.log(`✅ DEBUG QUICK-SEND: Phone validation passed`);
         try {
+            console.log(`💰 DEBUG QUICK-SEND: Checking credits for template: "${template_name}", recipients: ${validRecipients.length}`);
             const creditCheck = await (0, creditSystem_1.preCheckCreditsForBulk)(userId, template_name, validRecipients.length);
+            console.log(`💰 DEBUG QUICK-SEND: Credit check result:`, {
+                sufficient: creditCheck.sufficient,
+                required: creditCheck.requiredCredits,
+                available: creditCheck.currentBalance,
+                category: creditCheck.category
+            });
             if (!creditCheck.sufficient) {
                 return res.status(400).json({
                     success: false,
@@ -963,13 +970,24 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
                     }
                 });
             }
-            console.log(`[CREDIT SYSTEM] Pre-check passed: ${creditCheck.requiredCredits} credits required for ${validRecipients.length} ${creditCheck.category} messages`);
+            console.log(`✅ [CREDIT SYSTEM] Pre-check passed: ${creditCheck.requiredCredits} credits required for ${validRecipients.length} ${creditCheck.category} messages`);
         }
         catch (creditError) {
-            console.error('Credit pre-check error:', creditError);
+            console.error('❌ QUICK-SEND Credit pre-check error:', {
+                error: creditError.message,
+                stack: creditError.stack,
+                userId,
+                template_name,
+                recipientCount: validRecipients.length
+            });
             return res.status(500).json({
                 success: false,
-                error: 'Failed to check credit balance'
+                error: 'Failed to check credit balance',
+                debug: {
+                    message: creditError.message,
+                    userId,
+                    template_name
+                }
             });
         }
         const numberResult = await db_1.default.query('SELECT access_token, business_name FROM user_business_info WHERE user_id = $1 AND whatsapp_number_id = $2 AND is_active = true', [userId, phone_number_id]);

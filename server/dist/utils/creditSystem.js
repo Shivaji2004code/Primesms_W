@@ -131,11 +131,31 @@ async function addCredits(transaction) {
     }
 }
 async function getTemplateCategory(userId, templateName) {
-    const result = await db_1.default.query('SELECT category FROM templates WHERE user_id = $1 AND name = $2', [userId, templateName]);
-    if (result.rows.length === 0) {
-        return null;
+    try {
+        console.log(`💰 DEBUG CREDIT: Getting template category for userId: ${userId}, templateName: "${templateName}"`);
+        const result = await db_1.default.query('SELECT category FROM templates WHERE user_id = $1 AND name = $2', [userId, templateName]);
+        console.log(`💰 DEBUG CREDIT: Template query result:`, {
+            rowCount: result.rows.length,
+            category: result.rows[0]?.category
+        });
+        if (result.rows.length === 0) {
+            console.log(`❌ DEBUG CREDIT: Template not found for user ${userId}, template "${templateName}"`);
+            return null;
+        }
+        const category = result.rows[0].category;
+        console.log(`✅ DEBUG CREDIT: Template category found: ${category}`);
+        return category;
     }
-    return result.rows[0].category;
+    catch (error) {
+        console.error(`❌ DEBUG CREDIT: Database error in getTemplateCategory:`, {
+            error: error.message,
+            code: error.code,
+            userId,
+            templateName,
+            stack: error.stack
+        });
+        throw new Error(`Failed to get template category: ${error.message}`);
+    }
 }
 async function calculateCreditCost(userId, templateName, messageCount = 1) {
     const category = await getTemplateCategory(userId, templateName);

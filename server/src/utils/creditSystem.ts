@@ -214,16 +214,38 @@ export async function getTemplateCategory(
   userId: string, 
   templateName: string
 ): Promise<TemplateCategory | null> {
-  const result = await pool.query(
-    'SELECT category FROM templates WHERE user_id = $1 AND name = $2',
-    [userId, templateName]
-  );
-  
-  if (result.rows.length === 0) {
-    return null;
+  try {
+    console.log(`💰 DEBUG CREDIT: Getting template category for userId: ${userId}, templateName: "${templateName}"`);
+    
+    const result = await pool.query(
+      'SELECT category FROM templates WHERE user_id = $1 AND name = $2',
+      [userId, templateName]
+    );
+    
+    console.log(`💰 DEBUG CREDIT: Template query result:`, {
+      rowCount: result.rows.length,
+      category: result.rows[0]?.category
+    });
+    
+    if (result.rows.length === 0) {
+      console.log(`❌ DEBUG CREDIT: Template not found for user ${userId}, template "${templateName}"`);
+      return null;
+    }
+    
+    const category = result.rows[0].category as TemplateCategory;
+    console.log(`✅ DEBUG CREDIT: Template category found: ${category}`);
+    
+    return category;
+  } catch (error: any) {
+    console.error(`❌ DEBUG CREDIT: Database error in getTemplateCategory:`, {
+      error: error.message,
+      code: error.code,
+      userId,
+      templateName,
+      stack: error.stack
+    });
+    throw new Error(`Failed to get template category: ${error.message}`);
   }
-  
-  return result.rows[0].category as TemplateCategory;
 }
 
 /**

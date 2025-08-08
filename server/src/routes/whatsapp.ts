@@ -1185,7 +1185,16 @@ router.post('/quick-send', requireAuth, upload.single('headerImage'), async (req
     
     // CREDIT SYSTEM: Pre-check credits before sending
     try {
+      console.log(`💰 DEBUG QUICK-SEND: Checking credits for template: "${template_name}", recipients: ${validRecipients.length}`);
+      
       const creditCheck = await preCheckCreditsForBulk(userId, template_name, validRecipients.length);
+      
+      console.log(`💰 DEBUG QUICK-SEND: Credit check result:`, {
+        sufficient: creditCheck.sufficient,
+        required: creditCheck.requiredCredits,
+        available: creditCheck.currentBalance,
+        category: creditCheck.category
+      });
       
       if (!creditCheck.sufficient) {
         return res.status(400).json({
@@ -1199,12 +1208,23 @@ router.post('/quick-send', requireAuth, upload.single('headerImage'), async (req
         });
       }
       
-      console.log(`[CREDIT SYSTEM] Pre-check passed: ${creditCheck.requiredCredits} credits required for ${validRecipients.length} ${creditCheck.category} messages`);
-    } catch (creditError) {
-      console.error('Credit pre-check error:', creditError);
+      console.log(`✅ [CREDIT SYSTEM] Pre-check passed: ${creditCheck.requiredCredits} credits required for ${validRecipients.length} ${creditCheck.category} messages`);
+    } catch (creditError: any) {
+      console.error('❌ QUICK-SEND Credit pre-check error:', {
+        error: creditError.message,
+        stack: creditError.stack,
+        userId,
+        template_name,
+        recipientCount: validRecipients.length
+      });
       return res.status(500).json({
         success: false,
-        error: 'Failed to check credit balance'
+        error: 'Failed to check credit balance',
+        debug: {
+          message: creditError.message,
+          userId,
+          template_name
+        }
       });
     }
 
