@@ -107,6 +107,8 @@ app.use(session({
   }
 }));
 
+console.log('[SESSION] using connect-pg-simple');
+
 // Serve static files from client build
 const clientDist = path.join(__dirname, '../../client/dist');
 app.use(express.static(clientDist, { maxAge: '7d', etag: true }));

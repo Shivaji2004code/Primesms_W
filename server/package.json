@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "dev": "nodemon src/index.ts",
     "lint": "tsc --noEmit",
+    "db:smoke": "ts-node scripts/db-smoke.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
