@@ -1,0 +1,17 @@
+.env
+.env.*
+server/.env
+server/.env.*
+client/.env
+client/.env.*
+node_modules
+*/node_modules
+dist
+*/dist
+*.log
+npm-debug.log*
+.git
+.gitignore
+README.md
+Dockerfile
+docker-compose.yml
