@@ -10,10 +10,8 @@ import rateLimit from 'express-rate-limit';
 import compression from 'compression';
 import path from 'path';
 
-// Load environment variables only in development
-if (process.env.NODE_ENV !== 'production') {
-  dotenv.config();
-}
+// Load environment variables (always load for local testing)
+dotenv.config();
 
 // Import routes
 import authRoutes from './routes/auth';
@@ -57,6 +55,10 @@ app.use(pinoHttp({ logger }));
 app.use(compression());
 
 // Database connection - supports both DATABASE_URL and individual variables
+console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'Set' : 'Not set');
+console.log('DB_HOST:', process.env.DB_HOST);
+console.log('DB_PORT:', process.env.DB_PORT);
+
 export const pool = new Pool(
   process.env.DATABASE_URL 
     ? { connectionString: process.env.DATABASE_URL }

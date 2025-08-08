@@ -15,10 +15,8 @@ const pino_http_1 = __importDefault(require("pino-http"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const compression_1 = __importDefault(require("compression"));
 const path_1 = __importDefault(require("path"));
-// Load environment variables only in development
-if (process.env.NODE_ENV !== 'production') {
-    dotenv_1.default.config();
-}
+// Load environment variables (always load for local testing)
+dotenv_1.default.config();
 // Import routes
 const auth_1 = __importDefault(require("./routes/auth"));
 const admin_1 = __importDefault(require("./routes/admin"));
