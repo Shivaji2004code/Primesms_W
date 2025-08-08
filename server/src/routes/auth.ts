@@ -546,4 +546,7 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
+// Debug probe (temporary - remove after testing)
+router.get('/__ping', (_req, res) => res.json({ok: true, route: '/api/auth/__ping'}));
+
 export default router;
