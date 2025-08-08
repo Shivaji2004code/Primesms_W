@@ -9,14 +9,19 @@ const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const express_session_1 = __importDefault(require("express-session"));
 const dotenv_1 = __importDefault(require("dotenv"));
-const pg_1 = require("pg");
 const pino_1 = __importDefault(require("pino"));
 const pino_http_1 = __importDefault(require("pino-http"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const compression_1 = __importDefault(require("compression"));
 const path_1 = __importDefault(require("path"));
+// @ts-ignore types may vary
+const connect_pg_simple_1 = __importDefault(require("connect-pg-simple"));
 // Load environment variables (always load for local testing)
 dotenv_1.default.config();
+// Import database pool
+const db_1 = require("./db");
+Object.defineProperty(exports, "pool", { enumerable: true, get: function () { return db_1.pool; } });
+const PgSession = (0, connect_pg_simple_1.default)(express_session_1.default);
 // Import routes
 const auth_1 = __importDefault(require("./routes/auth"));
 const admin_1 = __importDefault(require("./routes/admin"));
@@ -44,31 +49,11 @@ const logger = (0, pino_1.default)({
     }
 });
 const app = (0, express_1.default)();
-const PORT = Number(process.env.PORT) || 5050;
+const PORT = Number(process.env.PORT) || 3000;
 // Setup pino HTTP logging
 app.use((0, pino_http_1.default)({ logger }));
 // Compression middleware
 app.use((0, compression_1.default)());
-// Database connection - supports both DATABASE_URL and individual variables
-exports.pool = new pg_1.Pool(process.env.DATABASE_URL
-    ? { connectionString: process.env.DATABASE_URL }
-    : {
-        host: process.env.DB_HOST,
-        port: parseInt(process.env.DB_PORT || '5432'),
-        database: process.env.DB_NAME,
-        user: process.env.DB_USER,
-        password: process.env.DB_PASSWORD,
-    });
-// Test database connection
-exports.pool.connect((err, client, release) => {
-    if (err) {
-        logger.error({ err }, 'Error connecting to database');
-    }
-    else {
-        logger.info('Connected to PostgreSQL database');
-        release();
-    }
-});
 // Trust proxy for Coolify deployment
 app.set('trust proxy', 1);
 // Security middleware
@@ -90,15 +75,21 @@ if (process.env.NODE_ENV !== 'production') {
 }
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
-// Session configuration
+// Session configuration with PostgreSQL store
 app.use((0, express_session_1.default)({
-    secret: process.env.SESSION_SECRET || 'your-secret-key',
+    store: new PgSession({
+        pool: db_1.pool,
+        tableName: 'session',
+        createTableIfMissing: true
+    }),
+    secret: process.env.SESSION_SECRET || 'change-me',
     resave: false,
     saveUninitialized: false,
     cookie: {
         secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
         httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+        maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     }
 }));
 // Serve static files from client build
@@ -112,17 +103,44 @@ app.use('/api/templates', templates_1.default);
 app.use('/api/credits', credits_1.default);
 app.use('/api/logs', logs_1.default);
 app.use('/api', send_1.default);
-// Health check endpoint for Coolify
-app.get('/health', (req, res) => {
-    res.status(200).json({
-        status: 'ok',
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString()
-    });
+// Health check endpoints with database connectivity
+app.get('/healthz', async (req, res) => {
+    try {
+        await db_1.pool.query('SELECT 1');
+        res.status(200).send('ok');
+    }
+    catch (e) {
+        res.status(500).send('db down');
+    }
+});
+app.get('/health', async (req, res) => {
+    try {
+        await db_1.pool.query('SELECT 1');
+        res.status(200).json({
+            status: 'ok',
+            uptime: process.uptime(),
+            timestamp: new Date().toISOString(),
+            database: 'connected'
+        });
+    }
+    catch (e) {
+        res.status(500).json({
+            status: 'error',
+            uptime: process.uptime(),
+            timestamp: new Date().toISOString(),
+            database: 'disconnected'
+        });
+    }
 });
 // Legacy health check
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'Server is running', timestamp: new Date().toISOString() });
+app.get('/api/health', async (req, res) => {
+    try {
+        await db_1.pool.query('SELECT 1');
+        res.json({ status: 'Server is running', timestamp: new Date().toISOString(), database: 'connected' });
+    }
+    catch (e) {
+        res.status(500).json({ status: 'Server running but database disconnected', timestamp: new Date().toISOString() });
+    }
 });
 // Centralized error handling middleware
 // eslint-disable-next-line no-unused-vars
@@ -151,7 +169,7 @@ const shutdown = async (signal) => {
             await new Promise((resolve) => server.close(() => resolve()));
         }
         // Close database pool
-        await exports.pool.end();
+        await db_1.pool.end();
         logger.info('Graceful shutdown complete');
         process.exit(0);
     }
@@ -164,8 +182,7 @@ const shutdown = async (signal) => {
 ['SIGTERM', 'SIGINT'].forEach(signal => process.on(signal, () => shutdown(signal)));
 // Start server
 const server = app.listen(PORT, '0.0.0.0', () => {
-    logger.info(`Server listening on ${PORT}`);
-    logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    logger.info(`Server running on http://0.0.0.0:${PORT} (env=${process.env.NODE_ENV})`);
     // Start log cleanup service
     logCleanup_1.logCleanupService.startScheduledCleanup();
 });

@@ -1,3 +1,3 @@
-import { Pool } from 'pg';
-export declare const pool: Pool;
+import { pool } from './db';
+export { pool };
 //# sourceMappingURL=index.d.ts.map
