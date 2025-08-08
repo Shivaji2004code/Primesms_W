@@ -227,10 +227,24 @@ app.use('/api/auth', authLimiter, authRoutes);
 // Debug routes (no additional limiting)
 app.get('/api/debug/session', noLimiter, (req, res) => {
   const s = req.session as any;
-  res.json({
+  const sessionData = {
     hasSession: Boolean(req.session),
-    userId: s?.userId ?? null
-  });
+    userId: s?.userId ?? null,
+    sessionId: req.sessionID,
+    sessionStore: Boolean(req.sessionStore),
+    cookieName: req.session?.cookie ? 'psid' : 'no-cookie',
+    cookieSettings: req.session?.cookie,
+    userAgent: req.get('User-Agent'),
+    ip: req.ip,
+    headers: {
+      authorization: req.get('Authorization'),
+      cookie: req.get('Cookie') ? 'present' : 'missing'
+    },
+    timestamp: new Date().toISOString()
+  };
+  
+  console.log('🐛 DEBUG SESSION REQUEST:', sessionData);
+  res.json(sessionData);
 });
 
 // Admin routes (high limits to prevent "Too many requests" errors)

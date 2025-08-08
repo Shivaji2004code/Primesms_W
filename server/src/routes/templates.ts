@@ -984,33 +984,68 @@ router.post('/', upload.single('headerMedia'), async (req, res) => {
     }
 
     // Save template to database
-    const result = await pool.query(
-      `INSERT INTO templates 
-       (user_id, name, category, language, status, components, template_id, 
-        message_send_ttl_seconds, allow_category_change, whatsapp_response, rejection_reason, 
-        header_media_id, header_type, header_handle, media_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-       RETURNING id, user_id, name, category, language, status, components, 
-                 template_id, message_send_ttl_seconds, allow_category_change, 
-                 quality_rating, rejection_reason, header_media_id, header_type, media_id, created_at, updated_at`,
-      [
-        userId,
-        templateData.name,
-        templateData.category,
-        templateData.language || 'en_US',
-        status,
-        JSON.stringify(templateData.components),
-        template_id,
-        templateData.message_send_ttl_seconds,
-        templateData.allow_category_change ?? true,
-        whatsapp_response ? JSON.stringify(whatsapp_response) : null,
-        rejection_reason,
-        header_media_id,
-        header_type,
-        header_handle,
-        media_id
-      ]
-    );
+    console.log('💾 Saving template to database:', {
+      userId,
+      name: templateData.name,
+      category: templateData.category,
+      status,
+      template_id,
+      components_length: templateData.components?.length
+    });
+    
+    let result;
+    try {
+      result = await pool.query(
+        `INSERT INTO templates 
+         (user_id, name, category, language, status, components, template_id, 
+          message_send_ttl_seconds, allow_category_change, whatsapp_response, rejection_reason, 
+          header_media_id, header_type, header_handle, media_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+         RETURNING *`,
+        [
+          userId,
+          templateData.name,
+          templateData.category,
+          templateData.language || 'en_US',
+          status,
+          JSON.stringify(templateData.components),
+          template_id,
+          templateData.message_send_ttl_seconds,
+          templateData.allow_category_change ?? true,
+          whatsapp_response ? JSON.stringify(whatsapp_response) : null,
+          rejection_reason,
+          header_media_id,
+          header_type,
+          header_handle,
+          media_id
+        ]
+      );
+    } catch (dbError: any) {
+      console.error('❌ Database INSERT error:', dbError);
+      console.error('❌ Error details:', {
+        code: dbError.code,
+        message: dbError.message,
+        detail: dbError.detail,
+        hint: dbError.hint,
+        position: dbError.position,
+        where: dbError.where
+      });
+      return res.status(500).json({ 
+        error: 'Database error while saving template',
+        details: dbError.message,
+        hint: 'Check if all required columns exist in templates table'
+      });
+    }
+
+    if (result.rows.length === 0) {
+      console.error('❌ No rows returned from INSERT - template not saved');
+      return res.status(500).json({ 
+        error: 'Failed to save template to database',
+        details: 'No rows returned from INSERT statement'
+      });
+    }
+
+    console.log('✅ Template saved to database successfully:', result.rows[0].id);
 
     const newTemplate = result.rows[0];
 

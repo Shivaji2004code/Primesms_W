@@ -141,10 +141,23 @@ app.use('/api/auth/reset-password', rateLimit_1.resetLimiter);
 app.use('/api/auth', rateLimit_1.authLimiter, auth_1.default);
 app.get('/api/debug/session', rateLimit_1.noLimiter, (req, res) => {
     const s = req.session;
-    res.json({
+    const sessionData = {
         hasSession: Boolean(req.session),
-        userId: s?.userId ?? null
-    });
+        userId: s?.userId ?? null,
+        sessionId: req.sessionID,
+        sessionStore: Boolean(req.sessionStore),
+        cookieName: req.session?.cookie ? 'psid' : 'no-cookie',
+        cookieSettings: req.session?.cookie,
+        userAgent: req.get('User-Agent'),
+        ip: req.ip,
+        headers: {
+            authorization: req.get('Authorization'),
+            cookie: req.get('Cookie') ? 'present' : 'missing'
+        },
+        timestamp: new Date().toISOString()
+    };
+    console.log('🐛 DEBUG SESSION REQUEST:', sessionData);
+    res.json(sessionData);
 });
 app.use('/api/admin', rateLimit_1.adminLimiter, admin_1.default);
 app.use('/api/templates', rateLimit_1.readLimiter, templates_1.default);

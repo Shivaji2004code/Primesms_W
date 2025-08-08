@@ -20,14 +20,42 @@ const getUserFromSession = async (req: Request) => {
 
 export const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
   const session = req.session as any;
+  
+  console.log('🔐 AUTH CHECK:', {
+    path: req.path,
+    method: req.method,
+    hasSession: Boolean(req.session),
+    sessionId: req.sessionID,
+    userId: session?.userId,
+    hasCookie: Boolean(req.get('Cookie')),
+    userAgent: req.get('User-Agent')?.substring(0, 50)
+  });
+  
   if (!session?.userId) {
-    return res.status(401).json({ error: 'Authentication required' });
+    console.log('❌ AUTH FAILED: No session or userId');
+    return res.status(401).json({ 
+      error: 'Authentication required',
+      debug: {
+        hasSession: Boolean(req.session),
+        sessionId: req.sessionID,
+        hasCookie: Boolean(req.get('Cookie'))
+      }
+    });
   }
   
   const user = await getUserFromSession(req);
   if (!user) {
-    return res.status(401).json({ error: 'Authentication required' });
+    console.log('❌ AUTH FAILED: User not found in database for userId:', session.userId);
+    return res.status(401).json({ 
+      error: 'Authentication required',
+      debug: {
+        userId: session.userId,
+        userFound: false
+      }
+    });
   }
+  
+  console.log('✅ AUTH SUCCESS:', { userId: user.id, username: user.username });
   
   // Add user to request for compatibility
   (req.session as any).user = user;
