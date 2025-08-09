@@ -1105,6 +1105,11 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
         const campaignName = campaign_name || `Quick Send - ${template_name} - ${new Date().toISOString()}`;
         const campaignEntries = [];
         for (const recipient of validRecipients) {
+            const cleanRecipient = recipient?.toString().trim();
+            if (!cleanRecipient) {
+                console.error(`⚠️  Skipping empty recipient in quick send: ${campaignName}`);
+                continue;
+            }
             const campaignResult = await db_1.default.query(`INSERT INTO campaign_logs 
          (user_id, campaign_name, template_used, phone_number_id, recipient_number, language_code, status, campaign_data, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
@@ -1113,14 +1118,14 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
                 campaignName,
                 template_name,
                 phone_number_id,
-                recipient,
+                cleanRecipient,
                 language,
                 'pending',
                 JSON.stringify({ variables, template_components: templateResult.rows[0].components })
             ]);
             campaignEntries.push({
                 id: campaignResult.rows[0].id,
-                recipient: recipient
+                recipient: cleanRecipient
             });
         }
         console.log(`✅ Created ${campaignEntries.length} individual campaign_logs entries for recipients`);
@@ -1294,6 +1299,11 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
         const campaignEntries = [];
         const campaignNameFinal = campaign_name || `Campaign - ${template_name} - ${new Date().toISOString()}`;
         for (const recipient of validRecipients) {
+            const cleanRecipient = recipient?.toString().trim();
+            if (!cleanRecipient) {
+                console.error(`⚠️  Skipping empty recipient in campaign: ${campaignNameFinal}`);
+                continue;
+            }
             const campaignResult = await db_1.default.query(`INSERT INTO campaign_logs 
          (user_id, campaign_name, template_used, phone_number_id, recipient_number, language_code, status, campaign_data, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
@@ -1302,14 +1312,14 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
                 campaignNameFinal,
                 template_name,
                 phone_number_id,
-                recipient,
+                cleanRecipient,
                 language,
                 'pending',
                 JSON.stringify({ variables, buttons, template_components: templateResult.rows[0].components })
             ]);
             campaignEntries.push({
                 id: campaignResult.rows[0].id,
-                recipient: recipient
+                recipient: cleanRecipient
             });
         }
         console.log(`✅ Created ${campaignEntries.length} individual campaign_logs entries with recipient numbers`);
@@ -1993,7 +2003,7 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
         cl.campaign_name,
         cl.template_used,
         COALESCE(ubi.whatsapp_number, cl.phone_number_id, 'Unknown') as from_number,
-        COALESCE(cl.recipient_number, 'Not Available') as recipient_number,
+        COALESCE(NULLIF(TRIM(cl.recipient_number), ''), 'Not Available') as recipient_number,
         cl.status,
         cl.sent_at,
         cl.delivered_at,

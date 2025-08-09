@@ -715,56 +715,16 @@ async function sendWhatsAppMessage(payload: any, businessInfo: any): Promise<{
  */
 async function logMessageSend(userId: string, templateId: string, recipient: string, messageId: string, templateName: string): Promise<void> {
   try {
-    // First, create or get a campaign log entry for this API send
-    const campaignName = `API_SEND_${templateName}_${new Date().toISOString().split('T')[0]}`;
-    
-    let campaignId: string;
-    
-    // Check if campaign exists for today
-    const existingCampaign = await pool.query(`
-      SELECT id FROM campaign_logs 
-      WHERE user_id = $1 AND campaign_name = $2 AND DATE(created_at) = CURRENT_DATE
-    `, [userId, campaignName]);
-    
-    if (existingCampaign.rows.length > 0) {
-      campaignId = existingCampaign.rows[0].id;
-      
-      // Update campaign stats
-      await pool.query(`
-        UPDATE campaign_logs 
-        SET successful_sends = successful_sends + 1,
-            total_recipients = total_recipients + 1,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = $1
-      `, [campaignId]);
-      
-    } else {
-      // Create new campaign log entry
-      const campaignResult = await pool.query(`
-        INSERT INTO campaign_logs (
-          user_id, campaign_name, template_used, total_recipients, 
-          successful_sends, failed_sends, status
-        )
-        VALUES ($1, $2, $3, 1, 1, 0, 'completed')
-        RETURNING id
-      `, [userId, campaignName, templateName]);
-      
-      campaignId = campaignResult.rows[0].id;
+    // Validate recipient is not empty
+    const cleanRecipient = recipient?.toString().trim();
+    if (!cleanRecipient) {
+      console.error(`⚠️  API send attempted with empty recipient for template: ${templateName}`);
+      return;
     }
     
-    // Log the individual message to message_logs
-    await pool.query(`
-      INSERT INTO message_logs (
-        campaign_id, recipient_number, message_id, status, sent_at
-      )
-      VALUES ($1, $2, $3, 'sent', CURRENT_TIMESTAMP)
-      ON CONFLICT (campaign_id, recipient_number) DO UPDATE SET
-        message_id = EXCLUDED.message_id,
-        status = EXCLUDED.status,
-        sent_at = EXCLUDED.sent_at
-    `, [campaignId, recipient, messageId]);
+    // Create individual campaign_logs entry for API messages with recipient details
+    const campaignName = `API_SEND_${templateName}_${new Date().toISOString().split('T')[0]}`;
     
-    // Create individual campaign_logs entry for API messages (instead of updating existing)
     await pool.query(`
       INSERT INTO campaign_logs (
         user_id, campaign_name, template_used, phone_number_id, recipient_number, 
@@ -773,7 +733,9 @@ async function logMessageSend(userId: string, templateId: string, recipient: str
       VALUES ($1, $2, $3, 
         (SELECT whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND is_active = true LIMIT 1),
         $4, $5, 'sent', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    `, [userId, campaignName, templateName, recipient, messageId]);
+    `, [userId, campaignName, templateName, cleanRecipient, messageId]);
+    
+    console.log(`✅ Created individual campaign_logs entry for API send: ${cleanRecipient}`);
     
   } catch (error) {
     // Log error but don't fail the request

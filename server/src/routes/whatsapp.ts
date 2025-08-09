@@ -1400,6 +1400,13 @@ router.post('/quick-send', requireAuth, upload.single('headerImage'), async (req
     const campaignEntries = [];
     
     for (const recipient of validRecipients) {
+      // Ensure recipient is not empty or null
+      const cleanRecipient = recipient?.toString().trim();
+      if (!cleanRecipient) {
+        console.error(`⚠️  Skipping empty recipient in quick send: ${campaignName}`);
+        continue;
+      }
+      
       const campaignResult = await pool.query(
         `INSERT INTO campaign_logs 
          (user_id, campaign_name, template_used, phone_number_id, recipient_number, language_code, status, campaign_data, created_at)
@@ -1410,7 +1417,7 @@ router.post('/quick-send', requireAuth, upload.single('headerImage'), async (req
           campaignName,
           template_name,
           phone_number_id,
-          recipient,
+          cleanRecipient,
           language,
           'pending',
           JSON.stringify({ variables, template_components: templateResult.rows[0].components })
@@ -1419,7 +1426,7 @@ router.post('/quick-send', requireAuth, upload.single('headerImage'), async (req
       
       campaignEntries.push({
         id: campaignResult.rows[0].id,
-        recipient: recipient
+        recipient: cleanRecipient
       });
     }
 
@@ -1663,6 +1670,13 @@ router.post('/send-bulk', requireAuth, async (req, res) => {
     const campaignNameFinal = campaign_name || `Campaign - ${template_name} - ${new Date().toISOString()}`;
     
     for (const recipient of validRecipients) {
+      // Ensure recipient is not empty or null
+      const cleanRecipient = recipient?.toString().trim();
+      if (!cleanRecipient) {
+        console.error(`⚠️  Skipping empty recipient in campaign: ${campaignNameFinal}`);
+        continue;
+      }
+      
       const campaignResult = await pool.query(
         `INSERT INTO campaign_logs 
          (user_id, campaign_name, template_used, phone_number_id, recipient_number, language_code, status, campaign_data, created_at)
@@ -1673,7 +1687,7 @@ router.post('/send-bulk', requireAuth, async (req, res) => {
           campaignNameFinal,
           template_name,
           phone_number_id,
-          recipient,
+          cleanRecipient,
           language,
           'pending',
           JSON.stringify({ variables, buttons, template_components: templateResult.rows[0].components })
@@ -1682,7 +1696,7 @@ router.post('/send-bulk', requireAuth, async (req, res) => {
       
       campaignEntries.push({
         id: campaignResult.rows[0].id,
-        recipient: recipient
+        recipient: cleanRecipient
       });
     }
     
@@ -2645,7 +2659,7 @@ router.get('/reports', requireAuth, async (req, res) => {
         cl.campaign_name,
         cl.template_used,
         COALESCE(ubi.whatsapp_number, cl.phone_number_id, 'Unknown') as from_number,
-        COALESCE(cl.recipient_number, 'Not Available') as recipient_number,
+        COALESCE(NULLIF(TRIM(cl.recipient_number), ''), 'Not Available') as recipient_number,
         cl.status,
         cl.sent_at,
         cl.delivered_at,
