@@ -570,6 +570,15 @@ async function logMessageSend(userId, templateId, recipient, messageId, template
         status = EXCLUDED.status,
         sent_at = EXCLUDED.sent_at
     `, [campaignId, recipient, messageId]);
+        await db_1.default.query(`
+      INSERT INTO campaign_logs (
+        user_id, campaign_name, template_used, phone_number_id, recipient_number, 
+        message_id, status, sent_at, created_at
+      )
+      VALUES ($1, $2, $3, 
+        (SELECT whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND is_active = true LIMIT 1),
+        $4, $5, 'sent', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `, [userId, campaignName, templateName, recipient, messageId]);
     }
     catch (error) {
         console.error('Failed to log message send:', error);

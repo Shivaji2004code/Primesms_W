@@ -1102,20 +1102,28 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
                 error: `Template "${template_name}" requires variables [${requiredVariablesList.join(', ')}], but unexpected variables were provided: [${unexpectedVariables.join(', ')}]`
             });
         }
-        const campaignResult = await db_1.default.query(`INSERT INTO campaign_logs 
-       (user_id, campaign_name, template_used, phone_number_id, language_code, total_recipients, status, campaign_data)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id`, [
-            userId,
-            campaign_name || `Quick Send - ${template_name} - ${new Date().toISOString()}`,
-            template_name,
-            phone_number_id,
-            language,
-            validRecipients.length,
-            'processing',
-            JSON.stringify({ variables, template_components: templateResult.rows[0].components })
-        ]);
-        const campaignId = campaignResult.rows[0].id;
+        const campaignName = campaign_name || `Quick Send - ${template_name} - ${new Date().toISOString()}`;
+        const campaignEntries = [];
+        for (const recipient of validRecipients) {
+            const campaignResult = await db_1.default.query(`INSERT INTO campaign_logs 
+         (user_id, campaign_name, template_used, phone_number_id, recipient_number, language_code, status, campaign_data, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+         RETURNING id`, [
+                userId,
+                campaignName,
+                template_name,
+                phone_number_id,
+                recipient,
+                language,
+                'pending',
+                JSON.stringify({ variables, template_components: templateResult.rows[0].components })
+            ]);
+            campaignEntries.push({
+                id: campaignResult.rows[0].id,
+                recipient: recipient
+            });
+        }
+        console.log(`✅ Created ${campaignEntries.length} individual campaign_logs entries for recipients`);
         let creditDeductionSuccess = false;
         let creditBalance = 0;
         try {
@@ -1126,8 +1134,7 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
                 transactionType: creditSystem_1.CreditTransactionType.DEDUCTION_QUICKSEND,
                 templateCategory: category,
                 templateName: template_name,
-                campaignId,
-                description: `Quicksend campaign: ${campaign_name || 'Unnamed'} (${validRecipients.length} recipients)`
+                description: `Quicksend campaign: ${campaignName} (${validRecipients.length} recipients)`
             });
             if (creditResult.success) {
                 creditDeductionSuccess = true;
@@ -1140,34 +1147,19 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
         }
         catch (creditError) {
             console.error('Credit deduction error for Quicksend:', creditError);
-            await db_1.default.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3', ['failed', 'Credit deduction failed', campaignId]);
+            await db_1.default.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE user_id = $3 AND campaign_name = $4', ['failed', 'Credit deduction failed', userId, campaignName]);
             return res.status(400).json({
                 success: false,
                 error: 'Credit deduction failed',
                 details: creditError instanceof Error ? creditError.message : 'Unknown error'
             });
         }
-        let successCount = 0;
-        let failCount = 0;
-        const messagePromises = validRecipients.map((recipient, index) => {
-            const recipientInfo = recipientData.find(item => formatPhoneNumber(item.phone) === recipient);
-            const recipientVariables = recipientInfo?.variables && Object.keys(recipientInfo.variables).length > 0
-                ? recipientInfo.variables
-                : variables;
-            console.log(`📤 Sending to ${recipient} with variables:`, recipientVariables);
-            return sendTemplateMessage(phone_number_id, access_token, recipient, template_name, language, recipientVariables, templateDetails.components, campaignId, userId, templateDetails.header_media_id, templateDetails.header_type, templateDetails.header_media_url, templateDetails.header_handle, uploadedImageMediaId || templateDetails.media_id, templateDetails.category).then(() => {
-                successCount++;
-            }).catch((error) => {
-                failCount++;
-                console.error(`Failed to send to ${recipient}:`, error.message);
-            });
-        });
-        await Promise.allSettled(messagePromises);
-        await db_1.default.query('UPDATE campaign_logs SET status = $1, successful_sends = $2, failed_sends = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4', ['completed', successCount, failCount, campaignId]);
+        let successCount = campaignEntries.length;
+        let failCount = validRecipients.length - campaignEntries.length;
         res.json({
             success: true,
             data: {
-                campaign_id: campaignId,
+                campaign_id: null,
                 total_recipients: validRecipients.length,
                 successful_sends: successCount,
                 failed_sends: failCount,
@@ -1299,20 +1291,28 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
                 error: `Template "${template_name}" requires variables [${requiredVariablesList.join(', ')}], but unexpected variables were provided: [${unexpectedVariables.join(', ')}]`
             });
         }
-        const campaignResult = await db_1.default.query(`INSERT INTO campaign_logs 
-       (user_id, campaign_name, template_used, phone_number_id, language_code, total_recipients, status, campaign_data)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id`, [
-            userId,
-            campaign_name || `Campaign - ${template_name} - ${new Date().toISOString()}`,
-            template_name,
-            phone_number_id,
-            language,
-            validRecipients.length,
-            'processing',
-            JSON.stringify({ variables, buttons, template_components: templateResult.rows[0].components })
-        ]);
-        const campaignId = campaignResult.rows[0].id;
+        const campaignEntries = [];
+        const campaignNameFinal = campaign_name || `Campaign - ${template_name} - ${new Date().toISOString()}`;
+        for (const recipient of validRecipients) {
+            const campaignResult = await db_1.default.query(`INSERT INTO campaign_logs 
+         (user_id, campaign_name, template_used, phone_number_id, recipient_number, language_code, status, campaign_data, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+         RETURNING id`, [
+                userId,
+                campaignNameFinal,
+                template_name,
+                phone_number_id,
+                recipient,
+                language,
+                'pending',
+                JSON.stringify({ variables, buttons, template_components: templateResult.rows[0].components })
+            ]);
+            campaignEntries.push({
+                id: campaignResult.rows[0].id,
+                recipient: recipient
+            });
+        }
+        console.log(`✅ Created ${campaignEntries.length} individual campaign_logs entries with recipient numbers`);
         let creditDeductionSuccess = false;
         let creditBalance = 0;
         try {
@@ -1323,7 +1323,6 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
                 transactionType: creditSystem_1.CreditTransactionType.DEDUCTION_CUSTOMISE_SMS,
                 templateCategory: category,
                 templateName: template_name,
-                campaignId,
                 description: `Customise SMS campaign: ${campaign_name || 'Unnamed'} (${validRecipients.length} recipients)`
             });
             if (creditResult.success) {
@@ -1337,7 +1336,7 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
         }
         catch (creditError) {
             console.error('Credit deduction error for Customise SMS:', creditError);
-            await db_1.default.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3', ['failed', 'Credit deduction failed', campaignId]);
+            await db_1.default.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE user_id = $3 AND campaign_name = $4', ['failed', 'Credit deduction failed', userId, campaignNameFinal]);
             return res.status(400).json({
                 success: false,
                 error: 'Credit deduction failed',
@@ -1346,20 +1345,10 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
         }
         let successCount = 0;
         let failCount = 0;
-        const batchSize = 10;
-        const batches = [];
-        for (let i = 0; i < validRecipients.length; i += batchSize) {
-            batches.push(validRecipients.slice(i, i + batchSize));
-        }
         const messagePromises = [];
-        for (const batch of batches) {
-            for (const recipient of batch) {
-                const messagePromise = sendTemplateMessage(phone_number_id, access_token, recipient, template_name, language, variables, templateResult.rows[0].components, campaignId, userId, templateResult.rows[0].header_media_id, templateResult.rows[0].header_type, templateResult.rows[0].header_media_url, templateResult.rows[0].header_handle, templateResult.rows[0].media_id, templateResult.rows[0].category);
-                messagePromises.push(messagePromise);
-            }
-            if (batches.indexOf(batch) < batches.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
+        for (const campaignEntry of campaignEntries) {
+            const messagePromise = sendTemplateMessage(phone_number_id, access_token, campaignEntry.recipient, template_name, language, variables, templateResult.rows[0].components, campaignEntry.id, userId, templateResult.rows[0].header_media_id, templateResult.rows[0].header_type, templateResult.rows[0].header_media_url, templateResult.rows[0].header_handle, templateResult.rows[0].media_id, templateResult.rows[0].category);
+            messagePromises.push(messagePromise);
         }
         const results = await Promise.allSettled(messagePromises);
         results.forEach(result => {
@@ -1370,11 +1359,10 @@ router.post('/send-bulk', auth_1.requireAuth, async (req, res) => {
                 failCount++;
             }
         });
-        await db_1.default.query('UPDATE campaign_logs SET status = $1, successful_sends = $2, failed_sends = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4', ['completed', successCount, failCount, campaignId]);
         res.json({
             success: true,
             data: {
-                campaign_id: campaignId,
+                campaign_id: null,
                 total_recipients: validRecipients.length,
                 successful_sends: successCount,
                 failed_sends: failCount,
@@ -1583,6 +1571,9 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
             console.log(`✅ Message sent successfully to ${recipient}, ID: ${messageId}`);
             await db_1.default.query(`INSERT INTO message_logs (campaign_id, recipient_number, message_id, status, api_response, sent_at)
          VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`, [campaignId, recipient, messageId, 'sent', JSON.stringify(responseData)]);
+            await db_1.default.query(`UPDATE campaign_logs 
+         SET message_id = $2, status = 'sent', sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`, [campaignId, messageId]);
             return { success: true, messageId, recipient };
         }
         else {
@@ -1590,6 +1581,9 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
             console.error(`❌ Message failed to ${recipient}:`, errorMessage);
             await db_1.default.query(`INSERT INTO message_logs (campaign_id, recipient_number, status, error_message, api_response)
          VALUES ($1, $2, $3, $4, $5)`, [campaignId, recipient, 'failed', errorMessage, JSON.stringify(responseData)]);
+            await db_1.default.query(`UPDATE campaign_logs 
+         SET status = 'failed', error_message = $2, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`, [campaignId, errorMessage]);
             throw new Error(errorMessage);
         }
     }
@@ -1598,6 +1592,9 @@ async function sendTemplateMessage(phoneNumberId, accessToken, recipient, templa
         await db_1.default.query(`INSERT INTO message_logs (campaign_id, recipient_number, status, error_message)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (campaign_id, recipient_number) DO NOTHING`, [campaignId, recipient, 'failed', errorMessage]);
+        await db_1.default.query(`UPDATE campaign_logs 
+       SET status = 'failed', error_message = $2, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`, [campaignId, errorMessage]);
         throw error;
     }
 }
@@ -1799,24 +1796,44 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
                     error: 'Template not found'
                 });
             }
-            const campaignResult = await db_1.default.query(`INSERT INTO campaign_logs 
-         (user_id, campaign_name, template_used, phone_number_id, language_code, total_recipients, status, campaign_data)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING id`, [
-                userId,
-                campaignName || `Custom Campaign - ${templateName} - ${new Date().toISOString()}`,
-                templateName,
-                wabaId,
-                language,
-                data.length,
-                'processing',
-                JSON.stringify({
-                    variableMappings: parsedVariableMappings,
-                    recipientColumn: recipientColName,
-                    template_components: templateResult.rows[0].components
-                })
-            ]);
-            const campaignId = campaignResult.rows[0].id;
+            const campaignNameFinal = campaignName || `Custom Campaign - ${templateName} - ${new Date().toISOString()}`;
+            const campaignEntries = [];
+            for (const row of data) {
+                const recipient = row[recipientColName];
+                const rowVariables = {};
+                Object.keys(parsedVariableMappings).forEach(templateVar => {
+                    const columnName = parsedVariableMappings[templateVar];
+                    if (columnName && row[columnName]) {
+                        const variableIndex = templateVar.replace(/[{}]/g, '');
+                        rowVariables[variableIndex] = row[columnName].toString();
+                    }
+                });
+                const campaignResult = await db_1.default.query(`INSERT INTO campaign_logs 
+           (user_id, campaign_name, template_used, phone_number_id, recipient_number, language_code, status, campaign_data, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+           RETURNING id`, [
+                    userId,
+                    campaignNameFinal,
+                    templateName,
+                    wabaId,
+                    recipient,
+                    language,
+                    'pending',
+                    JSON.stringify({
+                        variables: rowVariables,
+                        variableMappings: parsedVariableMappings,
+                        recipientColumn: recipientColName,
+                        template_components: templateResult.rows[0].components,
+                        rowData: row
+                    })
+                ]);
+                campaignEntries.push({
+                    id: campaignResult.rows[0].id,
+                    recipient: recipient,
+                    variables: rowVariables
+                });
+            }
+            console.log(`✅ Created ${campaignEntries.length} individual campaign_logs entries for custom campaign`);
             let creditDeductionSuccess = false;
             let creditBalance = 0;
             try {
@@ -1827,7 +1844,6 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
                     transactionType: creditSystem_1.CreditTransactionType.DEDUCTION_CUSTOMISE_SMS,
                     templateCategory: category,
                     templateName: templateName,
-                    campaignId,
                     description: `Custom Send campaign: ${campaignName || 'Unnamed'} (${data.length} recipients)`
                 });
                 if (creditResult.success) {
@@ -1841,7 +1857,7 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
             }
             catch (creditError) {
                 console.error('Credit deduction error for Custom Send:', creditError);
-                await db_1.default.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3', ['failed', 'Credit deduction failed', campaignId]);
+                await db_1.default.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE user_id = $3 AND campaign_name = $4', ['failed', 'Credit deduction failed', userId, campaignName || 'Custom Send']);
                 return res.status(400).json({
                     success: false,
                     error: 'Credit deduction failed',
@@ -1850,34 +1866,26 @@ router.post('/custom-send', auth_1.requireAuth, upload.single('file'), async (re
             }
             let successCount = 0;
             let failCount = 0;
-            const messagePromises = data.map((row) => {
-                const recipientNumber = row[recipientColName];
-                if (!recipientNumber) {
-                    failCount++;
-                    return Promise.resolve();
-                }
-                const rowVariables = {};
-                Object.keys(parsedVariableMappings).forEach(templateVar => {
-                    const columnName = parsedVariableMappings[templateVar];
-                    if (columnName && row[columnName]) {
-                        const variableIndex = templateVar.replace(/[{}]/g, '');
-                        rowVariables[variableIndex] = row[columnName].toString();
-                    }
-                });
-                return sendTemplateMessage(wabaId, numberResult.rows[0].access_token, formatPhoneNumber(recipientNumber.toString()), templateName, language, rowVariables, templateResult.rows[0].components, campaignId, userId, templateResult.rows[0].header_media_id, templateResult.rows[0].header_type, templateResult.rows[0].header_media_url, templateResult.rows[0].header_handle, templateResult.rows[0].media_id, templateResult.rows[0].category).then(() => {
+            const messagePromises = campaignEntries.map((campaignEntry) => {
+                return sendTemplateMessage(wabaId, numberResult.rows[0].access_token, formatPhoneNumber(campaignEntry.recipient.toString()), templateName, language, campaignEntry.variables, templateResult.rows[0].components, campaignEntry.id, userId, templateResult.rows[0].header_media_id, templateResult.rows[0].header_type, templateResult.rows[0].header_media_url, templateResult.rows[0].header_handle, templateResult.rows[0].media_id, templateResult.rows[0].category).then(() => {
                     successCount++;
-                }).catch((error) => {
+                }).catch(async (error) => {
                     failCount++;
-                    console.error(`Failed to send to ${recipientNumber}:`, error.message);
+                    console.error(`Failed to send to ${campaignEntry.recipient}:`, error.message);
+                    try {
+                        await db_1.default.query('UPDATE campaign_logs SET status = $1, error_message = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3', ['failed', error.message || 'Unknown error', campaignEntry.id]);
+                    }
+                    catch (updateError) {
+                        console.error(`Failed to update campaign entry ${campaignEntry.id} to failed status:`, updateError);
+                    }
                 });
             });
             await Promise.allSettled(messagePromises);
-            await db_1.default.query('UPDATE campaign_logs SET status = $1, successful_sends = $2, failed_sends = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4', ['completed', successCount, failCount, campaignId]);
             res.status(202).json({
                 success: true,
                 message: 'Campaign has been processed.',
                 data: {
-                    campaignId: campaignId,
+                    campaign_id: null,
                     totalRecipients: data.length,
                     successfulSends: successCount,
                     failedSends: failCount,
@@ -1956,17 +1964,17 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
         let paramCount = 1;
         if (dateFrom && dateFrom.toString().trim()) {
             paramCount++;
-            whereConditions += ` AND ml.created_at >= $${paramCount}`;
+            whereConditions += ` AND cl.created_at >= $${paramCount}`;
             params.push(dateFrom.toString());
         }
         if (dateTo && dateTo.toString().trim()) {
             paramCount++;
-            whereConditions += ` AND ml.created_at <= $${paramCount}::date + interval '1 day'`;
+            whereConditions += ` AND cl.created_at <= $${paramCount}::date + interval '1 day'`;
             params.push(dateTo.toString());
         }
         if (recipientNumber && recipientNumber.toString().trim()) {
             paramCount++;
-            whereConditions += ` AND ml.recipient_number ILIKE $${paramCount}`;
+            whereConditions += ` AND cl.recipient_number ILIKE $${paramCount}`;
             params.push(`%${recipientNumber.toString().trim()}%`);
         }
         if (template && template.toString().trim()) {
@@ -1976,33 +1984,34 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
         }
         if (status && status !== 'all') {
             paramCount++;
-            whereConditions += ` AND ml.status = $${paramCount}`;
+            whereConditions += ` AND cl.status = $${paramCount}`;
             params.push(status.toString());
         }
         const reportsQuery = `
       SELECT 
-        ml.id,
+        cl.id,
         cl.campaign_name,
         cl.template_used,
-        COALESCE(ubi.whatsapp_number, cl.phone_number_id) as from_number,
-        ml.recipient_number,
-        ml.status,
-        ml.error_message,
-        ml.sent_at,
-        ml.delivered_at,
-        ml.read_at,
-        ml.created_at
+        COALESCE(ubi.whatsapp_number, cl.phone_number_id, 'Unknown') as from_number,
+        COALESCE(cl.recipient_number, 'Not Available') as recipient_number,
+        cl.status,
+        cl.sent_at,
+        cl.delivered_at,
+        cl.error_message,
+        cl.created_at,
+        cl.updated_at
       FROM campaign_logs cl
-      JOIN message_logs ml ON cl.id = ml.campaign_id
       LEFT JOIN user_business_info ubi ON cl.phone_number_id = ubi.whatsapp_number_id AND cl.user_id = ubi.user_id
       ${whereConditions}
-      ORDER BY ml.created_at DESC
+      ORDER BY cl.created_at DESC
       ${exportFormat && exportFormat !== 'false' ? '' : `LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`}
     `;
         if (!exportFormat || exportFormat === 'false') {
             params.push(Number(limit), offset);
         }
+        console.log(`🔍 [REPORTS] Executing simplified campaign query for user: ${userId}`);
         const reportsResult = await db_1.default.query(reportsQuery, params);
+        console.log(`🔍 [REPORTS] Query returned ${reportsResult.rows.length} campaigns`);
         if (exportFormat && exportFormat !== 'false') {
             const headers = [
                 'Campaign Name',
@@ -2012,8 +2021,7 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
                 'Status',
                 'Sent At',
                 'Delivered At',
-                'Read At',
-                'Failure Reason'
+                'Error Message'
             ];
             const rows = reportsResult.rows.map(row => [
                 row.campaign_name || '',
@@ -2023,7 +2031,6 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
                 row.status || '',
                 row.sent_at || '',
                 row.delivered_at || '',
-                row.read_at || '',
                 row.error_message || ''
             ]);
             if (exportFormat === 'csv') {
@@ -2044,7 +2051,6 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
                         { wch: 15 },
                         { wch: 15 },
                         { wch: 10 },
-                        { wch: 18 },
                         { wch: 18 },
                         { wch: 18 },
                         { wch: 30 }
@@ -2071,7 +2077,6 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
         const countQuery = `
       SELECT COUNT(*) as total
       FROM campaign_logs cl
-      JOIN message_logs ml ON cl.id = ml.campaign_id
       LEFT JOIN user_business_info ubi ON cl.phone_number_id = ubi.whatsapp_number_id AND cl.user_id = ubi.user_id
       ${whereConditions}
     `;
@@ -2089,10 +2094,15 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
         });
     }
     catch (error) {
-        console.error('Error fetching reports:', error);
+        console.error('🔍 [REPORTS] Error fetching reports:', error);
+        console.error('🔍 [REPORTS] Error details:', {
+            message: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined
+        });
         res.status(500).json({
             success: false,
-            error: 'Failed to fetch reports'
+            error: 'Failed to fetch reports',
+            debug: error instanceof Error ? error.message : 'Unknown error'
         });
     }
 });
@@ -2101,17 +2111,16 @@ router.get('/reports/summary', auth_1.requireAuth, async (req, res) => {
         const userId = req.session.user.id;
         const summaryQuery = `
       SELECT 
-        COUNT(DISTINCT cl.id) as total_campaigns,
-        COUNT(ml.id) as total_messages,
-        COUNT(CASE WHEN ml.status IN ('sent', 'delivered', 'read') THEN 1 END) as successful_messages,
-        COUNT(CASE WHEN ml.status = 'failed' THEN 1 END) as failed_messages,
+        COUNT(DISTINCT COALESCE(cl.campaign_name, cl.id::text)) as total_campaigns,
+        COUNT(cl.id) as total_messages,
+        COUNT(CASE WHEN cl.status IN ('sent', 'delivered', 'read') THEN 1 END) as successful_messages,
+        COUNT(CASE WHEN cl.status IN ('failed') THEN 1 END) as failed_messages,
         ROUND(
-          (COUNT(CASE WHEN ml.status IN ('sent', 'delivered', 'read') THEN 1 END) * 100.0) / 
-          NULLIF(COUNT(ml.id), 0), 
+          (COUNT(CASE WHEN cl.status IN ('sent', 'delivered', 'read') THEN 1 END) * 100.0) / 
+          NULLIF(COUNT(cl.id), 0), 
           2
         ) as success_rate
       FROM campaign_logs cl
-      LEFT JOIN message_logs ml ON cl.id = ml.campaign_id
       WHERE cl.user_id = $1
     `;
         const result = await db_1.default.query(summaryQuery, [userId]);
@@ -2244,20 +2253,6 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
             });
         }
         const template = templateResult.rows[0];
-        const campaignResult = await db_1.default.query(`INSERT INTO campaign_logs 
-       (user_id, campaign_name, template_used, phone_number_id, language_code, total_recipients, status, campaign_data)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id`, [
-            userId,
-            `Custom Campaign - ${templateName}`,
-            templateName,
-            phoneNumberId,
-            language,
-            data.length,
-            'processing',
-            JSON.stringify({ template_components: template.components, custom_data: data })
-        ]);
-        const campaignId = campaignResult.rows[0].id;
         let creditDeductionSuccess = false;
         let creditBalance = 0;
         try {
@@ -2268,7 +2263,6 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
                 transactionType: creditSystem_1.CreditTransactionType.DEDUCTION_CUSTOMISE_SMS,
                 templateCategory: category,
                 templateName: templateName,
-                campaignId,
                 description: `Custom Messages campaign: ${templateName} (${data.length} recipients)`
             });
             if (creditResult.success) {
@@ -2282,7 +2276,7 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
         }
         catch (creditError) {
             console.error('Credit deduction error for Custom Messages:', creditError);
-            await db_1.default.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3', ['failed', 'Credit deduction failed', campaignId]);
+            await db_1.default.query('UPDATE campaign_logs SET status = $1, error_message = $2 WHERE user_id = $3 AND campaign_name = $4', ['failed', 'Credit deduction failed', userId, 'Custom Messages']);
             return res.status(400).json({
                 success: false,
                 error: 'Credit deduction failed',
@@ -2292,6 +2286,7 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
         let successfulSends = 0;
         let failedSends = 0;
         const errors = [];
+        const campaignEntries = [];
         for (const row of data) {
             try {
                 const recipient = row[recipientColumn];
@@ -2301,35 +2296,52 @@ router.post('/send-custom-messages', auth_1.requireAuth, async (req, res) => {
                     continue;
                 }
                 const variables = {};
-                console.log(`🔍 Processing recipient: ${recipient}`);
-                console.log(`🔍 Variable mappings:`, variableMappings);
-                console.log(`🔍 Row data:`, row);
                 Object.keys(variableMappings).forEach(variable => {
                     const columnName = variableMappings[variable];
                     const value = row[columnName];
-                    console.log(`🔍 Variable ${variable} -> Column ${columnName} -> Value: ${value}`);
                     if (value) {
                         variables[variable] = value.toString();
                     }
                 });
-                console.log(`🔍 Final variables for ${recipient}:`, variables);
-                await sendTemplateMessage(businessInfo.whatsapp_number_id, businessInfo.access_token, recipient, templateName, language, variables, template.components, campaignId.toString(), userId, undefined, undefined, undefined, undefined, undefined, template.category);
+                const campaignResult = await db_1.default.query(`
+          INSERT INTO campaign_logs 
+          (user_id, campaign_name, template_used, phone_number_id, recipient_number, language_code, status, campaign_data, created_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+          RETURNING id
+        `, [userId, 'Custom Messages', templateName, businessInfo.whatsapp_number_id, recipient, language, 'pending', JSON.stringify({ variables, template_components: template.components })]);
+                campaignEntries.push({
+                    id: campaignResult.rows[0].id,
+                    recipient,
+                    variables
+                });
+            }
+            catch (error) {
+                failedSends++;
+                errors.push(`Failed to create campaign entry for recipient: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+        }
+        for (const campaignEntry of campaignEntries) {
+            try {
+                await sendTemplateMessage(businessInfo.whatsapp_number_id, businessInfo.access_token, campaignEntry.recipient, templateName, language, campaignEntry.variables, template.components, campaignEntry.id.toString(), userId, template.header_media_id, template.header_type, template.header_media_url, template.header_handle, template.media_id, template.category);
                 successfulSends++;
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
             catch (error) {
                 failedSends++;
                 const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-                errors.push(`Failed to send to ${row[recipientColumn]}: ${errorMsg}`);
+                errors.push(`Failed to send to ${campaignEntry.recipient}: ${errorMsg}`);
+                try {
+                    await db_1.default.query('UPDATE campaign_logs SET status = $1, error_message = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3', ['failed', errorMsg, campaignEntry.id]);
+                }
+                catch (updateError) {
+                    console.error(`Failed to update campaign entry ${campaignEntry.id} to failed status:`, updateError);
+                }
             }
         }
-        await db_1.default.query(`UPDATE campaign_logs 
-       SET successful_sends = $1, failed_sends = $2, status = $3, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $4`, [successfulSends, failedSends, 'completed', campaignId]);
         res.json({
             success: true,
             data: {
-                campaign_id: campaignId,
+                campaign_id: null,
                 sent_count: successfulSends,
                 failed_count: failedSends,
                 total_count: data.length,

@@ -133,17 +133,25 @@ async function addCredits(transaction) {
 async function getTemplateCategory(userId, templateName) {
     try {
         console.log(`💰 DEBUG CREDIT: Getting template category for userId: ${userId}, templateName: "${templateName}"`);
-        const result = await db_1.default.query('SELECT category FROM templates WHERE user_id = $1 AND name = $2', [userId, templateName]);
+        const result = await db_1.default.query('SELECT category, status FROM templates WHERE user_id = $1 AND name = $2', [userId, templateName]);
         console.log(`💰 DEBUG CREDIT: Template query result:`, {
             rowCount: result.rows.length,
-            category: result.rows[0]?.category
+            category: result.rows[0]?.category,
+            status: result.rows[0]?.status
         });
         if (result.rows.length === 0) {
             console.log(`❌ DEBUG CREDIT: Template not found for user ${userId}, template "${templateName}"`);
+            const availableTemplates = await db_1.default.query('SELECT name, category, status FROM templates WHERE user_id = $1 AND status IN (\'APPROVED\', \'ACTIVE\') ORDER BY name', [userId]);
+            console.log(`💡 DEBUG CREDIT: Available approved templates for user:`, availableTemplates.rows.map(t => `${t.name} (${t.category})`).join(', '));
             return null;
         }
-        const category = result.rows[0].category;
-        console.log(`✅ DEBUG CREDIT: Template category found: ${category}`);
+        const template = result.rows[0];
+        const category = template.category;
+        if (!['APPROVED', 'ACTIVE'].includes(template.status)) {
+            console.log(`❌ DEBUG CREDIT: Template "${templateName}" found but status is "${template.status}" (not usable)`);
+            return null;
+        }
+        console.log(`✅ DEBUG CREDIT: Template category found: ${category} (status: ${template.status})`);
         return category;
     }
     catch (error) {
@@ -160,7 +168,7 @@ async function getTemplateCategory(userId, templateName) {
 async function calculateCreditCost(userId, templateName, messageCount = 1) {
     const category = await getTemplateCategory(userId, templateName);
     if (!category) {
-        throw new Error('Template not found');
+        throw new Error(`Template '${templateName}' not found or not accessible for this user. Please ensure the template exists and is approved.`);
     }
     const ratePerMessage = getCreditRate(category);
     const totalCost = Math.round((ratePerMessage * messageCount) * 100) / 100;

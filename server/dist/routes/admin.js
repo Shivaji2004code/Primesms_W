@@ -262,7 +262,7 @@ router.get('/users/:id/details', async (req, res) => {
         const user = userResult.rows[0];
         const businessResult = await db_1.default.query(`SELECT id, user_id, business_name, whatsapp_number, whatsapp_number_id, 
        waba_id, access_token, webhook_url, webhook_verify_token, is_active, 
-       created_at, updated_at 
+       app_id, created_at, updated_at 
        FROM user_business_info WHERE user_id = $1`, [id]);
         const userWithBusiness = {
             id: user.id,
@@ -334,7 +334,7 @@ router.get('/users/:id/business-info', async (req, res) => {
         }
         const result = await db_1.default.query(`SELECT id, user_id, business_name, whatsapp_number, whatsapp_number_id, 
        waba_id, access_token, webhook_url, webhook_verify_token, is_active, 
-       created_at, updated_at 
+       app_id, created_at, updated_at 
        FROM user_business_info WHERE user_id = $1`, [id]);
         if (result.rows.length === 0) {
             return res.json({ businessInfo: null });
@@ -351,6 +351,7 @@ router.get('/users/:id/business-info', async (req, res) => {
             webhookUrl: business.webhook_url,
             webhookVerifyToken: business.webhook_verify_token,
             isActive: business.is_active,
+            appId: business.app_id,
             createdAt: business.created_at,
             updatedAt: business.updated_at,
         };
@@ -364,7 +365,7 @@ router.get('/users/:id/business-info', async (req, res) => {
 router.put('/users/:id/business-info', async (req, res) => {
     try {
         const { id } = req.params;
-        const { businessName, whatsappNumber, whatsappNumberId, wabaId, accessToken, webhookUrl, webhookVerifyToken, isActive } = req.body;
+        const { businessName, whatsappNumber, whatsappNumberId, wabaId, accessToken, webhookUrl, webhookVerifyToken, isActive, appId } = req.body;
         const userCheck = await db_1.default.query('SELECT id FROM users WHERE id = $1', [id]);
         if (userCheck.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
@@ -381,22 +382,22 @@ router.put('/users/:id/business-info', async (req, res) => {
             result = await db_1.default.query(`UPDATE user_business_info 
          SET business_name = $2, whatsapp_number = $3, whatsapp_number_id = $4,
              waba_id = $5, access_token = $6, webhook_url = $7, 
-             webhook_verify_token = $8, is_active = $9, updated_at = CURRENT_TIMESTAMP
+             webhook_verify_token = $8, is_active = $9, app_id = $10, updated_at = CURRENT_TIMESTAMP
          WHERE user_id = $1
          RETURNING id, user_id, business_name, whatsapp_number, whatsapp_number_id, 
                    waba_id, access_token, webhook_url, webhook_verify_token, is_active, 
-                   created_at, updated_at`, [id, businessName, whatsappNumber, whatsappNumberId, wabaId, accessToken,
-                webhookUrl, webhookVerifyToken, isActive ?? true]);
+                   app_id, created_at, updated_at`, [id, businessName, whatsappNumber, whatsappNumberId, wabaId, accessToken,
+                webhookUrl, webhookVerifyToken, isActive ?? true, appId]);
         }
         else {
             result = await db_1.default.query(`INSERT INTO user_business_info 
          (user_id, business_name, whatsapp_number, whatsapp_number_id, waba_id, 
-          access_token, webhook_url, webhook_verify_token, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          access_token, webhook_url, webhook_verify_token, is_active, app_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING id, user_id, business_name, whatsapp_number, whatsapp_number_id, 
                    waba_id, access_token, webhook_url, webhook_verify_token, is_active, 
-                   created_at, updated_at`, [id, businessName, whatsappNumber, whatsappNumberId, wabaId, accessToken,
-                webhookUrl, webhookVerifyToken, isActive ?? true]);
+                   app_id, created_at, updated_at`, [id, businessName, whatsappNumber, whatsappNumberId, wabaId, accessToken,
+                webhookUrl, webhookVerifyToken, isActive ?? true, appId]);
         }
         const business = result.rows[0];
         const businessInfo = {
@@ -410,6 +411,7 @@ router.put('/users/:id/business-info', async (req, res) => {
             webhookUrl: business.webhook_url,
             webhookVerifyToken: business.webhook_verify_token,
             isActive: business.is_active,
+            appId: business.app_id,
             createdAt: business.created_at,
             updatedAt: business.updated_at,
         };
