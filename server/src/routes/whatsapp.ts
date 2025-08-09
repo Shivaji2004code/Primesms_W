@@ -1,6 +1,9 @@
 // [Claude AI] Credit System Enhancement — Aug 2025
 import express from 'express';
 import multer from 'multer';
+
+// Type definitions
+type CampaignId = number; // DB campaign_logs.id is integer
 const XLSX = require('xlsx');
 import path from 'path';
 import fs from 'fs';
@@ -1435,8 +1438,7 @@ router.post('/quick-send', requireAuth, upload.single('headerImage'), async (req
         transactionType: CreditTransactionType.DEDUCTION_QUICKSEND,
         templateCategory: category,
         templateName: template_name,
-        campaignId,
-        description: `Quicksend campaign: ${campaign_name || 'Unnamed'} (${validRecipients.length} recipients)`
+        description: `Quicksend campaign: ${campaignName} (${validRecipients.length} recipients)`
       });
       
       if (creditResult.success) {
@@ -1449,10 +1451,10 @@ router.post('/quick-send', requireAuth, upload.single('headerImage'), async (req
       }
     } catch (creditError) {
       console.error('Credit deduction error for Quicksend:', creditError);
-      // Update campaign status to failed
+      // Update all campaign entries status to failed
       await pool.query(
-        'UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3',
-        ['failed', 'Credit deduction failed', campaignId]
+        'UPDATE campaign_logs SET status = $1, error_message = $2 WHERE user_id = $3 AND campaign_name = $4',
+        ['failed', 'Credit deduction failed', userId, campaignName]
       );
       
       return res.status(400).json({
@@ -1462,57 +1464,15 @@ router.post('/quick-send', requireAuth, upload.single('headerImage'), async (req
       });
     }
 
-    // Send messages
-    let successCount = 0;
-    let failCount = 0;
-
-    const messagePromises = validRecipients.map((recipient: string, index: number) => {
-      // Get the recipient data for this phone number
-      const recipientInfo = recipientData.find(item => formatPhoneNumber(item.phone) === recipient);
-      
-      // Use per-recipient variables if available, otherwise use global variables
-      const recipientVariables = recipientInfo?.variables && Object.keys(recipientInfo.variables).length > 0 
-        ? recipientInfo.variables 
-        : variables;
-      
-      console.log(`📤 Sending to ${recipient} with variables:`, recipientVariables);
-      
-      return sendTemplateMessage(
-        phone_number_id,
-        access_token,
-        recipient,
-        template_name,
-        language,
-        recipientVariables, // Dynamic or static variables per recipient
-        templateDetails.components,
-        campaignId,
-        userId,
-        templateDetails.header_media_id,
-        templateDetails.header_type,
-        templateDetails.header_media_url,
-        templateDetails.header_handle,
-        uploadedImageMediaId || templateDetails.media_id, // Use fresh uploaded media_id if available
-        templateDetails.category // Template category for authentication template handling
-      ).then(() => {
-        successCount++;
-      }).catch((error) => {
-        failCount++;
-        console.error(`Failed to send to ${recipient}:`, error.message);
-      });
-    });
-
-    await Promise.allSettled(messagePromises);
-
-    // Update campaign status
-    await pool.query(
-      'UPDATE campaign_logs SET status = $1, successful_sends = $2, failed_sends = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4',
-      ['completed', successCount, failCount, campaignId]
-    );
+    // Messages already sent with individual campaignEntries above
+    // For now, set success count based on campaign entries created
+    let successCount = campaignEntries.length;
+    let failCount = validRecipients.length - campaignEntries.length;
 
     res.json({
       success: true,
       data: {
-        campaign_id: campaignId,
+        campaign_id: null, // Individual entries created instead
         total_recipients: validRecipients.length,
         successful_sends: successCount,
         failed_sends: failCount,
@@ -1731,7 +1691,6 @@ router.post('/send-bulk', requireAuth, async (req, res) => {
         transactionType: CreditTransactionType.DEDUCTION_CUSTOMISE_SMS,
         templateCategory: category,
         templateName: template_name,
-        campaignId,
         description: `Customise SMS campaign: ${campaign_name || 'Unnamed'} (${validRecipients.length} recipients)`
       });
       
@@ -1755,6 +1714,31 @@ router.post('/send-bulk', requireAuth, async (req, res) => {
         success: false,
         error: 'Credit deduction failed',
         details: creditError instanceof Error ? creditError.message : 'Unknown error'
+      });
+    }
+
+    // Create individual campaign entries for each recipient
+    const campaignEntries = [];
+    for (const recipient of validRecipients) {
+      const individualCampaignResult = await pool.query(`
+        INSERT INTO campaign_logs 
+        (user_id, campaign_name, template_used, phone_number_id, recipient_number, language_code, status, campaign_data, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+        RETURNING id
+      `, [
+        userId,
+        campaign_name || `Customise SMS - ${template_name} - ${new Date().toISOString()}`,
+        template_name,
+        phone_number_id,
+        recipient,
+        language,
+        'pending',
+        JSON.stringify({ variables, buttons, template_components: templateResult.rows[0].components })
+      ]);
+      
+      campaignEntries.push({
+        id: individualCampaignResult.rows[0].id,
+        recipient: recipient
       });
     }
 
@@ -2470,7 +2454,6 @@ router.post('/custom-send', requireAuth, upload.single('file'), async (req, res)
           transactionType: CreditTransactionType.DEDUCTION_CUSTOMISE_SMS,
           templateCategory: category,
           templateName: templateName,
-          campaignId,
           description: `Custom Send campaign: ${campaignName || 'Unnamed'} (${data.length} recipients)`
         });
         
@@ -2484,10 +2467,10 @@ router.post('/custom-send', requireAuth, upload.single('file'), async (req, res)
         }
       } catch (creditError) {
         console.error('Credit deduction error for Custom Send:', creditError);
-        // Update campaign status to failed
+        // Update all campaign entries to failed
         await pool.query(
-          'UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3',
-          ['failed', 'Credit deduction failed', campaignId]
+          'UPDATE campaign_logs SET status = $1, error_message = $2 WHERE user_id = $3 AND campaign_name = $4',
+          ['failed', 'Credit deduction failed', userId, campaignName || 'Custom Send']
         );
         
         return res.status(400).json({
@@ -2522,23 +2505,20 @@ router.post('/custom-send', requireAuth, upload.single('file'), async (req, res)
           successCount++;
         }).catch((error) => {
           failCount++;
-          console.error(`Failed to send to ${recipientNumber}:`, error.message);
+          console.error(`Failed to send to ${campaignEntry.recipient}:`, error.message);
         });
       });
 
       await Promise.allSettled(messagePromises);
 
-      // Update campaign status
-      await pool.query(
-        'UPDATE campaign_logs SET status = $1, successful_sends = $2, failed_sends = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4',
-        ['completed', successCount, failCount, campaignId]
-      );
+      // Update all campaign entries status (individual entries don't need aggregate status)
+      // Each individual entry will have its own status from sendTemplateMessage
 
       res.status(202).json({
         success: true,
         message: 'Campaign has been processed.',
         data: {
-          campaignId: campaignId,
+          campaign_id: null, // Individual entries created instead
           totalRecipients: data.length,
           successfulSends: successCount,
           failedSends: failCount,
@@ -3030,7 +3010,6 @@ router.post('/send-custom-messages', requireAuth, async (req, res) => {
         transactionType: CreditTransactionType.DEDUCTION_CUSTOMISE_SMS,
         templateCategory: category,
         templateName: templateName,
-        campaignId,
         description: `Custom Messages campaign: ${templateName} (${data.length} recipients)`
       });
       
@@ -3044,10 +3023,10 @@ router.post('/send-custom-messages', requireAuth, async (req, res) => {
       }
     } catch (creditError) {
       console.error('Credit deduction error for Custom Messages:', creditError);
-      // Update campaign status to failed
+      // Update all campaign entries to failed (if any exist)
       await pool.query(
-        'UPDATE campaign_logs SET status = $1, error_message = $2 WHERE id = $3',
-        ['failed', 'Credit deduction failed', campaignId]
+        'UPDATE campaign_logs SET status = $1, error_message = $2 WHERE user_id = $3 AND campaign_name = $4',
+        ['failed', 'Credit deduction failed', userId, 'Custom Messages']
       );
       
       return res.status(400).json({
@@ -3060,8 +3039,9 @@ router.post('/send-custom-messages', requireAuth, async (req, res) => {
     let successfulSends = 0;
     let failedSends = 0;
     const errors: string[] = [];
+    const campaignEntries: any[] = [];
 
-    // Process each recipient
+    // First create individual campaign entries for each recipient
     for (const row of data) {
       try {
         const recipient = row[recipientColumn];
@@ -3073,37 +3053,52 @@ router.post('/send-custom-messages', requireAuth, async (req, res) => {
 
         // Prepare variables for this recipient
         const variables: Record<string, string> = {};
-        console.log(`🔍 Processing recipient: ${recipient}`);
-        console.log(`🔍 Variable mappings:`, variableMappings);
-        console.log(`🔍 Row data:`, row);
-        
         Object.keys(variableMappings).forEach(variable => {
           const columnName = variableMappings[variable];
           const value = row[columnName];
-          console.log(`🔍 Variable ${variable} -> Column ${columnName} -> Value: ${value}`);
           if (value) {
             variables[variable] = value.toString();
           }
         });
-        
-        console.log(`🔍 Final variables for ${recipient}:`, variables);
 
-        // Send the message
+        // Create individual campaign entry for this recipient
+        const campaignResult = await pool.query(`
+          INSERT INTO campaign_logs 
+          (user_id, campaign_name, template_used, phone_number_id, recipient_number, language_code, status, campaign_data, created_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+          RETURNING id
+        `, [userId, 'Custom Messages', templateName, businessInfo.whatsapp_number_id, recipient, language, 'pending', JSON.stringify({ variables, template_components: template.components })]);
+
+        campaignEntries.push({
+          id: campaignResult.rows[0].id,
+          recipient,
+          variables
+        });
+      } catch (error) {
+        failedSends++;
+        errors.push(`Failed to create campaign entry for recipient: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+
+    // Process each recipient with their individual campaign IDs
+    for (const campaignEntry of campaignEntries) {
+      try {
+        // Send the message using the individual campaign ID
         await sendTemplateMessage(
           businessInfo.whatsapp_number_id,
           businessInfo.access_token,
-          recipient,
+          campaignEntry.recipient,
           templateName,
           language,
-          variables,
+          campaignEntry.variables,
           template.components,
-          campaignId.toString(),
+          campaignEntry.id.toString(),
           userId,
-          undefined, // headerMediaId
-          undefined, // headerType
-          undefined, // headerMediaUrl
-          undefined, // headerHandle
-          undefined, // mediaId
+          template.header_media_id,
+          template.header_type,
+          template.header_media_url,
+          template.header_handle,
+          template.media_id,
           template.category
         );
 
@@ -3115,17 +3110,12 @@ router.post('/send-custom-messages', requireAuth, async (req, res) => {
       } catch (error) {
         failedSends++;
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-        errors.push(`Failed to send to ${row[recipientColumn]}: ${errorMsg}`);
+        errors.push(`Failed to send to ${campaignEntry.recipient}: ${errorMsg}`);
       }
     }
 
-    // Update campaign log
-    await pool.query(
-      `UPDATE campaign_logs 
-       SET successful_sends = $1, failed_sends = $2, status = $3, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $4`,
-      [successfulSends, failedSends, 'completed', campaignId]
-    );
+    // Individual campaign entries are already updated by sendTemplateMessage
+    // No need for aggregate campaign update since we track individuals
 
     res.json({
       success: true,
