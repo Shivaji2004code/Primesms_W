@@ -2628,8 +2628,8 @@ router.get('/reports', requireAuth, async (req, res) => {
     
     const offset = (Number(page) - 1) * Number(limit);
     
-    // Build WHERE conditions for campaign_logs only - show individual recipients
-    let whereConditions = 'WHERE cl.user_id = $1 AND cl.recipient_number IS NOT NULL';
+    // Build WHERE conditions for campaign_logs - handle both old and new data structures
+    let whereConditions = 'WHERE cl.user_id = $1';
     const params: any[] = [userId];
     let paramCount = 1;
     
@@ -2667,24 +2667,57 @@ router.get('/reports', requireAuth, async (req, res) => {
       params.push(status.toString());
     }
     
-    // Updated reports query with proper phone number lookup
+    // Updated reports query - prioritize individual recipient data, fallback to message_logs
     const reportsQuery = `
-      SELECT 
-        cl.id,
-        cl.campaign_name,
-        cl.template_used,
-        COALESCE(ubi.whatsapp_number, cl.phone_number_id, 'Unknown') as from_number,
-        COALESCE(cl.recipient_number, 'Not Available') as recipient_number,
-        cl.status,
-        cl.sent_at,
-        cl.delivered_at,
-        cl.error_message,
-        cl.created_at,
-        cl.updated_at
-      FROM campaign_logs cl
-      LEFT JOIN user_business_info ubi ON cl.phone_number_id = ubi.whatsapp_number_id AND cl.user_id = ubi.user_id
-      ${whereConditions}
-      ORDER BY cl.created_at DESC
+      WITH recipient_reports AS (
+        -- First: Get individual recipient records from campaign_logs (new structure)
+        SELECT 
+          cl.id,
+          cl.campaign_name,
+          cl.template_used,
+          COALESCE(ubi.whatsapp_number, cl.phone_number_id, 'Unknown') as from_number,
+          cl.recipient_number,
+          cl.status,
+          cl.sent_at,
+          cl.delivered_at,
+          cl.error_message,
+          cl.created_at,
+          cl.updated_at,
+          'individual' as source_type
+        FROM campaign_logs cl
+        LEFT JOIN user_business_info ubi ON cl.phone_number_id = ubi.whatsapp_number_id AND cl.user_id = ubi.user_id
+        ${whereConditions}
+        AND cl.recipient_number IS NOT NULL
+        
+        UNION ALL
+        
+        -- Second: Get data from message_logs for campaigns without individual records (old structure)
+        SELECT 
+          ml.id,
+          cl.campaign_name,
+          cl.template_used,
+          COALESCE(ubi.whatsapp_number, cl.phone_number_id, 'Unknown') as from_number,
+          ml.recipient_number,
+          COALESCE(ml.status, 'pending') as status,
+          ml.sent_at,
+          ml.delivered_at,
+          ml.error_message,
+          COALESCE(ml.created_at, cl.created_at) as created_at,
+          CURRENT_TIMESTAMP as updated_at,
+          'message_logs' as source_type
+        FROM campaign_logs cl
+        JOIN message_logs ml ON cl.id = ml.campaign_id
+        LEFT JOIN user_business_info ubi ON cl.phone_number_id = ubi.whatsapp_number_id AND cl.user_id = ubi.user_id
+        ${whereConditions}
+        AND NOT EXISTS (
+          SELECT 1 FROM campaign_logs cl2 
+          WHERE cl2.user_id = cl.user_id 
+          AND cl2.campaign_name = cl.campaign_name 
+          AND cl2.recipient_number IS NOT NULL
+        )
+      )
+      SELECT * FROM recipient_reports
+      ORDER BY created_at DESC
       ${exportFormat && exportFormat !== 'false' ? '' : `LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`}
     `;
     
@@ -2773,10 +2806,30 @@ router.get('/reports', requireAuth, async (req, res) => {
     
     // Get total count for pagination
     const countQuery = `
-      SELECT COUNT(*) as total
-      FROM campaign_logs cl
-      LEFT JOIN user_business_info ubi ON cl.phone_number_id = ubi.whatsapp_number_id AND cl.user_id = ubi.user_id
-      ${whereConditions}
+      WITH recipient_reports AS (
+        -- Count individual recipient records from campaign_logs (new structure)
+        SELECT cl.id
+        FROM campaign_logs cl
+        LEFT JOIN user_business_info ubi ON cl.phone_number_id = ubi.whatsapp_number_id AND cl.user_id = ubi.user_id
+        ${whereConditions}
+        AND cl.recipient_number IS NOT NULL
+        
+        UNION ALL
+        
+        -- Count data from message_logs for campaigns without individual records (old structure)
+        SELECT ml.id
+        FROM campaign_logs cl
+        JOIN message_logs ml ON cl.id = ml.campaign_id
+        LEFT JOIN user_business_info ubi ON cl.phone_number_id = ubi.whatsapp_number_id AND cl.user_id = ubi.user_id
+        ${whereConditions}
+        AND NOT EXISTS (
+          SELECT 1 FROM campaign_logs cl2 
+          WHERE cl2.user_id = cl.user_id 
+          AND cl2.campaign_name = cl.campaign_name 
+          AND cl2.recipient_number IS NOT NULL
+        )
+      )
+      SELECT COUNT(*) as total FROM recipient_reports
     `;
     
     const countResult = await pool.query(countQuery, params.slice(0, paramCount));
@@ -2813,19 +2866,42 @@ router.get('/reports/summary', requireAuth, async (req, res) => {
     const userId = req.session.user!.id;
     
     const summaryQuery = `
+      WITH all_messages AS (
+        -- Get individual recipient records from campaign_logs (new structure)
+        SELECT 
+          cl.campaign_name,
+          cl.status
+        FROM campaign_logs cl
+        WHERE cl.user_id = $1
+        AND cl.recipient_number IS NOT NULL
+        
+        UNION ALL
+        
+        -- Get data from message_logs for campaigns without individual records (old structure)
+        SELECT 
+          cl.campaign_name,
+          COALESCE(ml.status, 'pending') as status
+        FROM campaign_logs cl
+        JOIN message_logs ml ON cl.id = ml.campaign_id
+        WHERE cl.user_id = $1
+        AND NOT EXISTS (
+          SELECT 1 FROM campaign_logs cl2 
+          WHERE cl2.user_id = cl.user_id 
+          AND cl2.campaign_name = cl.campaign_name 
+          AND cl2.recipient_number IS NOT NULL
+        )
+      )
       SELECT 
-        COUNT(DISTINCT COALESCE(cl.campaign_name, cl.id::text)) as total_campaigns,
-        COUNT(cl.id) as total_messages,
-        COUNT(CASE WHEN cl.status IN ('sent', 'delivered', 'read') THEN 1 END) as successful_messages,
-        COUNT(CASE WHEN cl.status IN ('failed') THEN 1 END) as failed_messages,
+        COUNT(DISTINCT campaign_name) as total_campaigns,
+        COUNT(*) as total_messages,
+        COUNT(CASE WHEN status IN ('sent', 'delivered', 'read') THEN 1 END) as successful_messages,
+        COUNT(CASE WHEN status IN ('failed') THEN 1 END) as failed_messages,
         ROUND(
-          (COUNT(CASE WHEN cl.status IN ('sent', 'delivered', 'read') THEN 1 END) * 100.0) / 
-          NULLIF(COUNT(cl.id), 0), 
+          (COUNT(CASE WHEN status IN ('sent', 'delivered', 'read') THEN 1 END) * 100.0) / 
+          NULLIF(COUNT(*), 0), 
           2
         ) as success_rate
-      FROM campaign_logs cl
-      WHERE cl.user_id = $1 
-      AND cl.recipient_number IS NOT NULL
+      FROM all_messages
     `;
     
     const result = await pool.query(summaryQuery, [userId]);
