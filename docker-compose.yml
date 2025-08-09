@@ -1,0 +1,57 @@
+# ============================================================================
+# DOCKER COMPOSE FOR PRIME SMS - DEVELOPMENT & TESTING
+# ============================================================================
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: PrimeSMS_W
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_PORT: 5432
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./migration_complete_production_fix.sql:/docker-entrypoint-initdb.d/02-migration.sql
+      - ./migration_add_recipient_to_campaign_logs.sql:/docker-entrypoint-initdb.d/03-recipient-fields.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Prime SMS Application
+  app:
+    build: .
+    ports:
+      - "5050:5050"
+    environment:
+      NODE_ENV: production
+      PORT: 5050
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: PrimeSMS_W
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      SESSION_SECRET: your-session-secret-change-in-production
+      WHATSAPP_API_BASE_URL: https://graph.facebook.com/v21.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - app_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5050/api/health', (res) => { if (res.statusCode === 200) process.exit(0); else process.exit(1); }).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  app_uploads:
