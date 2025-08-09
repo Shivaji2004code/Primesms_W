@@ -2596,7 +2596,7 @@ router.get('/reports', requireAuth, async (req, res) => {
     
     const offset = (Number(page) - 1) * Number(limit);
     
-    // Build WHERE conditions
+    // Build WHERE conditions for campaign_logs only
     let whereConditions = 'WHERE cl.user_id = $1';
     const params: any[] = [userId];
     let paramCount = 1;
@@ -2604,21 +2604,14 @@ router.get('/reports', requireAuth, async (req, res) => {
     // Date range filter
     if (dateFrom && dateFrom.toString().trim()) {
       paramCount++;
-      whereConditions += ` AND ml.created_at >= $${paramCount}`;
+      whereConditions += ` AND cl.created_at >= $${paramCount}`;
       params.push(dateFrom.toString());
     }
     
     if (dateTo && dateTo.toString().trim()) {
       paramCount++;
-      whereConditions += ` AND ml.created_at <= $${paramCount}::date + interval '1 day'`;
+      whereConditions += ` AND cl.created_at <= $${paramCount}::date + interval '1 day'`;
       params.push(dateTo.toString());
-    }
-    
-    // Recipient number filter
-    if (recipientNumber && recipientNumber.toString().trim()) {
-      paramCount++;
-      whereConditions += ` AND ml.recipient_number ILIKE $${paramCount}`;
-      params.push(`%${recipientNumber.toString().trim()}%`);
     }
     
     // Template filter
@@ -2631,37 +2624,38 @@ router.get('/reports', requireAuth, async (req, res) => {
     // Status filter
     if (status && status !== 'all') {
       paramCount++;
-      whereConditions += ` AND ml.status = $${paramCount}`;
+      whereConditions += ` AND cl.status = $${paramCount}`;
       params.push(status.toString());
     }
     
-    // Main query for reports
+    // Simplified campaign-only reports query
     const reportsQuery = `
       SELECT 
-        ml.id,
+        cl.id,
         cl.campaign_name,
         cl.template_used,
-        COALESCE(ubi.whatsapp_number, cl.phone_number_id) as from_number,
-        ml.recipient_number,
-        ml.status,
-        ml.error_message,
-        ml.sent_at,
-        ml.delivered_at,
-        ml.read_at,
-        ml.created_at
+        COALESCE(cl.phone_number_id, 'Unknown') as from_number,
+        cl.total_recipients,
+        cl.successful_sends,
+        cl.failed_sends,
+        cl.status,
+        cl.error_message,
+        cl.created_at,
+        cl.updated_at
       FROM campaign_logs cl
-      JOIN message_logs ml ON cl.id = ml.campaign_id
-      LEFT JOIN user_business_info ubi ON cl.phone_number_id = ubi.whatsapp_number_id AND cl.user_id = ubi.user_id
       ${whereConditions}
-      ORDER BY ml.created_at DESC
+      ORDER BY cl.created_at DESC
       ${exportFormat && exportFormat !== 'false' ? '' : `LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`}
     `;
     
+    // Add pagination parameters if not exporting
     if (!exportFormat || exportFormat === 'false') {
       params.push(Number(limit), offset);
     }
     
+    console.log(`🔍 [REPORTS] Executing simplified campaign query for user: ${userId}`);
     const reportsResult = await pool.query(reportsQuery, params);
+    console.log(`🔍 [REPORTS] Query returned ${reportsResult.rows.length} campaigns`);
     
     // If exporting data
     if (exportFormat && exportFormat !== 'false') {
@@ -2669,23 +2663,23 @@ router.get('/reports', requireAuth, async (req, res) => {
         'Campaign Name',
         'Template',
         'From Number', 
-        'Recipient Number',
+        'Total Recipients',
+        'Successful Sends',
+        'Failed Sends',
         'Status',
-        'Sent At',
-        'Delivered At',
-        'Read At',
-        'Failure Reason'
+        'Created At',
+        'Error Message'
       ];
       
       const rows = reportsResult.rows.map(row => [
         row.campaign_name || '',
         row.template_used || '',
         row.from_number || '',
-        row.recipient_number || '',
+        row.total_recipients || '0',
+        row.successful_sends || '0',
+        row.failed_sends || '0',
         row.status || '',
-        row.sent_at || '',
-        row.delivered_at || '',
-        row.read_at || '',
+        row.created_at || '',
         row.error_message || ''
       ]);
       
@@ -2710,12 +2704,12 @@ router.get('/reports', requireAuth, async (req, res) => {
             { wch: 25 }, // Campaign Name
             { wch: 15 }, // Template
             { wch: 15 }, // From Number
-            { wch: 15 }, // Recipient Number
+            { wch: 12 }, // Total Recipients
+            { wch: 12 }, // Successful Sends
+            { wch: 12 }, // Failed Sends
             { wch: 10 }, // Status
-            { wch: 18 }, // Sent At
-            { wch: 18 }, // Delivered At
-            { wch: 18 }, // Read At
-            { wch: 30 }  // Failure Reason
+            { wch: 18 }, // Created At
+            { wch: 30 }  // Error Message
           ];
           worksheet['!cols'] = columnWidths;
           
@@ -2744,8 +2738,6 @@ router.get('/reports', requireAuth, async (req, res) => {
     const countQuery = `
       SELECT COUNT(*) as total
       FROM campaign_logs cl
-      JOIN message_logs ml ON cl.id = ml.campaign_id
-      LEFT JOIN user_business_info ubi ON cl.phone_number_id = ubi.whatsapp_number_id AND cl.user_id = ubi.user_id
       ${whereConditions}
     `;
     
@@ -2764,10 +2756,15 @@ router.get('/reports', requireAuth, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching reports:', error);
+    console.error('🔍 [REPORTS] Error fetching reports:', error);
+    console.error('🔍 [REPORTS] Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch reports'
+      error: 'Failed to fetch reports',
+      debug: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
@@ -2779,17 +2776,16 @@ router.get('/reports/summary', requireAuth, async (req, res) => {
     
     const summaryQuery = `
       SELECT 
-        COUNT(DISTINCT cl.id) as total_campaigns,
-        COUNT(ml.id) as total_messages,
-        COUNT(CASE WHEN ml.status IN ('sent', 'delivered', 'read') THEN 1 END) as successful_messages,
-        COUNT(CASE WHEN ml.status = 'failed' THEN 1 END) as failed_messages,
+        COUNT(cl.id) as total_campaigns,
+        COALESCE(SUM(cl.total_recipients), 0) as total_messages,
+        COALESCE(SUM(cl.successful_sends), 0) as successful_messages,
+        COALESCE(SUM(cl.failed_sends), 0) as failed_messages,
         ROUND(
-          (COUNT(CASE WHEN ml.status IN ('sent', 'delivered', 'read') THEN 1 END) * 100.0) / 
-          NULLIF(COUNT(ml.id), 0), 
+          (COALESCE(SUM(cl.successful_sends), 0) * 100.0) / 
+          NULLIF(COALESCE(SUM(cl.total_recipients), 0), 0), 
           2
         ) as success_rate
       FROM campaign_logs cl
-      LEFT JOIN message_logs ml ON cl.id = ml.campaign_id
       WHERE cl.user_id = $1
     `;
     
