@@ -355,7 +355,7 @@ router.get('/users/:id/details', async (req, res) => {
     const businessResult = await pool.query(
       `SELECT id, user_id, business_name, whatsapp_number, whatsapp_number_id, 
        waba_id, access_token, webhook_url, webhook_verify_token, is_active, 
-       created_at, updated_at 
+       app_id, created_at, updated_at 
        FROM user_business_info WHERE user_id = $1`,
       [id]
     );
@@ -440,7 +440,7 @@ router.get('/users/:id/business-info', async (req, res) => {
     const result = await pool.query(
       `SELECT id, user_id, business_name, whatsapp_number, whatsapp_number_id, 
        waba_id, access_token, webhook_url, webhook_verify_token, is_active, 
-       created_at, updated_at 
+       app_id, created_at, updated_at 
        FROM user_business_info WHERE user_id = $1`,
       [id]
     );
@@ -461,6 +461,7 @@ router.get('/users/:id/business-info', async (req, res) => {
       webhookUrl: business.webhook_url,
       webhookVerifyToken: business.webhook_verify_token,
       isActive: business.is_active,
+      appId: business.app_id,
       createdAt: business.created_at,
       updatedAt: business.updated_at,
     };
@@ -485,7 +486,8 @@ router.put('/users/:id/business-info', async (req, res) => {
       accessToken,
       webhookUrl,
       webhookVerifyToken,
-      isActive
+      isActive,
+      appId
     }: CreateBusinessInfoRequest = req.body;
 
     // Verify user exists
@@ -516,26 +518,26 @@ router.put('/users/:id/business-info', async (req, res) => {
         `UPDATE user_business_info 
          SET business_name = $2, whatsapp_number = $3, whatsapp_number_id = $4,
              waba_id = $5, access_token = $6, webhook_url = $7, 
-             webhook_verify_token = $8, is_active = $9, updated_at = CURRENT_TIMESTAMP
+             webhook_verify_token = $8, is_active = $9, app_id = $10, updated_at = CURRENT_TIMESTAMP
          WHERE user_id = $1
          RETURNING id, user_id, business_name, whatsapp_number, whatsapp_number_id, 
                    waba_id, access_token, webhook_url, webhook_verify_token, is_active, 
-                   created_at, updated_at`,
+                   app_id, created_at, updated_at`,
         [id, businessName, whatsappNumber, whatsappNumberId, wabaId, accessToken, 
-         webhookUrl, webhookVerifyToken, isActive ?? true]
+         webhookUrl, webhookVerifyToken, isActive ?? true, appId]
       );
     } else {
       // Create new record
       result = await pool.query(
         `INSERT INTO user_business_info 
          (user_id, business_name, whatsapp_number, whatsapp_number_id, waba_id, 
-          access_token, webhook_url, webhook_verify_token, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          access_token, webhook_url, webhook_verify_token, is_active, app_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING id, user_id, business_name, whatsapp_number, whatsapp_number_id, 
                    waba_id, access_token, webhook_url, webhook_verify_token, is_active, 
-                   created_at, updated_at`,
+                   app_id, created_at, updated_at`,
         [id, businessName, whatsappNumber, whatsappNumberId, wabaId, accessToken, 
-         webhookUrl, webhookVerifyToken, isActive ?? true]
+         webhookUrl, webhookVerifyToken, isActive ?? true, appId]
       );
     }
 
@@ -551,6 +553,7 @@ router.put('/users/:id/business-info', async (req, res) => {
       webhookUrl: business.webhook_url,
       webhookVerifyToken: business.webhook_verify_token,
       isActive: business.is_active,
+      appId: business.app_id,
       createdAt: business.created_at,
       updatedAt: business.updated_at,
     };

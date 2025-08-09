@@ -44,6 +44,7 @@ export interface UserBusinessInfo {
   webhookUrl?: string;
   webhookVerifyToken?: string;
   isActive: boolean;
+  appId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -61,6 +62,7 @@ export interface CreateBusinessInfoRequest {
   webhookUrl?: string;
   webhookVerifyToken?: string;
   isActive?: boolean;
+  appId?: string;
 }
 
 // Template types

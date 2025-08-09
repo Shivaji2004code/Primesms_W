@@ -160,15 +160,13 @@ INSERT INTO credit_transactions (
     user_id, 
     amount, 
     transaction_type, 
-    description, 
-    balance_after
+    description
 )
 SELECT 
     u.id,
     10000.00,
     'INITIAL_ALLOCATION',
-    'Initial admin credits',
-    10000.00
+    'Initial admin credits'
 FROM users u WHERE u.username = 'primesms'
 ON CONFLICT DO NOTHING;
 
@@ -177,15 +175,13 @@ INSERT INTO credit_transactions (
     user_id, 
     amount, 
     transaction_type, 
-    description, 
-    balance_after
+    description
 )
 SELECT 
     u.id,
     1000.00,
     'WELCOME_BONUS',
-    'Welcome bonus for new user',
-    1000.00
+    'Welcome bonus for new user'
 FROM users u WHERE u.username = 'testuser'
 ON CONFLICT DO NOTHING;
 

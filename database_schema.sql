@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS user_business_info (
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    app_id VARCHAR(255),
     UNIQUE(user_id)
 );
 
@@ -53,7 +54,7 @@ CREATE TABLE IF NOT EXISTS templates (
     name VARCHAR(255) NOT NULL,
     category VARCHAR(20) NOT NULL CHECK (category IN ('UTILITY', 'MARKETING', 'AUTHENTICATION')),
     language VARCHAR(10) NOT NULL DEFAULT 'en_US',
-    status VARCHAR(20) NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT', 'IN_REVIEW', 'PENDING', 'APPROVED', 'ACTIVE', 'REJECTED', 'PAUSED', 'DISABLED', 'APPEAL_REQUESTED')),
+    status VARCHAR(20) NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT', 'PENDING', 'APPROVED', 'REJECTED', 'ACTIVE', 'PAUSED', 'DISABLED')),
     
     -- Template components as JSON
     components JSONB NOT NULL,
@@ -67,11 +68,14 @@ CREATE TABLE IF NOT EXISTS templates (
     header_media_id VARCHAR(255),
     header_type VARCHAR(20) DEFAULT 'NONE',
     header_media_url TEXT,
-    header_handle VARCHAR(255),
-    media_id VARCHAR(255),
+    header_handle TEXT,
+    media_id TEXT,
     
     -- Quality and status
     quality_rating VARCHAR(20) CHECK (quality_rating IN ('HIGH', 'MEDIUM', 'LOW', 'QUALITY_PENDING')),
+    
+    -- Header type constraint
+    CONSTRAINT templates_header_type_check CHECK (header_type IN ('NONE', 'TEXT', 'STATIC_IMAGE', 'DYNAMIC_IMAGE')),
     whatsapp_response JSONB,
     rejection_reason TEXT,
     
@@ -136,8 +140,11 @@ CREATE TABLE IF NOT EXISTS credit_transactions (
     message_id VARCHAR(255),
     campaign_id UUID REFERENCES campaign_logs(id) ON DELETE SET NULL,
     description TEXT,
-    balance_after DECIMAL(10,2),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Constraints
+    CONSTRAINT credit_transactions_amount_check CHECK (amount <> 0),
+    CONSTRAINT credit_transactions_template_category_check CHECK (template_category IS NULL OR template_category IN ('MARKETING', 'UTILITY', 'AUTHENTICATION'))
 );
 
 -- ============================================================================
@@ -149,11 +156,9 @@ CREATE TABLE IF NOT EXISTS admin_actions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     admin_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     action_type VARCHAR(50) NOT NULL,
-    target_type VARCHAR(50),
-    target_id UUID,
+    target_type VARCHAR(50) NOT NULL,
+    target_id UUID NOT NULL,
     details JSONB,
-    ip_address INET,
-    user_agent TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -201,7 +206,8 @@ CREATE INDEX IF NOT EXISTS idx_templates_user_id ON templates(user_id);
 CREATE INDEX IF NOT EXISTS idx_templates_status ON templates(status);
 CREATE INDEX IF NOT EXISTS idx_templates_category ON templates(category);
 CREATE INDEX IF NOT EXISTS idx_templates_template_id ON templates(template_id);
-CREATE INDEX IF NOT EXISTS idx_templates_name ON templates(user_id, name);
+CREATE INDEX IF NOT EXISTS idx_templates_status_created ON templates(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_templates_user_status ON templates(user_id, status);
 
 -- Campaign logs indexes
 CREATE INDEX IF NOT EXISTS idx_campaign_logs_user_id ON campaign_logs(user_id);
@@ -219,11 +225,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS message_logs_campaign_recipient_unique
 CREATE INDEX IF NOT EXISTS idx_credit_transactions_user_id ON credit_transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_credit_transactions_created_at ON credit_transactions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_credit_transactions_type ON credit_transactions(transaction_type);
+CREATE INDEX IF NOT EXISTS idx_credit_transactions_campaign_id ON credit_transactions(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_credit_transactions_user_created ON credit_transactions(user_id, created_at DESC);
 
 -- Admin actions indexes
-CREATE INDEX IF NOT EXISTS idx_admin_actions_admin_user_id ON admin_actions(admin_user_id);
-CREATE INDEX IF NOT EXISTS idx_admin_actions_created_at ON admin_actions(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_admin_actions_action_type ON admin_actions(action_type);
+CREATE INDEX IF NOT EXISTS idx_admin_actions_admin_user ON admin_actions(admin_user_id);
+CREATE INDEX IF NOT EXISTS idx_admin_actions_created_at ON admin_actions(created_at);
+CREATE INDEX IF NOT EXISTS idx_admin_actions_type ON admin_actions(action_type);
+CREATE INDEX IF NOT EXISTS idx_admin_actions_target ON admin_actions(target_type, target_id);
 
 -- User business info indexes
 CREATE INDEX IF NOT EXISTS idx_user_business_info_user_id ON user_business_info(user_id);
