@@ -144,7 +144,20 @@ CREATE TABLE IF NOT EXISTS credit_transactions (
     
     -- Constraints
     CONSTRAINT credit_transactions_amount_check CHECK (amount <> 0),
-    CONSTRAINT credit_transactions_template_category_check CHECK (template_category IS NULL OR template_category IN ('MARKETING', 'UTILITY', 'AUTHENTICATION'))
+    CONSTRAINT credit_transactions_template_category_check CHECK (template_category IS NULL OR template_category IN ('MARKETING', 'UTILITY', 'AUTHENTICATION')),
+    CONSTRAINT credit_transactions_transaction_type_check CHECK (transaction_type IN (
+        'DEDUCTION_QUICKSEND',
+        'DEDUCTION_CUSTOMISE_SMS',
+        'DEDUCTION_API_DELIVERED',
+        'DEDUCTION_DUPLICATE_BLOCKED',
+        'ADMIN_ADD',
+        'ADMIN_DEDUCT',
+        'REFUND',
+        'CREDIT_DEDUCTION',
+        'CREDIT_ADD',
+        'INITIAL_ALLOCATION',
+        'WELCOME_BONUS'
+    ))
 );
 
 -- ============================================================================
