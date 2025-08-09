@@ -764,7 +764,7 @@ async function logMessageSend(userId: string, templateId: string, recipient: str
         sent_at = EXCLUDED.sent_at
     `, [campaignId, recipient, messageId]);
     
-    // Also create individual campaign_logs entry for API messages
+    // Create individual campaign_logs entry for API messages (instead of updating existing)
     await pool.query(`
       INSERT INTO campaign_logs (
         user_id, campaign_name, template_used, phone_number_id, recipient_number, 

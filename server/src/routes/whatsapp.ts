@@ -1392,25 +1392,35 @@ router.post('/quick-send', requireAuth, upload.single('headerImage'), async (req
       });
     }
 
-    // Create campaign log
-    const campaignResult = await pool.query(
-      `INSERT INTO campaign_logs 
-       (user_id, campaign_name, template_used, phone_number_id, language_code, total_recipients, status, campaign_data)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id`,
-      [
-        userId,
-        campaign_name || `Quick Send - ${template_name} - ${new Date().toISOString()}`,
-        template_name,
-        phone_number_id,
-        language,
-        validRecipients.length,
-        'processing',
-        JSON.stringify({ variables, template_components: templateResult.rows[0].components })
-      ]
-    );
+    // Create individual campaign_logs entries for each recipient
+    const campaignName = campaign_name || `Quick Send - ${template_name} - ${new Date().toISOString()}`;
+    const campaignEntries = [];
+    
+    for (const recipient of validRecipients) {
+      const campaignResult = await pool.query(
+        `INSERT INTO campaign_logs 
+         (user_id, campaign_name, template_used, phone_number_id, recipient_number, language_code, status, campaign_data, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+         RETURNING id`,
+        [
+          userId,
+          campaignName,
+          template_name,
+          phone_number_id,
+          recipient,
+          language,
+          'pending',
+          JSON.stringify({ variables, template_components: templateResult.rows[0].components })
+        ]
+      );
+      
+      campaignEntries.push({
+        id: campaignResult.rows[0].id,
+        recipient: recipient
+      });
+    }
 
-    const campaignId = campaignResult.rows[0].id;
+    console.log(`✅ Created ${campaignEntries.length} individual campaign_logs entries for recipients`);
     
     // CREDIT SYSTEM: Deduct credits upfront for Quicksend (deduct on push, not delivery)
     let creditDeductionSuccess = false;
@@ -1753,42 +1763,28 @@ router.post('/send-bulk', requireAuth, async (req, res) => {
     let successCount = 0;
     let failCount = 0;
 
-    // Process messages in batches to respect rate limits
-    const batchSize = 10;
-    const batches = [];
-    
-    for (let i = 0; i < validRecipients.length; i += batchSize) {
-      batches.push(validRecipients.slice(i, i + batchSize));
-    }
-
+    // Process messages with their individual campaign IDs
     const messagePromises = [];
 
-    for (const batch of batches) {
-      for (const recipient of batch) {
-        const messagePromise = sendTemplateMessage(
-          phone_number_id,
-          access_token,
-          recipient,
-          template_name,
-          language,
-          variables,
-          templateResult.rows[0].components,
-          campaignId,
-          userId,
-          templateResult.rows[0].header_media_id,
-          templateResult.rows[0].header_type,
-          templateResult.rows[0].header_media_url,
-          templateResult.rows[0].header_handle,
-          templateResult.rows[0].media_id,
-          templateResult.rows[0].category
-        );
-        messagePromises.push(messagePromise);
-      }
-      
-      // Wait between batches to respect rate limits
-      if (batches.indexOf(batch) < batches.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
+    for (const campaignEntry of campaignEntries) {
+      const messagePromise = sendTemplateMessage(
+        phone_number_id,
+        access_token,
+        campaignEntry.recipient,
+        template_name,
+        language,
+        variables,
+        templateResult.rows[0].components,
+        campaignEntry.id, // Use individual campaign ID
+        userId,
+        templateResult.rows[0].header_media_id,
+        templateResult.rows[0].header_type,
+        templateResult.rows[0].header_media_url,
+        templateResult.rows[0].header_handle,
+        templateResult.rows[0].media_id,
+        templateResult.rows[0].category
+      );
+      messagePromises.push(messagePromise);
     }
 
     // Execute all message sending promises
@@ -2097,13 +2093,12 @@ async function sendTemplateMessage(
         [campaignId, recipient, messageId, 'sent', JSON.stringify(responseData)]
       );
       
-      // Also create individual campaign_logs entry for reports
+      // Update the existing campaign_logs entry with message details
       await pool.query(
-        `INSERT INTO campaign_logs 
-         (user_id, campaign_name, template_used, phone_number_id, recipient_number, message_id, status, sent_at, created_at)
-         SELECT cl.user_id, cl.campaign_name, cl.template_used, cl.phone_number_id, $2, $3, 'sent', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-         FROM campaign_logs cl WHERE cl.id = $1`,
-        [campaignId, recipient, messageId]
+        `UPDATE campaign_logs 
+         SET message_id = $2, status = 'sent', sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [campaignId, messageId]
       );
       
       return { success: true, messageId, recipient };
@@ -2119,13 +2114,12 @@ async function sendTemplateMessage(
         [campaignId, recipient, 'failed', errorMessage, JSON.stringify(responseData)]
       );
       
-      // Also create individual campaign_logs entry for failed messages
+      // Update the existing campaign_logs entry with error details
       await pool.query(
-        `INSERT INTO campaign_logs 
-         (user_id, campaign_name, template_used, phone_number_id, recipient_number, status, error_message, created_at)
-         SELECT cl.user_id, cl.campaign_name, cl.template_used, cl.phone_number_id, $2, 'failed', $3, CURRENT_TIMESTAMP
-         FROM campaign_logs cl WHERE cl.id = $1`,
-        [campaignId, recipient, errorMessage]
+        `UPDATE campaign_logs 
+         SET status = 'failed', error_message = $2, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [campaignId, errorMessage]
       );
       
       throw new Error(errorMessage);
@@ -2142,18 +2136,12 @@ async function sendTemplateMessage(
       [campaignId, recipient, 'failed', errorMessage]
     );
     
-    // Also create individual campaign_logs entry for failed messages (with conflict handling)
+    // Update the existing campaign_logs entry with error details
     await pool.query(
-      `INSERT INTO campaign_logs 
-       (user_id, campaign_name, template_used, phone_number_id, recipient_number, status, error_message, created_at)
-       SELECT cl.user_id, cl.campaign_name, cl.template_used, cl.phone_number_id, $2, 'failed', $3, CURRENT_TIMESTAMP
-       FROM campaign_logs cl WHERE cl.id = $1 
-       AND NOT EXISTS (
-         SELECT 1 FROM campaign_logs cl2 
-         WHERE cl2.user_id = cl.user_id AND cl2.recipient_number = $2 
-         AND cl2.campaign_name = cl.campaign_name
-       )`,
-      [campaignId, recipient, errorMessage]
+      `UPDATE campaign_logs 
+       SET status = 'failed', error_message = $2, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [campaignId, errorMessage]
     );
     
     throw error;
@@ -2419,29 +2407,55 @@ router.post('/custom-send', requireAuth, upload.single('file'), async (req, res)
         });
       }
 
-      // Create campaign record
-      const campaignResult = await pool.query(
-        `INSERT INTO campaign_logs 
-         (user_id, campaign_name, template_used, phone_number_id, language_code, total_recipients, status, campaign_data)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING id`,
-        [
-          userId,
-          campaignName || `Custom Campaign - ${templateName} - ${new Date().toISOString()}`,
-          templateName,
-          wabaId,
-          language,
-          data.length,
-          'processing',
-          JSON.stringify({ 
-            variableMappings: parsedVariableMappings, 
-            recipientColumn: recipientColName,
-            template_components: templateResult.rows[0].components 
-          })
-        ]
-      );
+      // Create individual campaign_logs entries for each recipient
+      const campaignNameFinal = campaignName || `Custom Campaign - ${templateName} - ${new Date().toISOString()}`;
+      const campaignEntries = [];
+      
+      for (const row of data) {
+        const recipient = row[recipientColName];
+        
+        // Build variables object for this row
+        const rowVariables: Record<string, string> = {};
+        Object.keys(parsedVariableMappings).forEach(templateVar => {
+          const columnName = parsedVariableMappings[templateVar];
+          if (columnName && row[columnName]) {
+            // Extract the number from the template variable (e.g., "{{1}}" -> "1")
+            const variableIndex = templateVar.replace(/[{}]/g, '');
+            rowVariables[variableIndex] = row[columnName].toString();
+          }
+        });
+        
+        const campaignResult = await pool.query(
+          `INSERT INTO campaign_logs 
+           (user_id, campaign_name, template_used, phone_number_id, recipient_number, language_code, status, campaign_data, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+           RETURNING id`,
+          [
+            userId,
+            campaignNameFinal,
+            templateName,
+            wabaId,
+            recipient,
+            language,
+            'pending',
+            JSON.stringify({ 
+              variables: rowVariables,
+              variableMappings: parsedVariableMappings, 
+              recipientColumn: recipientColName,
+              template_components: templateResult.rows[0].components,
+              rowData: row
+            })
+          ]
+        );
+        
+        campaignEntries.push({
+          id: campaignResult.rows[0].id,
+          recipient: recipient,
+          variables: rowVariables
+        });
+      }
 
-      const campaignId = campaignResult.rows[0].id;
+      console.log(`✅ Created ${campaignEntries.length} individual campaign_logs entries for custom campaign`);
       
       // CREDIT SYSTEM: Deduct credits upfront for Custom Send (deduct on push, not delivery)
       let creditDeductionSuccess = false;
@@ -2483,37 +2497,20 @@ router.post('/custom-send', requireAuth, upload.single('file'), async (req, res)
         });
       }
 
-      // Send messages to each recipient
+      // Send messages using individual campaign IDs
       let successCount = 0;
       let failCount = 0;
 
-      const messagePromises = data.map((row: any) => {
-        const recipientNumber = row[recipientColName];
-        if (!recipientNumber) {
-          failCount++;
-          return Promise.resolve();
-        }
-
-        // Build variables object for this row
-        const rowVariables: Record<string, string> = {};
-        Object.keys(parsedVariableMappings).forEach(templateVar => {
-          const columnName = parsedVariableMappings[templateVar];
-          if (columnName && row[columnName]) {
-            // Extract the number from the template variable (e.g., "{{1}}" -> "1")
-            const variableIndex = templateVar.replace(/[{}]/g, '');
-            rowVariables[variableIndex] = row[columnName].toString();
-          }
-        });
-
+      const messagePromises = campaignEntries.map((campaignEntry) => {
         return sendTemplateMessage(
           wabaId,
           numberResult.rows[0].access_token,
-          formatPhoneNumber(recipientNumber.toString()),
+          formatPhoneNumber(campaignEntry.recipient.toString()),
           templateName,
           language,
-          rowVariables,
+          campaignEntry.variables,
           templateResult.rows[0].components,
-          campaignId,
+          campaignEntry.id, // Use individual campaign ID
           userId,
           templateResult.rows[0].header_media_id,
           templateResult.rows[0].header_type,  
