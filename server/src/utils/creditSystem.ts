@@ -217,23 +217,44 @@ export async function getTemplateCategory(
   try {
     console.log(`💰 DEBUG CREDIT: Getting template category for userId: ${userId}, templateName: "${templateName}"`);
     
+    // First, check if template exists with more detailed query
     const result = await pool.query(
-      'SELECT category FROM templates WHERE user_id = $1 AND name = $2',
+      'SELECT category, status FROM templates WHERE user_id = $1 AND name = $2',
       [userId, templateName]
     );
     
     console.log(`💰 DEBUG CREDIT: Template query result:`, {
       rowCount: result.rows.length,
-      category: result.rows[0]?.category
+      category: result.rows[0]?.category,
+      status: result.rows[0]?.status
     });
     
     if (result.rows.length === 0) {
       console.log(`❌ DEBUG CREDIT: Template not found for user ${userId}, template "${templateName}"`);
+      
+      // Show available templates for debugging
+      const availableTemplates = await pool.query(
+        'SELECT name, category, status FROM templates WHERE user_id = $1 AND status IN (\'APPROVED\', \'ACTIVE\') ORDER BY name',
+        [userId]
+      );
+      
+      console.log(`💡 DEBUG CREDIT: Available approved templates for user:`, 
+        availableTemplates.rows.map(t => `${t.name} (${t.category})`).join(', ')
+      );
+      
       return null;
     }
     
-    const category = result.rows[0].category as TemplateCategory;
-    console.log(`✅ DEBUG CREDIT: Template category found: ${category}`);
+    const template = result.rows[0];
+    const category = template.category as TemplateCategory;
+    
+    // Check if template is in a usable status
+    if (!['APPROVED', 'ACTIVE'].includes(template.status)) {
+      console.log(`❌ DEBUG CREDIT: Template "${templateName}" found but status is "${template.status}" (not usable)`);
+      return null;
+    }
+    
+    console.log(`✅ DEBUG CREDIT: Template category found: ${category} (status: ${template.status})`);
     
     return category;
   } catch (error: any) {
@@ -259,7 +280,7 @@ export async function calculateCreditCost(
   const category = await getTemplateCategory(userId, templateName);
   
   if (!category) {
-    throw new Error('Template not found');
+    throw new Error(`Template '${templateName}' not found or not accessible for this user. Please ensure the template exists and is approved.`);
   }
   
   const ratePerMessage = getCreditRate(category);
