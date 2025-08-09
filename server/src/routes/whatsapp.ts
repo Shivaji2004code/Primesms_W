@@ -2628,8 +2628,8 @@ router.get('/reports', requireAuth, async (req, res) => {
     
     const offset = (Number(page) - 1) * Number(limit);
     
-    // Build WHERE conditions for campaign_logs only
-    let whereConditions = 'WHERE cl.user_id = $1';
+    // Build WHERE conditions for campaign_logs only - show individual recipients
+    let whereConditions = 'WHERE cl.user_id = $1 AND cl.recipient_number IS NOT NULL';
     const params: any[] = [userId];
     let paramCount = 1;
     
@@ -2814,17 +2814,18 @@ router.get('/reports/summary', requireAuth, async (req, res) => {
     
     const summaryQuery = `
       SELECT 
-        COUNT(cl.id) as total_campaigns,
-        COALESCE(SUM(cl.total_recipients), 0) as total_messages,
-        COALESCE(SUM(cl.successful_sends), 0) as successful_messages,
-        COALESCE(SUM(cl.failed_sends), 0) as failed_messages,
+        COUNT(DISTINCT COALESCE(cl.campaign_name, cl.id::text)) as total_campaigns,
+        COUNT(cl.id) as total_messages,
+        COUNT(CASE WHEN cl.status IN ('sent', 'delivered', 'read') THEN 1 END) as successful_messages,
+        COUNT(CASE WHEN cl.status IN ('failed') THEN 1 END) as failed_messages,
         ROUND(
-          (COALESCE(SUM(cl.successful_sends), 0) * 100.0) / 
-          NULLIF(COALESCE(SUM(cl.total_recipients), 0), 0), 
+          (COUNT(CASE WHEN cl.status IN ('sent', 'delivered', 'read') THEN 1 END) * 100.0) / 
+          NULLIF(COUNT(cl.id), 0), 
           2
         ) as success_rate
       FROM campaign_logs cl
-      WHERE cl.user_id = $1
+      WHERE cl.user_id = $1 
+      AND cl.recipient_number IS NOT NULL
     `;
     
     const result = await pool.query(summaryQuery, [userId]);
