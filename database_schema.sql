@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS templates (
 -- CAMPAIGN AND MESSAGE TRACKING
 -- ============================================================================
 
--- Campaign Logs - Track bulk messaging campaigns
+-- Campaign Logs - Track bulk messaging campaigns and individual messages
 CREATE TABLE IF NOT EXISTS campaign_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -99,10 +99,19 @@ CREATE TABLE IF NOT EXISTS campaign_logs (
     template_used VARCHAR(255) NOT NULL,
     phone_number_id VARCHAR(255),
     language_code VARCHAR(10) DEFAULT 'en',
+    
+    -- Campaign-level tracking
     total_recipients INTEGER DEFAULT 0,
     successful_sends INTEGER DEFAULT 0,
     failed_sends INTEGER DEFAULT 0,
-    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'paused')),
+    
+    -- Individual message tracking
+    recipient_number VARCHAR(20),
+    message_id VARCHAR(255),
+    sent_at TIMESTAMP,
+    delivered_at TIMESTAMP,
+    
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'paused', 'sent', 'delivered', 'read')),
     campaign_data JSONB,
     error_message TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -226,6 +235,8 @@ CREATE INDEX IF NOT EXISTS idx_templates_user_status ON templates(user_id, statu
 CREATE INDEX IF NOT EXISTS idx_campaign_logs_user_id ON campaign_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_campaign_logs_status ON campaign_logs(status);
 CREATE INDEX IF NOT EXISTS idx_campaign_logs_created_at ON campaign_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_campaign_logs_recipient_number ON campaign_logs(recipient_number);
+CREATE INDEX IF NOT EXISTS idx_campaign_logs_sent_at ON campaign_logs(sent_at DESC);
 
 -- Message logs indexes
 CREATE INDEX IF NOT EXISTS idx_message_logs_campaign_id ON message_logs(campaign_id);

@@ -2614,6 +2614,13 @@ router.get('/reports', requireAuth, async (req, res) => {
       params.push(dateTo.toString());
     }
     
+    // Recipient number filter
+    if (recipientNumber && recipientNumber.toString().trim()) {
+      paramCount++;
+      whereConditions += ` AND cl.recipient_number ILIKE $${paramCount}`;
+      params.push(`%${recipientNumber.toString().trim()}%`);
+    }
+    
     // Template filter
     if (template && template.toString().trim()) {
       paramCount++;
@@ -2628,17 +2635,17 @@ router.get('/reports', requireAuth, async (req, res) => {
       params.push(status.toString());
     }
     
-    // Simplified campaign-only reports query
+    // Updated reports query with recipient and timing data
     const reportsQuery = `
       SELECT 
         cl.id,
         cl.campaign_name,
         cl.template_used,
         COALESCE(cl.phone_number_id, 'Unknown') as from_number,
-        cl.total_recipients,
-        cl.successful_sends,
-        cl.failed_sends,
+        cl.recipient_number,
         cl.status,
+        cl.sent_at,
+        cl.delivered_at,
         cl.error_message,
         cl.created_at,
         cl.updated_at
@@ -2663,11 +2670,10 @@ router.get('/reports', requireAuth, async (req, res) => {
         'Campaign Name',
         'Template',
         'From Number', 
-        'Total Recipients',
-        'Successful Sends',
-        'Failed Sends',
+        'Recipient Number',
         'Status',
-        'Created At',
+        'Sent At',
+        'Delivered At',
         'Error Message'
       ];
       
@@ -2675,11 +2681,10 @@ router.get('/reports', requireAuth, async (req, res) => {
         row.campaign_name || '',
         row.template_used || '',
         row.from_number || '',
-        row.total_recipients || '0',
-        row.successful_sends || '0',
-        row.failed_sends || '0',
+        row.recipient_number || '',
         row.status || '',
-        row.created_at || '',
+        row.sent_at || '',
+        row.delivered_at || '',
         row.error_message || ''
       ]);
       
@@ -2704,11 +2709,10 @@ router.get('/reports', requireAuth, async (req, res) => {
             { wch: 25 }, // Campaign Name
             { wch: 15 }, // Template
             { wch: 15 }, // From Number
-            { wch: 12 }, // Total Recipients
-            { wch: 12 }, // Successful Sends
-            { wch: 12 }, // Failed Sends
+            { wch: 15 }, // Recipient Number
             { wch: 10 }, // Status
-            { wch: 18 }, // Created At
+            { wch: 18 }, // Sent At
+            { wch: 18 }, // Delivered At
             { wch: 30 }  // Error Message
           ];
           worksheet['!cols'] = columnWidths;
