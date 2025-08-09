@@ -1,6 +1,6 @@
 # Prime SMS API Documentation
 
-**Base URL:** `https://www.primesms.app`
+**Base URL:** `https://primesms.app`
 
 ## Overview
 
@@ -45,12 +45,12 @@ All API calls require a valid username that corresponds to an active Prime SMS a
 
 **GET Request:**
 ```
-GET https://www.primesms.app/api/send?username=harsha&templatename=final_call&recipient_number=919000900190&var1=shivaji
+GET https://primesms.app/api/send?username=harsha&templatename=final_call&recipient_number=919000900190&var1=shivaji
 ```
 
 **POST Request:**
 ```bash
-curl -X POST https://www.primesms.app/api/send \
+curl -X POST https://primesms.app/api/send \
   -H "Content-Type: application/json" \
   -d '{
     "username": "harsha",
@@ -137,7 +137,7 @@ curl -X POST https://www.primesms.app/api/send \
 
 #### Example Request
 ```
-GET https://www.primesms.app/api/send/template-info/harsha/final_call
+GET https://primesms.app/api/send/template-info/harsha/final_call
 ```
 
 #### Success Response
@@ -229,7 +229,7 @@ The API uses standard HTTP status codes:
 
 For API support and questions:
 - Email: admin@primesms.app
-- Dashboard: https://www.primesms.app/user/support
+- Dashboard: https://primesms.app/user/support
 
 ## Changelog
 
