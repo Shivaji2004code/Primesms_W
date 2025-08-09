@@ -752,7 +752,7 @@ async function logMessageSend(userId: string, templateId: string, recipient: str
       campaignId = campaignResult.rows[0].id;
     }
     
-    // Log the individual message
+    // Log the individual message to message_logs
     await pool.query(`
       INSERT INTO message_logs (
         campaign_id, recipient_number, message_id, status, sent_at
@@ -763,6 +763,17 @@ async function logMessageSend(userId: string, templateId: string, recipient: str
         status = EXCLUDED.status,
         sent_at = EXCLUDED.sent_at
     `, [campaignId, recipient, messageId]);
+    
+    // Also create individual campaign_logs entry for API messages
+    await pool.query(`
+      INSERT INTO campaign_logs (
+        user_id, campaign_name, template_used, phone_number_id, recipient_number, 
+        message_id, status, sent_at, created_at
+      )
+      VALUES ($1, $2, $3, 
+        (SELECT whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND is_active = true LIMIT 1),
+        $4, $5, 'sent', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `, [userId, campaignName, templateName, recipient, messageId]);
     
   } catch (error) {
     // Log error but don't fail the request

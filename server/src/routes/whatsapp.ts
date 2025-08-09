@@ -2090,11 +2090,20 @@ async function sendTemplateMessage(
       
       console.log(`✅ Message sent successfully to ${recipient}, ID: ${messageId}`);
       
-      // Log successful message
+      // Log successful message to message_logs
       await pool.query(
         `INSERT INTO message_logs (campaign_id, recipient_number, message_id, status, api_response, sent_at)
          VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
         [campaignId, recipient, messageId, 'sent', JSON.stringify(responseData)]
+      );
+      
+      // Also create individual campaign_logs entry for reports
+      await pool.query(
+        `INSERT INTO campaign_logs 
+         (user_id, campaign_name, template_used, phone_number_id, recipient_number, message_id, status, sent_at, created_at)
+         SELECT cl.user_id, cl.campaign_name, cl.template_used, cl.phone_number_id, $2, $3, 'sent', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+         FROM campaign_logs cl WHERE cl.id = $1`,
+        [campaignId, recipient, messageId]
       );
       
       return { success: true, messageId, recipient };
@@ -2103,11 +2112,20 @@ async function sendTemplateMessage(
       
       console.error(`❌ Message failed to ${recipient}:`, errorMessage);
       
-      // Log failed message
+      // Log failed message to message_logs
       await pool.query(
         `INSERT INTO message_logs (campaign_id, recipient_number, status, error_message, api_response)
          VALUES ($1, $2, $3, $4, $5)`,
         [campaignId, recipient, 'failed', errorMessage, JSON.stringify(responseData)]
+      );
+      
+      // Also create individual campaign_logs entry for failed messages
+      await pool.query(
+        `INSERT INTO campaign_logs 
+         (user_id, campaign_name, template_used, phone_number_id, recipient_number, status, error_message, created_at)
+         SELECT cl.user_id, cl.campaign_name, cl.template_used, cl.phone_number_id, $2, 'failed', $3, CURRENT_TIMESTAMP
+         FROM campaign_logs cl WHERE cl.id = $1`,
+        [campaignId, recipient, errorMessage]
       );
       
       throw new Error(errorMessage);
@@ -2122,6 +2140,20 @@ async function sendTemplateMessage(
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (campaign_id, recipient_number) DO NOTHING`,
       [campaignId, recipient, 'failed', errorMessage]
+    );
+    
+    // Also create individual campaign_logs entry for failed messages (with conflict handling)
+    await pool.query(
+      `INSERT INTO campaign_logs 
+       (user_id, campaign_name, template_used, phone_number_id, recipient_number, status, error_message, created_at)
+       SELECT cl.user_id, cl.campaign_name, cl.template_used, cl.phone_number_id, $2, 'failed', $3, CURRENT_TIMESTAMP
+       FROM campaign_logs cl WHERE cl.id = $1 
+       AND NOT EXISTS (
+         SELECT 1 FROM campaign_logs cl2 
+         WHERE cl2.user_id = cl.user_id AND cl2.recipient_number = $2 
+         AND cl2.campaign_name = cl.campaign_name
+       )`,
+      [campaignId, recipient, errorMessage]
     );
     
     throw error;
@@ -2635,14 +2667,14 @@ router.get('/reports', requireAuth, async (req, res) => {
       params.push(status.toString());
     }
     
-    // Updated reports query with recipient and timing data
+    // Updated reports query with proper phone number lookup
     const reportsQuery = `
       SELECT 
         cl.id,
         cl.campaign_name,
         cl.template_used,
-        COALESCE(cl.phone_number_id, 'Unknown') as from_number,
-        cl.recipient_number,
+        COALESCE(ubi.whatsapp_number, cl.phone_number_id, 'Unknown') as from_number,
+        COALESCE(cl.recipient_number, 'Not Available') as recipient_number,
         cl.status,
         cl.sent_at,
         cl.delivered_at,
@@ -2650,6 +2682,7 @@ router.get('/reports', requireAuth, async (req, res) => {
         cl.created_at,
         cl.updated_at
       FROM campaign_logs cl
+      LEFT JOIN user_business_info ubi ON cl.phone_number_id = ubi.whatsapp_number_id AND cl.user_id = ubi.user_id
       ${whereConditions}
       ORDER BY cl.created_at DESC
       ${exportFormat && exportFormat !== 'false' ? '' : `LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`}
@@ -2742,6 +2775,7 @@ router.get('/reports', requireAuth, async (req, res) => {
     const countQuery = `
       SELECT COUNT(*) as total
       FROM campaign_logs cl
+      LEFT JOIN user_business_info ubi ON cl.phone_number_id = ubi.whatsapp_number_id AND cl.user_id = ubi.user_id
       ${whereConditions}
     `;
     
