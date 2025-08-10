@@ -64,14 +64,18 @@ export default function AdminUserWallet() {
     setSuccessMessage('');
 
     try {
-      const currentBalance = userDetails?.creditBalance || 0;
+      // Ensure proper number conversion and decimal precision
+      const currentBalance = parseFloat(userDetails?.creditBalance?.toString() || '0');
+      const amountToProcess = parseFloat(amount.toString());
       let newBalance;
       
       if (operationType === 'add') {
-        newBalance = currentBalance + amount;
+        newBalance = Math.round((currentBalance + amountToProcess) * 100) / 100;
       } else {
-        newBalance = Math.max(0, currentBalance - amount); // Prevent negative balance
+        newBalance = Math.round(Math.max(0, currentBalance - amountToProcess) * 100) / 100; // Prevent negative balance
       }
+
+      console.log(`💰 FRONTEND CALCULATION: ${currentBalance} ${operationType} ${amountToProcess} = ${newBalance}`);
 
       const response = await fetch(`/api/admin/users/${id}`, {
         method: 'PUT',
@@ -126,10 +130,11 @@ export default function AdminUserWallet() {
     );
   }
 
-  const currentBalance = userDetails?.creditBalance || 0;
+  const currentBalance = parseFloat(userDetails?.creditBalance?.toString() || '0');
+  const amountValue = parseFloat(amount.toString() || '0');
   const projectedBalance = operationType === 'add' 
-    ? currentBalance + amount 
-    : Math.max(0, currentBalance - amount);
+    ? Math.round((currentBalance + amountValue) * 100) / 100
+    : Math.round(Math.max(0, currentBalance - amountValue) * 100) / 100;
 
   return (
     <DashboardLayout 

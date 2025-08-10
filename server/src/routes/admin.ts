@@ -227,12 +227,17 @@ router.put('/users/:id', async (req, res) => {
     }
 
     if (creditBalance !== undefined) {
-      if (creditBalance < 0) {
+      const creditAmount = parseFloat(creditBalance.toString());
+      if (creditAmount < 0) {
         return res.status(400).json({ error: 'Credit balance cannot be negative' });
       }
-
+      
+      // Properly handle decimal precision for credit balance
+      const roundedCreditBalance = Math.round(creditAmount * 100) / 100;
       updateFields.push(`credit_balance = $${paramCount++}`);
-      values.push(creditBalance);
+      values.push(roundedCreditBalance);
+      
+      console.log(`💰 ADMIN UPDATE: Setting credit_balance to ${roundedCreditBalance} (from ${creditBalance})`);
     }
 
     if (updateFields.length === 0) {
