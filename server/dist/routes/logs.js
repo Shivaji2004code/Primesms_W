@@ -13,7 +13,7 @@ router.get('/', auth_1.requireAuth, async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20;
         const offset = (page - 1) * limit;
-        const countResult = await db_1.default.query('SELECT COUNT(*) as total FROM message_logs');
+        const countResult = await db_1.default.query('SELECT COUNT(*) as total FROM campaign_logs');
         const total = parseInt(countResult.rows[0].total);
         const logsResult = await db_1.default.query(`SELECT 
         id,
@@ -21,7 +21,7 @@ router.get('/', auth_1.requireAuth, async (req, res) => {
         status,
         message_id,
         created_at
-      FROM message_logs 
+      FROM campaign_logs 
       ORDER BY created_at DESC 
       LIMIT $1 OFFSET $2`, [limit, offset]);
         const logs = logsResult.rows.map(row => ({
@@ -53,9 +53,8 @@ router.get('/cleanup/stats', auth_1.requireAuth, auth_1.requireAdmin, async (req
         res.json({
             success: true,
             stats: {
-                messageLogsCount: stats.messageLogsCount,
                 campaignLogsCount: stats.campaignLogsCount,
-                totalCount: stats.messageLogsCount + stats.campaignLogsCount,
+                totalCount: stats.campaignLogsCount,
                 thresholdDate: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
             }
         });
@@ -75,9 +74,8 @@ router.post('/cleanup', auth_1.requireAuth, auth_1.requireAdmin, async (req, res
             success: true,
             message: 'Log cleanup completed successfully',
             deleted: {
-                messageLogsDeleted: result.messageLogsDeleted,
                 campaignLogsDeleted: result.campaignLogsDeleted,
-                totalDeleted: result.messageLogsDeleted + result.campaignLogsDeleted
+                totalDeleted: result.campaignLogsDeleted
             },
             timestamp: new Date().toISOString()
         });

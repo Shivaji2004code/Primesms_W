@@ -56,16 +56,12 @@ class LogCleanupService {
             const thresholdISO = threshold.toISOString();
             console.log(`🧹 Starting log cleanup for records older than: ${threshold.toISOString()}`);
             await client.query('BEGIN');
-            const messageLogsResult = await client.query('DELETE FROM message_logs WHERE created_at < $1', [thresholdISO]);
             const campaignLogsResult = await client.query('DELETE FROM campaign_logs WHERE created_at < $1', [thresholdISO]);
             await client.query('COMMIT');
-            const messageLogsDeleted = messageLogsResult.rowCount || 0;
             const campaignLogsDeleted = campaignLogsResult.rowCount || 0;
             console.log(`✅ Log cleanup completed successfully:`);
-            console.log(`   - Message logs deleted: ${messageLogsDeleted}`);
             console.log(`   - Campaign logs deleted: ${campaignLogsDeleted}`);
-            console.log(`   - Total logs deleted: ${messageLogsDeleted + campaignLogsDeleted}`);
-            return { messageLogsDeleted, campaignLogsDeleted };
+            return { campaignLogsDeleted };
         }
         catch (error) {
             await client.query('ROLLBACK');
@@ -106,10 +102,8 @@ class LogCleanupService {
         try {
             const threshold = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
             const thresholdISO = threshold.toISOString();
-            const messageLogsResult = await client.query('SELECT COUNT(*) as count FROM message_logs WHERE created_at < $1', [thresholdISO]);
             const campaignLogsResult = await client.query('SELECT COUNT(*) as count FROM campaign_logs WHERE created_at < $1', [thresholdISO]);
             return {
-                messageLogsCount: parseInt(messageLogsResult.rows[0].count),
                 campaignLogsCount: parseInt(campaignLogsResult.rows[0].count)
             };
         }

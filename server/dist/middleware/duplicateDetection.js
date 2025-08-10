@@ -23,15 +23,22 @@ async function logDuplicateAttempt(userId, templateName, phone, variables, messa
              total_recipients = total_recipients + 1,
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $1`, [campaignId]);
-            await db_1.default.query(`INSERT INTO message_logs (campaign_id, recipient_number, message_id, status, error_message, variables_used, sent_at) 
-         VALUES ($1, $2, $3, 'duplicate', $4, $5, CURRENT_TIMESTAMP)`, [campaignId, phone, `duplicate_${messageHash.substring(0, 8)}`, `Duplicate message blocked - hash: ${messageHash}`, variablesJson]);
         }
         else {
             const campaignResult = await db_1.default.query(`INSERT INTO campaign_logs (user_id, campaign_name, template_used, total_recipients, successful_sends, failed_sends, status, error_message) 
          VALUES ($1, $2, $3, 1, 0, 1, 'failed', $4) RETURNING id`, [userId, `Duplicate Block: ${templateName}`, templateName, `Duplicate blocked - Variables: ${variablesJson || 'none'}`]);
             const newCampaignId = campaignResult.rows[0].id;
-            await db_1.default.query(`INSERT INTO message_logs (campaign_id, recipient_number, message_id, status, error_message, variables_used, sent_at) 
-         VALUES ($1, $2, $3, 'duplicate', $4, $5, CURRENT_TIMESTAMP)`, [newCampaignId, phone, `duplicate_${messageHash.substring(0, 8)}`, `Duplicate message blocked - hash: ${messageHash}`, variablesJson]);
+            await db_1.default.query(`UPDATE campaign_logs SET 
+           recipient_number = $1, 
+           message_id = $2,
+           campaign_data = jsonb_build_object(
+             'duplicate', true, 
+             'hash', $3, 
+             'variables', $4::jsonb,
+             'blocked_at', CURRENT_TIMESTAMP
+           ),
+           updated_at = CURRENT_TIMESTAMP
+         WHERE id = $5`, [phone, `duplicate_${messageHash.substring(0, 8)}`, messageHash, variablesJson || '{}', newCampaignId]);
         }
         console.log(`[DUPLICATE DETECTION] Blocked duplicate message for user ${userId}, template ${templateName}, phone ${phone}, variables: ${variablesJson}, hash: ${messageHash}`);
     }

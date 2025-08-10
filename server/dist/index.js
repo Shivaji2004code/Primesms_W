@@ -26,6 +26,8 @@ const whatsapp_1 = __importDefault(require("./routes/whatsapp"));
 const send_1 = __importDefault(require("./routes/send"));
 const credits_1 = __importDefault(require("./routes/credits"));
 const logs_1 = __importDefault(require("./routes/logs"));
+const metaWebhook_1 = __importDefault(require("./routes/metaWebhook"));
+const sseRoutes_1 = __importDefault(require("./routes/sseRoutes"));
 const auth_2 = require("./middleware/auth");
 const rateLimit_1 = require("./config/rateLimit");
 (0, errorHandler_1.setupGlobalErrorHandlers)();
@@ -34,6 +36,12 @@ exports.app = app;
 app.set('trust proxy', 1);
 app.use(health_1.default);
 console.log('[HEALTH] Health endpoints mounted FIRST - always accessible');
+app.use('/webhooks', express_1.default.json({
+    verify: (req, _res, buf) => {
+        req.rawBody = Buffer.from(buf);
+    }
+}), metaWebhook_1.default);
+console.log('[WEBHOOKS] Meta webhook routes mounted at /webhooks/*');
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
 const allowedOrigins = [
@@ -165,6 +173,7 @@ app.use('/api/logs', rateLimit_1.readLimiter, logs_1.default);
 app.use('/api/credits', rateLimit_1.readLimiter, credits_1.default);
 app.use('/api/whatsapp', rateLimit_1.writeLimiter, whatsapp_1.default);
 app.use('/api/send', rateLimit_1.writeLimiter, send_1.default);
+app.use('/api', sseRoutes_1.default);
 app.get('/api', (req, res) => {
     res.json({
         message: 'Prime SMS API',

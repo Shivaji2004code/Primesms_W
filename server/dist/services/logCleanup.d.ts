@@ -4,13 +4,11 @@ export declare class LogCleanupService {
     private constructor();
     static getInstance(): LogCleanupService;
     cleanupOldLogs(): Promise<{
-        messageLogsDeleted: number;
         campaignLogsDeleted: number;
     }>;
     startScheduledCleanup(): void;
     stopScheduledCleanup(): void;
     getOldLogsStats(): Promise<{
-        messageLogsCount: number;
         campaignLogsCount: number;
     }>;
 }

@@ -63,9 +63,8 @@ router.get('/cleanup/stats', requireAuth, requireAdmin, async (req, res) => {
     res.json({
       success: true,
       stats: {
-        messageLogsCount: stats.messageLogsCount,
         campaignLogsCount: stats.campaignLogsCount,
-        totalCount: stats.messageLogsCount + stats.campaignLogsCount,
+        totalCount: stats.campaignLogsCount,
         thresholdDate: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
       }
     });
@@ -88,9 +87,8 @@ router.post('/cleanup', requireAuth, requireAdmin, async (req, res) => {
       success: true,
       message: 'Log cleanup completed successfully',
       deleted: {
-        messageLogsDeleted: result.messageLogsDeleted,
         campaignLogsDeleted: result.campaignLogsDeleted,
-        totalDeleted: result.messageLogsDeleted + result.campaignLogsDeleted
+        totalDeleted: result.campaignLogsDeleted
       },
       timestamp: new Date().toISOString()
     });

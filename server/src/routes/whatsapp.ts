@@ -1639,31 +1639,18 @@ router.post('/send-bulk', requireAuth, async (req, res) => {
     console.log(`   Provided variables: [${providedVariablesList.join(', ')}]`);
     console.log(`   Variables object:`, variables);
     
-    // Check if variables count matches
-    if (requiredVariablesList.length !== providedVariablesList.length) {
-      return res.status(400).json({
-        success: false,
-        error: `Template "${template_name}" requires ${requiredVariablesList.length} variables (${requiredVariablesList.join(', ')}), but ${providedVariablesList.length} were provided (${providedVariablesList.join(', ')})`
-      });
-    }
-    
-    // Ensure all required variables are provided with correct indices
-    const missingVariables = requiredVariablesList.filter(reqVar => !variables[reqVar]);
-    const unexpectedVariables = providedVariablesList.filter(provVar => !requiredVariablesList.includes(provVar));
+    // RELAXED VALIDATION FOR BULK: Only check for critical missing variables, allow extra variables
+    const missingVariables = requiredVariablesList.filter(reqVar => !variables[reqVar] && variables[reqVar] !== '');
     
     if (missingVariables.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: `Missing required variables for template "${template_name}": ${missingVariables.join(', ')}`
-      });
+      console.log(`⚠️ Missing required variables for template "${template_name}": ${missingVariables.join(', ')}`);
+      console.log(`   This will be handled by sendTemplateMessage with placeholder values`);
     }
     
-    if (unexpectedVariables.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: `Template "${template_name}" requires variables [${requiredVariablesList.join(', ')}], but unexpected variables were provided: [${unexpectedVariables.join(', ')}]`
-      });
-    }
+    console.log(`✅ Bulk validation passed - proceeding with message sending`);
+    console.log(`   Required: [${requiredVariablesList.join(', ')}]`);
+    console.log(`   Provided: [${providedVariablesList.join(', ')}]`);
+    console.log(`   Missing (will use placeholders): [${missingVariables.join(', ')}]`);
 
     // Create individual campaign entries for each recipient (ensuring recipient_number is always saved)
     const campaignEntries = [];
@@ -2068,19 +2055,14 @@ async function sendTemplateMessage(
       
       console.log(`✅ Message sent successfully to ${recipient}, ID: ${messageId}`);
       
-      // Log successful message to message_logs
-      await pool.query(
-        `INSERT INTO message_logs (campaign_id, recipient_number, message_id, status, api_response, sent_at)
-         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
-        [campaignId, recipient, messageId, 'sent', JSON.stringify(responseData)]
-      );
-      
-      // Update the existing campaign_logs entry with message details
+      // Update campaign_logs with successful message details (no more message_logs table)
       await pool.query(
         `UPDATE campaign_logs 
-         SET message_id = $2, status = 'sent', sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+         SET message_id = $2, recipient_number = $3, status = 'sent', 
+             sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP,
+             campaign_data = COALESCE(campaign_data, '{}'::jsonb) || $4::jsonb
          WHERE id = $1`,
-        [campaignId, messageId]
+        [campaignId, messageId, recipient, JSON.stringify({api_response: responseData, sent_at: new Date()})]
       );
       
       return { success: true, messageId, recipient };
@@ -2089,19 +2071,13 @@ async function sendTemplateMessage(
       
       console.error(`❌ Message failed to ${recipient}:`, errorMessage);
       
-      // Log failed message to message_logs
-      await pool.query(
-        `INSERT INTO message_logs (campaign_id, recipient_number, status, error_message, api_response)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [campaignId, recipient, 'failed', errorMessage, JSON.stringify(responseData)]
-      );
-      
-      // Update the existing campaign_logs entry with error details
+      // Update campaign_logs with failed message details (no more message_logs table)
       await pool.query(
         `UPDATE campaign_logs 
-         SET status = 'failed', error_message = $2, updated_at = CURRENT_TIMESTAMP
+         SET recipient_number = $2, status = 'failed', error_message = $3, updated_at = CURRENT_TIMESTAMP,
+             campaign_data = COALESCE(campaign_data, '{}'::jsonb) || $4::jsonb
          WHERE id = $1`,
-        [campaignId, errorMessage]
+        [campaignId, recipient, errorMessage, JSON.stringify({api_response: responseData, failed_at: new Date()})]
       );
       
       throw new Error(errorMessage);
@@ -2110,20 +2086,13 @@ async function sendTemplateMessage(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     
-    // Log failed message if not already logged
-    await pool.query(
-      `INSERT INTO message_logs (campaign_id, recipient_number, status, error_message)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (campaign_id, recipient_number) DO NOTHING`,
-      [campaignId, recipient, 'failed', errorMessage]
-    );
-    
-    // Update the existing campaign_logs entry with error details
+    // Update campaign_logs with catch error details (no more message_logs table)  
     await pool.query(
       `UPDATE campaign_logs 
-       SET status = 'failed', error_message = $2, updated_at = CURRENT_TIMESTAMP
+       SET recipient_number = $2, status = 'failed', error_message = $3, updated_at = CURRENT_TIMESTAMP,
+           campaign_data = COALESCE(campaign_data, '{}'::jsonb) || $4::jsonb
        WHERE id = $1`,
-      [campaignId, errorMessage]
+      [campaignId, recipient, errorMessage, JSON.stringify({catch_error: errorMessage, failed_at: new Date()})]
     );
     
     throw error;

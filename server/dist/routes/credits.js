@@ -101,13 +101,17 @@ router.post('/add', auth_1.requireAuth, async (req, res) => {
         }
         await db_1.default.query('BEGIN');
         try {
-            const updateResult = await db_1.default.query('UPDATE users SET credit_balance = credit_balance + $1 WHERE id = $2 RETURNING credit_balance', [amount, userId]);
-            if (updateResult.rows.length === 0) {
+            const currentBalanceResult = await db_1.default.query('SELECT credit_balance FROM users WHERE id = $1', [userId]);
+            if (currentBalanceResult.rows.length === 0) {
                 throw new Error('User not found');
             }
-            const newBalance = updateResult.rows[0].credit_balance;
+            const currentBalance = parseFloat(currentBalanceResult.rows[0].credit_balance);
+            const amountToAdd = parseFloat(amount.toString());
+            const newBalance = Math.round((currentBalance + amountToAdd) * 100) / 100;
+            const updateResult = await db_1.default.query('UPDATE users SET credit_balance = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING credit_balance', [newBalance, userId]);
+            console.log(`💰 ADMIN CREDIT ADD: ${currentBalance} + ${amountToAdd} = ${newBalance}`);
             await db_1.default.query(`INSERT INTO credit_transactions (user_id, amount, transaction_type, description) 
-         VALUES ($1, $2, 'ADMIN_ADD', $3)`, [userId, amount, description]);
+         VALUES ($1, $2, 'ADMIN_ADD', $3)`, [userId, amountToAdd, description]);
             await db_1.default.query('COMMIT');
             res.json({
                 success: true,
@@ -135,14 +139,16 @@ const deductCredits = async (userId, amount, description) => {
         if (balanceResult.rows.length === 0) {
             throw new Error('User not found');
         }
-        const currentBalance = balanceResult.rows[0].credit_balance;
-        if (currentBalance < amount) {
+        const currentBalance = parseFloat(balanceResult.rows[0].credit_balance);
+        const amountToDeduct = parseFloat(amount.toString());
+        if (currentBalance < amountToDeduct) {
             throw new Error('Insufficient credits');
         }
-        const updateResult = await db_1.default.query('UPDATE users SET credit_balance = credit_balance - $1 WHERE id = $2 RETURNING credit_balance', [amount, userId]);
-        const newBalance = updateResult.rows[0].credit_balance;
+        const newBalance = Math.round((currentBalance - amountToDeduct) * 100) / 100;
+        const updateResult = await db_1.default.query('UPDATE users SET credit_balance = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING credit_balance', [newBalance, userId]);
+        console.log(`💰 ADMIN CREDIT DEDUCT: ${currentBalance} - ${amountToDeduct} = ${newBalance}`);
         await db_1.default.query(`INSERT INTO credit_transactions (user_id, amount, transaction_type, description) 
-       VALUES ($1, $2, 'ADMIN_DEDUCT', $3)`, [userId, -amount, description]);
+       VALUES ($1, $2, 'ADMIN_DEDUCT', $3)`, [userId, -amountToDeduct, description]);
         await db_1.default.query('COMMIT');
         return { success: true, newBalance };
     }

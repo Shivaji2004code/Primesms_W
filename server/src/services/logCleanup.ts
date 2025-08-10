@@ -15,9 +15,9 @@ export class LogCleanupService {
   }
 
   /**
-   * Delete logs older than 90 days from campaign_logs and campaign_logs tables
+   * Delete logs older than 90 days from campaign_logs table
    */
-  public async cleanupOldLogs(): Promise<{ messageLogsDeleted: number; campaignLogsDeleted: number }> {
+  public async cleanupOldLogs(): Promise<{ campaignLogsDeleted: number }> {
     const client = await pool.connect();
     
     try {
@@ -30,13 +30,7 @@ export class LogCleanupService {
       // Start transaction
       await client.query('BEGIN');
 
-      // Delete old message logs
-      const messageLogsResult = await client.query(
-        'DELETE FROM campaign_logs WHERE created_at < $1',
-        [thresholdISO]
-      );
-
-      // Delete old campaign logs (this will cascade delete related campaign_logs)
+      // Delete old campaign logs
       const campaignLogsResult = await client.query(
         'DELETE FROM campaign_logs WHERE created_at < $1',
         [thresholdISO]
@@ -45,15 +39,12 @@ export class LogCleanupService {
       // Commit transaction
       await client.query('COMMIT');
 
-      const messageLogsDeleted = messageLogsResult.rowCount || 0;
       const campaignLogsDeleted = campaignLogsResult.rowCount || 0;
 
       console.log(`✅ Log cleanup completed successfully:`);
-      console.log(`   - Message logs deleted: ${messageLogsDeleted}`);
       console.log(`   - Campaign logs deleted: ${campaignLogsDeleted}`);
-      console.log(`   - Total logs deleted: ${messageLogsDeleted + campaignLogsDeleted}`);
 
-      return { messageLogsDeleted, campaignLogsDeleted };
+      return { campaignLogsDeleted };
 
     } catch (error) {
       // Rollback transaction on error
@@ -104,17 +95,12 @@ export class LogCleanupService {
   /**
    * Get statistics about old logs that would be deleted
    */
-  public async getOldLogsStats(): Promise<{ messageLogsCount: number; campaignLogsCount: number }> {
+  public async getOldLogsStats(): Promise<{ campaignLogsCount: number }> {
     const client = await pool.connect();
     
     try {
       const threshold = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
       const thresholdISO = threshold.toISOString();
-
-      const messageLogsResult = await client.query(
-        'SELECT COUNT(*) as count FROM campaign_logs WHERE created_at < $1',
-        [thresholdISO]
-      );
 
       const campaignLogsResult = await client.query(
         'SELECT COUNT(*) as count FROM campaign_logs WHERE created_at < $1',
@@ -122,7 +108,6 @@ export class LogCleanupService {
       );
 
       return {
-        messageLogsCount: parseInt(messageLogsResult.rows[0].count),
         campaignLogsCount: parseInt(campaignLogsResult.rows[0].count)
       };
 

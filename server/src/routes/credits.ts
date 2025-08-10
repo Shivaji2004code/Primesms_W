@@ -131,23 +131,35 @@ router.post('/add', requireAuth, async (req, res) => {
     await pool.query('BEGIN');
 
     try {
-      // Update user balance
-      const updateResult = await pool.query(
-        'UPDATE users SET credit_balance = credit_balance + $1 WHERE id = $2 RETURNING credit_balance',
-        [amount, userId]
+      // Get current balance and properly handle decimal precision
+      const currentBalanceResult = await pool.query(
+        'SELECT credit_balance FROM users WHERE id = $1',
+        [userId]
       );
 
-      if (updateResult.rows.length === 0) {
+      if (currentBalanceResult.rows.length === 0) {
         throw new Error('User not found');
       }
 
-      const newBalance = updateResult.rows[0].credit_balance;
+      const currentBalance = parseFloat(currentBalanceResult.rows[0].credit_balance);
+      const amountToAdd = parseFloat(amount.toString());
+      
+      // Properly calculate new balance with decimal precision
+      const newBalance = Math.round((currentBalance + amountToAdd) * 100) / 100;
 
-      // Add transaction record
+      // Update user balance with properly calculated value
+      const updateResult = await pool.query(
+        'UPDATE users SET credit_balance = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING credit_balance',
+        [newBalance, userId]
+      );
+
+      console.log(`💰 ADMIN CREDIT ADD: ${currentBalance} + ${amountToAdd} = ${newBalance}`);
+
+      // Add transaction record (positive amount for addition)
       await pool.query(
         `INSERT INTO credit_transactions (user_id, amount, transaction_type, description) 
          VALUES ($1, $2, 'ADMIN_ADD', $3)`,
-        [userId, amount, description]
+        [userId, amountToAdd, description]
       );
 
       await pool.query('COMMIT');
@@ -177,7 +189,7 @@ export const deductCredits = async (userId: string, amount: number, description:
   try {
     await pool.query('BEGIN');
 
-    // Check current balance
+    // Check current balance and handle decimal precision
     const balanceResult = await pool.query(
       'SELECT credit_balance FROM users WHERE id = $1',
       [userId]
@@ -187,24 +199,29 @@ export const deductCredits = async (userId: string, amount: number, description:
       throw new Error('User not found');
     }
 
-    const currentBalance = balanceResult.rows[0].credit_balance;
-    if (currentBalance < amount) {
+    const currentBalance = parseFloat(balanceResult.rows[0].credit_balance);
+    const amountToDeduct = parseFloat(amount.toString());
+    
+    if (currentBalance < amountToDeduct) {
       throw new Error('Insufficient credits');
     }
 
-    // Update user balance
+    // Properly calculate new balance with decimal precision
+    const newBalance = Math.round((currentBalance - amountToDeduct) * 100) / 100;
+
+    // Update user balance with properly calculated value
     const updateResult = await pool.query(
-      'UPDATE users SET credit_balance = credit_balance - $1 WHERE id = $2 RETURNING credit_balance',
-      [amount, userId]
+      'UPDATE users SET credit_balance = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING credit_balance',
+      [newBalance, userId]
     );
 
-    const newBalance = updateResult.rows[0].credit_balance;
+    console.log(`💰 ADMIN CREDIT DEDUCT: ${currentBalance} - ${amountToDeduct} = ${newBalance}`);
 
-    // Add transaction record
+    // Add transaction record (negative amount for deduction)
     await pool.query(
       `INSERT INTO credit_transactions (user_id, amount, transaction_type, description) 
        VALUES ($1, $2, 'ADMIN_DEDUCT', $3)`,
-      [userId, -amount, description]
+      [userId, -amountToDeduct, description]
     );
 
     await pool.query('COMMIT');

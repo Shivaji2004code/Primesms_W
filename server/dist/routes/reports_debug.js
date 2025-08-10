@@ -51,7 +51,7 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
         console.log(`🔍 [REPORTS DEBUG] User has ${campaignCheck.rows[0].count} campaigns`);
         const messageCheck = await db_1.default.query(`SELECT COUNT(*) as count 
        FROM campaign_logs cl 
-       JOIN message_logs ml ON cl.id = ml.campaign_id 
+       JOIN campaign_logs ml ON cl.id = ml.campaign_id 
        WHERE cl.user_id = $1`, [userId]);
         console.log(`🔍 [REPORTS DEBUG] User has ${messageCheck.rows[0].count} messages`);
         let whereConditions = 'WHERE cl.user_id = $1';
@@ -101,7 +101,7 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
         ml.read_at,
         ml.created_at
       FROM campaign_logs cl
-      JOIN message_logs ml ON cl.id = ml.campaign_id
+      JOIN campaign_logs ml ON cl.id = ml.campaign_id
       ${whereConditions}
       ORDER BY ml.created_at DESC
       ${exportFormat && exportFormat !== 'false' ? '' : `LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`}
@@ -116,7 +116,7 @@ router.get('/reports', auth_1.requireAuth, async (req, res) => {
         const countQuery = `
       SELECT COUNT(*) as total
       FROM campaign_logs cl
-      JOIN message_logs ml ON cl.id = ml.campaign_id
+      JOIN campaign_logs ml ON cl.id = ml.campaign_id
       ${whereConditions}
     `;
         const countResult = await db_1.default.query(countQuery, params.slice(0, paramCount));
