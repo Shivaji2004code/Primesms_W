@@ -711,7 +711,7 @@ async function sendWhatsAppMessage(payload: any, businessInfo: any): Promise<{
 }
 
 /**
- * Log successful message send using existing campaign_logs and message_logs structure
+ * Log successful message send using campaign_logs only (no message_logs table)
  */
 async function logMessageSend(userId: string, templateId: string, recipient: string, messageId: string, templateName: string): Promise<void> {
   try {
@@ -722,20 +722,24 @@ async function logMessageSend(userId: string, templateId: string, recipient: str
       return;
     }
     
-    // Create individual campaign_logs entry for API messages with recipient details
+    // Create campaign_logs entry for API messages with proper structure
     const campaignName = `API_SEND_${templateName}_${new Date().toISOString().split('T')[0]}`;
     
     await pool.query(`
       INSERT INTO campaign_logs (
         user_id, campaign_name, template_used, phone_number_id, recipient_number, 
-        message_id, status, sent_at, created_at
+        message_id, status, sent_at, created_at, updated_at
       )
       VALUES ($1, $2, $3, 
         (SELECT whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND is_active = true LIMIT 1),
-        $4, $5, 'sent', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        $4, $5, 'sent', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT (user_id, message_id) DO UPDATE SET
+        status = 'sent',
+        sent_at = COALESCE(campaign_logs.sent_at, CURRENT_TIMESTAMP),
+        updated_at = CURRENT_TIMESTAMP
     `, [userId, campaignName, templateName, cleanRecipient, messageId]);
     
-    console.log(`✅ Created individual campaign_logs entry for API send: ${cleanRecipient}`);
+    console.log(`✅ Created campaign_logs entry for API send: ${cleanRecipient} (messageId: ${messageId})`);
     
   } catch (error) {
     // Log error but don't fail the request

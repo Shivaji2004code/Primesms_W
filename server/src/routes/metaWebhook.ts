@@ -127,43 +127,70 @@ async function processStatusUpdates(ubi: UserBusinessInfo, statuses: any[]): Pro
       
       console.log(`📊 [WEBHOOK] Status update: message ${id} -> ${statusValue} for ${recipient_id}`);
       
-      // Update message_logs table with delivery status
+      // Update campaign_logs table directly (no more message_logs)
       if (statusValue && id) {
-        const updateResult = await client.query(`
-          UPDATE message_logs 
-          SET status = $1, 
-              ${statusValue === 'delivered' ? 'delivered_at' : statusValue === 'read' ? 'read_at' : 'sent_at'} = $2
-          WHERE message_id = $3 AND status != 'failed'
-          RETURNING id, campaign_id, recipient_number
-        `, [statusValue, new Date(parseInt(timestamp) * 1000), id]);
+        let updateQuery = '';
+        let timestampValue = new Date(parseInt(timestamp) * 1000);
         
-        if (updateResult.rows.length > 0) {
-          const { campaign_id, recipient_number } = updateResult.rows[0];
-          console.log(`✅ [WEBHOOK] Updated message status: ${id} -> ${statusValue} for campaign ${campaign_id}`);
-          
-          // Update campaign_logs aggregates if needed
-          if (statusValue === 'delivered') {
-            await client.query(`
-              UPDATE campaign_logs 
-              SET delivered_at = COALESCE(delivered_at, $1)
-              WHERE id = $2 AND recipient_number = $3
-            `, [new Date(parseInt(timestamp) * 1000), campaign_id, recipient_number]);
-          }
-        } else {
-          console.log(`⚠️  [WEBHOOK] No message found to update for ID: ${id}`);
+        // Build update query based on status
+        if (statusValue === 'sent') {
+          updateQuery = `
+            UPDATE campaign_logs 
+            SET status = $1, sent_at = COALESCE(sent_at, $2), updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = $3 AND message_id = $4`;
+        } else if (statusValue === 'delivered') {
+          updateQuery = `
+            UPDATE campaign_logs 
+            SET status = $1, delivered_at = COALESCE(delivered_at, $2), updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = $3 AND message_id = $4`;
+        } else if (statusValue === 'read') {
+          updateQuery = `
+            UPDATE campaign_logs 
+            SET status = $1, read_at = COALESCE(read_at, $2), updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = $3 AND message_id = $4`;
+        } else if (statusValue === 'failed') {
+          const errorMessage = status.errors?.[0]?.title || status.error?.message || 'Delivery failed';
+          updateQuery = `
+            UPDATE campaign_logs 
+            SET status = 'failed', error_message = $5, updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = $3 AND message_id = $4`;
         }
-      }
-      
-      // Handle error statuses
-      if (status.errors && status.errors.length > 0) {
-        const errorMessage = status.errors[0].title || 'Unknown error';
-        console.log(`❌ [WEBHOOK] Message ${id} failed: ${errorMessage}`);
         
-        await client.query(`
-          UPDATE message_logs 
-          SET status = 'failed', error_message = $1
-          WHERE message_id = $2
-        `, [errorMessage, id]);
+        if (updateQuery) {
+          const params = statusValue === 'failed' 
+            ? [statusValue, timestampValue, ubi.userId, id, status.errors?.[0]?.title || 'Delivery failed']
+            : [statusValue, timestampValue, ubi.userId, id];
+            
+          const updateResult = await client.query(updateQuery, params);
+          
+          if (updateResult.rowCount && updateResult.rowCount > 0) {
+            console.log(`✅ [WEBHOOK] Updated campaign status: ${id} -> ${statusValue} for user ${ubi.userId}`);
+          } else {
+            console.log(`⚠️  [WEBHOOK] No campaign found for message ID: ${id} user ${ubi.userId}`);
+            
+            // Create campaign_logs entry if webhook arrives before send confirmation
+            if (statusValue !== 'failed') {
+              await client.query(`
+                INSERT INTO campaign_logs (
+                  user_id, message_id, recipient_number, status, campaign_name, 
+                  template_used, sent_at, delivered_at, read_at, created_at, updated_at
+                ) VALUES ($1, $2, $3, $4, 'webhook_only', 'unknown', 
+                  ${statusValue === 'sent' ? '$5' : 'NULL'}, 
+                  ${statusValue === 'delivered' ? '$5' : 'NULL'},
+                  ${statusValue === 'read' ? '$5' : 'NULL'},
+                  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id, message_id) DO UPDATE SET
+                  status = $4,
+                  ${statusValue === 'sent' ? 'sent_at = COALESCE(campaign_logs.sent_at, $5),' : ''}
+                  ${statusValue === 'delivered' ? 'delivered_at = COALESCE(campaign_logs.delivered_at, $5),' : ''}
+                  ${statusValue === 'read' ? 'read_at = COALESCE(campaign_logs.read_at, $5),' : ''}
+                  updated_at = CURRENT_TIMESTAMP
+              `, [ubi.userId, id, recipient_id, statusValue, timestampValue]);
+              
+              console.log(`🔄 [WEBHOOK] Created campaign entry from webhook: ${id}`);
+            }
+          }
+        }
       }
     }
   } catch (error) {

@@ -53,12 +53,8 @@ async function logDuplicateAttempt(
         [campaignId]
       );
       
-      // Log the individual duplicate message
-      await pool.query(
-        `INSERT INTO message_logs (campaign_id, recipient_number, message_id, status, error_message, variables_used, sent_at) 
-         VALUES ($1, $2, $3, 'duplicate', $4, $5, CURRENT_TIMESTAMP)`,
-        [campaignId, phone, `duplicate_${messageHash.substring(0, 8)}`, `Duplicate message blocked - hash: ${messageHash}`, variablesJson]
-      );
+      // Log duplicate attempt in campaign_logs (no more message_logs table)
+      // Already handled by the campaign_logs UPDATE above
     } else {
       // Create new campaign log for standalone duplicate
       const campaignResult = await pool.query(
@@ -69,11 +65,20 @@ async function logDuplicateAttempt(
       
       const newCampaignId = campaignResult.rows[0].id;
       
-      // Log the individual duplicate message
+      // Store duplicate info directly in campaign_logs (no more message_logs table)
       await pool.query(
-        `INSERT INTO message_logs (campaign_id, recipient_number, message_id, status, error_message, variables_used, sent_at) 
-         VALUES ($1, $2, $3, 'duplicate', $4, $5, CURRENT_TIMESTAMP)`,
-        [newCampaignId, phone, `duplicate_${messageHash.substring(0, 8)}`, `Duplicate message blocked - hash: ${messageHash}`, variablesJson]
+        `UPDATE campaign_logs SET 
+           recipient_number = $1, 
+           message_id = $2,
+           campaign_data = jsonb_build_object(
+             'duplicate', true, 
+             'hash', $3, 
+             'variables', $4::jsonb,
+             'blocked_at', CURRENT_TIMESTAMP
+           ),
+           updated_at = CURRENT_TIMESTAMP
+         WHERE id = $5`,
+        [phone, `duplicate_${messageHash.substring(0, 8)}`, messageHash, variablesJson || '{}', newCampaignId]
       );
     }
 

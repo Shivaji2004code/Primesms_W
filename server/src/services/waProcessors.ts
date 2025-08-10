@@ -174,12 +174,28 @@ class RealCampaignLogsRepo implements CampaignLogsRepo {
         console.log(`⚠️  [PROCESSORS] Message not found for status update: ${messageId} user ${userId}`);
         
         // Create entry if it doesn't exist (webhook arrived before send confirmation)
+        // Use proper column names that exist in campaign_logs
+        const recipientNumber = meta?.recipient_id || 'unknown';
+        
         await client.query(`
           INSERT INTO campaign_logs (
-            user_id, message_id, status, campaign_data, campaign_name, template_used, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, 'webhook_only', 'unknown', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-          ON CONFLICT (user_id, message_id) DO NOTHING
-        `, [userId, messageId, status, JSON.stringify(meta || {})]);
+            user_id, message_id, recipient_number, status, campaign_data, 
+            campaign_name, template_used, 
+            sent_at, delivered_at, read_at,
+            created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, 'webhook_only', 'unknown', 
+            ${status === 'sent' ? 'CURRENT_TIMESTAMP' : 'NULL'},
+            ${status === 'delivered' ? 'CURRENT_TIMESTAMP' : 'NULL'},
+            ${status === 'read' ? 'CURRENT_TIMESTAMP' : 'NULL'},
+            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT (user_id, message_id) DO UPDATE SET
+            status = $4,
+            campaign_data = campaign_logs.campaign_data || $5::jsonb,
+            ${status === 'sent' ? 'sent_at = COALESCE(campaign_logs.sent_at, CURRENT_TIMESTAMP),' : ''}
+            ${status === 'delivered' ? 'delivered_at = COALESCE(campaign_logs.delivered_at, CURRENT_TIMESTAMP),' : ''}
+            ${status === 'read' ? 'read_at = COALESCE(campaign_logs.read_at, CURRENT_TIMESTAMP),' : ''}
+            updated_at = CURRENT_TIMESTAMP
+        `, [userId, messageId, recipientNumber, status, JSON.stringify(meta || {})]);
         
         console.log(`🔄 [PROCESSORS] Created campaign_logs entry from webhook: ${messageId}`);
       }

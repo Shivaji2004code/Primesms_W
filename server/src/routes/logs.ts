@@ -13,7 +13,7 @@ router.get('/', requireAuth, async (req, res) => {
     const offset = (page - 1) * limit;
 
     // Get total count
-    const countResult = await pool.query('SELECT COUNT(*) as total FROM message_logs');
+    const countResult = await pool.query('SELECT COUNT(*) as total FROM campaign_logs');
     const total = parseInt(countResult.rows[0].total);
 
     // Get paginated message logs
@@ -24,7 +24,7 @@ router.get('/', requireAuth, async (req, res) => {
         status,
         message_id,
         created_at
-      FROM message_logs 
+      FROM campaign_logs 
       ORDER BY created_at DESC 
       LIMIT $1 OFFSET $2`,
       [limit, offset]

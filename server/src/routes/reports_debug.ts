@@ -39,7 +39,7 @@ router.get('/reports', requireAuth, async (req, res) => {
     const messageCheck = await pool.query(
       `SELECT COUNT(*) as count 
        FROM campaign_logs cl 
-       JOIN message_logs ml ON cl.id = ml.campaign_id 
+       JOIN campaign_logs ml ON cl.id = ml.campaign_id 
        WHERE cl.user_id = $1`,
       [userId]
     );
@@ -104,7 +104,7 @@ router.get('/reports', requireAuth, async (req, res) => {
         ml.read_at,
         ml.created_at
       FROM campaign_logs cl
-      JOIN message_logs ml ON cl.id = ml.campaign_id
+      JOIN campaign_logs ml ON cl.id = ml.campaign_id
       ${whereConditions}
       ORDER BY ml.created_at DESC
       ${exportFormat && exportFormat !== 'false' ? '' : `LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`}
@@ -124,7 +124,7 @@ router.get('/reports', requireAuth, async (req, res) => {
     const countQuery = `
       SELECT COUNT(*) as total
       FROM campaign_logs cl
-      JOIN message_logs ml ON cl.id = ml.campaign_id
+      JOIN campaign_logs ml ON cl.id = ml.campaign_id
       ${whereConditions}
     `;
     

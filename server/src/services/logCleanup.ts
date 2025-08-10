@@ -15,7 +15,7 @@ export class LogCleanupService {
   }
 
   /**
-   * Delete logs older than 90 days from message_logs and campaign_logs tables
+   * Delete logs older than 90 days from campaign_logs and campaign_logs tables
    */
   public async cleanupOldLogs(): Promise<{ messageLogsDeleted: number; campaignLogsDeleted: number }> {
     const client = await pool.connect();
@@ -32,11 +32,11 @@ export class LogCleanupService {
 
       // Delete old message logs
       const messageLogsResult = await client.query(
-        'DELETE FROM message_logs WHERE created_at < $1',
+        'DELETE FROM campaign_logs WHERE created_at < $1',
         [thresholdISO]
       );
 
-      // Delete old campaign logs (this will cascade delete related message_logs)
+      // Delete old campaign logs (this will cascade delete related campaign_logs)
       const campaignLogsResult = await client.query(
         'DELETE FROM campaign_logs WHERE created_at < $1',
         [thresholdISO]
@@ -112,7 +112,7 @@ export class LogCleanupService {
       const thresholdISO = threshold.toISOString();
 
       const messageLogsResult = await client.query(
-        'SELECT COUNT(*) as count FROM message_logs WHERE created_at < $1',
+        'SELECT COUNT(*) as count FROM campaign_logs WHERE created_at < $1',
         [thresholdISO]
       );
 
