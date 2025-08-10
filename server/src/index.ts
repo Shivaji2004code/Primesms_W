@@ -33,6 +33,7 @@ import whatsappRoutes from './routes/whatsapp';
 import sendRoutes from './routes/send';
 import creditsRoutes from './routes/credits';
 import logsRoutes from './routes/logs';
+import metaWebhookRouter from './routes/metaWebhook';
 
 // Import middleware
 import { requireAuthWithRedirect } from './middleware/auth';
@@ -72,10 +73,24 @@ app.use(healthRouter);
 console.log('[HEALTH] Health endpoints mounted FIRST - always accessible');
 
 // ============================================================================
+// WEBHOOK ROUTES (MUST BE BEFORE STANDARD BODY PARSING)
+// ============================================================================
+
+// Mount webhook routes with raw body capture for signature verification
+// This must be before express.json() to capture raw body for HMAC validation
+app.use('/webhooks', express.json({
+  verify: (req: any, _res, buf) => { 
+    req.rawBody = Buffer.from(buf); 
+  }
+}), metaWebhookRouter);
+
+console.log('[WEBHOOKS] Meta webhook routes mounted at /webhooks/*');
+
+// ============================================================================
 // MIDDLEWARE CONFIGURATION (REQUIRED ORDER)
 // ============================================================================
 
-// 2) Body parsing
+// 2) Body parsing (for non-webhook routes)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
