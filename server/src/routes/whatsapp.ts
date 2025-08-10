@@ -1653,7 +1653,7 @@ router.post('/send-bulk', requireAuth, async (req, res) => {
     console.log(`   Missing (will use placeholders): [${missingVariables.join(', ')}]`);
 
     // Create individual campaign entries for each recipient (ensuring recipient_number is always saved)
-    const campaignEntries = [];
+    const campaignEntries: Array<{id: string, recipient: string}> = [];
     const campaignNameFinal = campaign_name || `Campaign - ${template_name} - ${new Date().toISOString()}`;
     
     for (const recipient of validRecipients) {
@@ -1762,10 +1762,21 @@ router.post('/send-bulk', requireAuth, async (req, res) => {
     // Execute all message sending promises
     const results = await Promise.allSettled(messagePromises);
     
-    results.forEach(result => {
+    results.forEach((result, index) => {
       if (result.status === 'fulfilled') {
-        successCount++;
+        const response = result.value;
+        if (response?.success === false && response?.duplicate) {
+          console.log(`🚨 BULK MESSAGE ${index + 1}: Duplicate detected for ${campaignEntries[index].recipient}`);
+          failCount++;
+        } else if (response?.success) {
+          console.log(`✅ BULK MESSAGE ${index + 1}: Successfully sent to ${campaignEntries[index].recipient}`);
+          successCount++;
+        } else {
+          console.log(`⚠️ BULK MESSAGE ${index + 1}: Unknown response for ${campaignEntries[index].recipient}:`, response);
+          failCount++;
+        }
       } else {
+        console.log(`❌ BULK MESSAGE ${index + 1}: Promise rejected for ${campaignEntries[index].recipient}:`, result.reason);
         failCount++;
       }
     });
@@ -1816,6 +1827,8 @@ async function sendTemplateMessage(
   templateCategory?: string
 ): Promise<any> {
   try {
+    console.log(`🔄 SENDING MESSAGE: Starting sendTemplateMessage for ${recipient} with template ${templateName}`);
+    
     // DUPLICATE DETECTION: Check if this exact message was sent recently
     const duplicateCheck = await checkAndHandleDuplicate(
       userId,
@@ -1835,6 +1848,8 @@ async function sendTemplateMessage(
         message: 'Duplicate message blocked'
       };
     }
+
+    console.log(`✅ DUPLICATE CHECK PASSED: Proceeding to send message to ${recipient}`);
     const templateComponents: any[] = [];
 
     console.log(`🚀 Processing template "${templateName}" with category: ${templateCategory || 'UNKNOWN'}, header_type: ${headerType || 'UNKNOWN'}`);
@@ -2008,6 +2023,7 @@ async function sendTemplateMessage(
     };
 
     console.log('📤 Sending WhatsApp message payload:', JSON.stringify(payload, null, 2));
+    console.log(`🌐 MAKING META API CALL: Sending to ${recipient} via phone_number_id: ${phoneNumberId}`);
 
     // Make actual WhatsApp API call
     const response = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
