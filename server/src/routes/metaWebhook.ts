@@ -3,6 +3,8 @@ import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import axios from 'axios';
 import pool from '../db';
+import { createProcessors } from '../services/waProcessors';
+import { sseHub } from '../services/sseBroadcaster';
 
 type AnyObj = Record<string, any>;
 
@@ -170,6 +172,17 @@ async function processStatusUpdates(ubi: UserBusinessInfo, statuses: any[]): Pro
     client.release();
   }
 }
+
+// ====== INITIALIZE PROCESSORS ======
+
+// Create processors instance with SSE broadcaster
+const waProcessors = createProcessors({
+  emitReport: (userId: string, payload: any) => sseHub.emitReport(userId, payload),
+  emitTemplate: (userId: string, payload: any) => sseHub.emitTemplate(userId, payload)
+});
+
+console.log('✅ [WEBHOOK] WhatsApp processors initialized with SSE broadcasting');
+
 // ===============================================================================
 
 const metaWebhookRouter = Router();
@@ -367,20 +380,32 @@ metaWebhookRouter.post('/meta', async (req, res) => {
     pushLog(logItem);
     console.log(`📝 [WEBHOOK] Logged event: ${logItem.summary}`);
     
-    // Process webhook events asynchronously 
-    if (ubi && body?.entry?.[0]?.changes?.[0]?.value) {
-      const changeValue = body.entry[0].changes[0].value;
-      
-      // Handle incoming messages (customer replies)
-      if (Array.isArray(changeValue.messages) && changeValue.messages.length > 0) {
-        setImmediate(() => processIncomingMessages(ubi, changeValue.messages));
+    // Process webhook events asynchronously using enhanced processors
+    setImmediate(async () => {
+      try {
+        // Use new processors for template updates and message statuses
+        await waProcessors.processWebhook(body);
+        
+        // Keep existing message processing for customer replies (if needed)
+        if (ubi && body?.entry?.[0]?.changes?.[0]?.value) {
+          const changeValue = body.entry[0].changes[0].value;
+          
+          // Handle incoming messages (customer replies) - existing functionality
+          if (Array.isArray(changeValue.messages) && changeValue.messages.length > 0) {
+            await processIncomingMessages(ubi, changeValue.messages);
+          }
+          
+          // Note: Message status updates are now handled by waProcessors.processWebhook()
+          // but we can keep the existing processStatusUpdates for backward compatibility
+          if (Array.isArray(changeValue.statuses) && changeValue.statuses.length > 0) {
+            await processStatusUpdates(ubi, changeValue.statuses);
+          }
+        }
+      } catch (error) {
+        console.error('❌ [WEBHOOK] Error in async processing:', error);
+        // Don't throw - webhook already returned 200
       }
-      
-      // Handle message status updates (sent, delivered, read, failed)
-      if (Array.isArray(changeValue.statuses) && changeValue.statuses.length > 0) {
-        setImmediate(() => processStatusUpdates(ubi, changeValue.statuses));
-      }
-    }
+    });
     
   } catch (e) {
     console.error('❌ [WEBHOOK] Event processing error:', e);

@@ -34,6 +34,7 @@ import sendRoutes from './routes/send';
 import creditsRoutes from './routes/credits';
 import logsRoutes from './routes/logs';
 import metaWebhookRouter from './routes/metaWebhook';
+import sseRouter from './routes/sseRoutes';
 
 // Import middleware
 import { requireAuthWithRedirect } from './middleware/auth';
@@ -273,6 +274,9 @@ app.use('/api/credits', readLimiter, creditsRoutes);
 // Write-heavy routes (reasonable limits for messaging operations)
 app.use('/api/whatsapp', writeLimiter, whatsappRoutes);
 app.use('/api/send', writeLimiter, sendRoutes);
+
+// SSE routes for real-time updates (no rate limiting for persistent connections)
+app.use('/api', sseRouter);
 
 // API Root endpoint
 app.get('/api', (req, res) => {
