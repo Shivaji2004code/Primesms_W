@@ -173,6 +173,15 @@ export default function WhatsAppBulkMessaging() {
     }
   }, [selectedTemplate, selectedLanguage]);
 
+  // Cleanup image preview URL to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
+    };
+  }, [imagePreviewUrl]);
+
   // Calculate form completion percentage
   const getFormProgress = () => {
     let completed = 0;
@@ -310,11 +319,18 @@ export default function WhatsAppBulkMessaging() {
       return;
     }
 
+    // Clean up previous object URL to prevent memory leaks
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+    }
+
     setHeaderImage(file);
     
     // Create preview URL
     const previewUrl = URL.createObjectURL(file);
     setImagePreviewUrl(previewUrl);
+    
+    console.log('🖼️ Image uploaded:', file.name, 'Preview URL:', previewUrl);
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
