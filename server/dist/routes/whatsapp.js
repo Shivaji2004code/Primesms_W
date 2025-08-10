@@ -1164,7 +1164,7 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
         let failCount = 0;
         const messagePromises = [];
         for (const campaignEntry of campaignEntries) {
-            const messagePromise = sendTemplateMessage(phone_number_id, access_token, campaignEntry.recipient, template_name, language, variables, templateResult.rows[0].components, campaignEntry.id.toString(), userId, templateResult.rows[0].header_media_id, templateResult.rows[0].header_type, templateResult.rows[0].header_media_url, templateResult.rows[0].header_handle, templateResult.rows[0].media_id, templateResult.rows[0].category);
+            const messagePromise = sendTemplateMessage(phone_number_id, access_token, campaignEntry.recipient, template_name, language, variables, templateResult.rows[0].components, campaignEntry.id.toString(), userId, templateResult.rows[0].header_media_id, templateResult.rows[0].header_type, templateResult.rows[0].header_media_url, templateResult.rows[0].header_handle, uploadedImageMediaId || templateResult.rows[0].media_id, templateResult.rows[0].category);
             messagePromises.push(messagePromise);
         }
         const results = await Promise.allSettled(messagePromises);

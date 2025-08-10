@@ -173,14 +173,7 @@ export default function WhatsAppBulkMessaging() {
     }
   }, [selectedTemplate, selectedLanguage]);
 
-  // Cleanup image preview URL to prevent memory leaks
-  useEffect(() => {
-    return () => {
-      if (imagePreviewUrl) {
-        URL.revokeObjectURL(imagePreviewUrl);
-      }
-    };
-  }, [imagePreviewUrl]);
+  // Data URLs don't need cleanup like blob URLs
 
   // Calculate form completion percentage
   const getFormProgress = () => {
@@ -319,18 +312,16 @@ export default function WhatsAppBulkMessaging() {
       return;
     }
 
-    // Clean up previous object URL to prevent memory leaks
-    if (imagePreviewUrl) {
-      URL.revokeObjectURL(imagePreviewUrl);
-    }
-
     setHeaderImage(file);
     
-    // Create preview URL
-    const previewUrl = URL.createObjectURL(file);
-    setImagePreviewUrl(previewUrl);
-    
-    console.log('🖼️ Image uploaded:', file.name, 'Preview URL:', previewUrl);
+    // Create preview using FileReader to avoid CSP blob URL issues
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      setImagePreviewUrl(dataUrl);
+      console.log('🖼️ Image uploaded:', file.name, 'Preview URL type:', dataUrl?.substring(0, 30) + '...');
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {

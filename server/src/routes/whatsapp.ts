@@ -1494,7 +1494,7 @@ router.post('/quick-send', requireAuth, upload.single('headerImage'), async (req
         templateResult.rows[0].header_type,
         templateResult.rows[0].header_media_url,
         templateResult.rows[0].header_handle,
-        templateResult.rows[0].media_id,
+        uploadedImageMediaId || templateResult.rows[0].media_id, // Use fresh uploaded media_id if available
         templateResult.rows[0].category
       );
       messagePromises.push(messagePromise);
