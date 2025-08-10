@@ -97,7 +97,7 @@ router.get('/template-info/:username/:templatename', async (req, res) => {
   }
 });
 
-router.all('/send', async (req, res) => {
+router.all('/', async (req, res) => {
   try {
     
     // Extract parameters from both GET and POST requests

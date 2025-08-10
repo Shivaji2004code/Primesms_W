@@ -43,24 +43,24 @@ async function logDuplicateAttempt(
     const variablesJson = variables ? JSON.stringify(variables) : null;
     
     if (campaignId) {
-      // Update existing campaign with failed send
+      // Update existing campaign with failed send and duplicate error message
       await pool.query(
         `UPDATE campaign_logs 
          SET failed_sends = failed_sends + 1, 
              total_recipients = total_recipients + 1,
+             status = 'failed',
+             error_message = 'duplicate msg',
+             sent_at = COALESCE(sent_at, CURRENT_TIMESTAMP),
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $1`,
         [campaignId]
       );
-      
-      // Log duplicate attempt in campaign_logs (no more message_logs table)
-      // Already handled by the campaign_logs UPDATE above
     } else {
       // Create new campaign log for standalone duplicate
       const campaignResult = await pool.query(
-        `INSERT INTO campaign_logs (user_id, campaign_name, template_used, total_recipients, successful_sends, failed_sends, status, error_message) 
-         VALUES ($1, $2, $3, 1, 0, 1, 'failed', $4) RETURNING id`,
-        [userId, `Duplicate Block: ${templateName}`, templateName, `Duplicate blocked - Variables: ${variablesJson || 'none'}`]
+        `INSERT INTO campaign_logs (user_id, campaign_name, template_used, total_recipients, successful_sends, failed_sends, status, error_message, sent_at, created_at, updated_at) 
+         VALUES ($1, $2, $3, 1, 0, 1, 'failed', 'duplicate msg', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id`,
+        [userId, `Duplicate Block: ${templateName}`, templateName]
       );
       
       const newCampaignId = campaignResult.rows[0].id;

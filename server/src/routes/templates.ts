@@ -662,7 +662,7 @@ router.get('/', async (req, res) => {
     const templatesQuery = `
       SELECT id, user_id, name, category, language, status, components, 
              template_id, message_send_ttl_seconds, allow_category_change, 
-             quality_rating, rejection_reason, created_at, updated_at
+             quality_rating, whatsapp_response, rejection_reason, created_at, updated_at
       FROM templates 
       ${whereClause}
       ORDER BY created_at DESC 
@@ -683,6 +683,7 @@ router.get('/', async (req, res) => {
       messageSendTtlSeconds: row.message_send_ttl_seconds,
       allowCategoryChange: row.allow_category_change,
       qualityRating: row.quality_rating,
+      whatsappResponse: row.whatsapp_response,
       rejectionReason: row.rejection_reason,
       createdAt: row.created_at,
       updatedAt: row.updated_at

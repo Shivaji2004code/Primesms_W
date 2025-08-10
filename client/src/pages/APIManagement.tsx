@@ -87,7 +87,7 @@ export default function APIManagement() {
 
       if (response.ok) {
         const data = await response.json();
-        setTemplates(data.templates.filter((t: Template) => t.status === 'APPROVED' || t.status === 'ACTIVE'));
+        setTemplates(data.data.filter((t: Template) => t.status === 'APPROVED' || t.status === 'ACTIVE'));
       }
     } catch (error) {
       console.error('Error fetching templates:', error);
@@ -100,7 +100,7 @@ export default function APIManagement() {
     if (!currentUser || !templateName) return;
 
     try {
-      const response = await fetch(`/api/template-info/${currentUser.username}/${templateName}`, {
+      const response = await fetch(`/api/send/template-info/${currentUser.username}/${templateName}`, {
         credentials: 'include'
       });
 
@@ -168,7 +168,7 @@ export default function APIManagement() {
       ...testData.variables
     };
 
-    return `curl -X POST "https://your-api-domain.com/api/send" \\
+    return `curl -X POST "https://primesms.app/api/send" \\
   -H "Content-Type: application/json" \\
   -d '${JSON.stringify(payload, null, 2)}'`;
   };
@@ -191,7 +191,7 @@ const axios = require('axios');
 
 async function sendWhatsAppMessage() {
   try {
-    const response = await axios.post('https://your-api-domain.com/api/send', ${JSON.stringify(payload, null, 4)});
+    const response = await axios.post('https://primesms.app/api/send', ${JSON.stringify(payload, null, 4)});
     
     console.log('Message sent successfully:', response.data);
     return response.data;
@@ -225,7 +225,7 @@ import requests
 import json
 
 def send_whatsapp_message():
-    url = "https://your-api-domain.com/api/send"
+    url = "https://primesms.app/api/send"
     
     payload = ${JSON.stringify(payload, null, 4).replace(/"/g, '"')}
     
@@ -508,7 +508,7 @@ except Exception as e:
 
                   <h3>API Endpoint</h3>
                   <div className="bg-gray-100 p-4 rounded-lg">
-                    <p><strong>URL:</strong> <code>https://your-api-domain.com/api/send</code></p>
+                    <p><strong>URL:</strong> <code>https://primesms.app/api/send</code></p>
                     <p><strong>Method:</strong> <code>POST</code> or <code>GET</code></p>
                     <p><strong>Content-Type:</strong> <code>application/json</code> (for POST)</p>
                   </div>
@@ -664,7 +664,7 @@ except Exception as e:
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="bg-green-50 p-3 rounded-lg">
-                    <code className="text-green-800">GET /api/template-info/:username/:templatename</code>
+                    <code className="text-green-800">GET /api/send/template-info/:username/:templatename</code>
                   </div>
                   <p className="text-sm text-gray-600">
                     Analyze a template and get information about required parameters, variables, and buttons.
@@ -672,7 +672,7 @@ except Exception as e:
                   <div className="space-y-2">
                     <h4 className="font-medium">Example:</h4>
                     <code className="text-xs bg-gray-100 p-2 rounded block">
-                      GET /api/template-info/{currentUser?.username}/welcome_message
+                      GET /api/send/template-info/{currentUser?.username}/welcome_message
                     </code>
                   </div>
                 </CardContent>

@@ -21,12 +21,15 @@ async function logDuplicateAttempt(userId, templateName, phone, variables, messa
             await db_1.default.query(`UPDATE campaign_logs 
          SET failed_sends = failed_sends + 1, 
              total_recipients = total_recipients + 1,
+             status = 'failed',
+             error_message = 'duplicate msg',
+             sent_at = COALESCE(sent_at, CURRENT_TIMESTAMP),
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $1`, [campaignId]);
         }
         else {
-            const campaignResult = await db_1.default.query(`INSERT INTO campaign_logs (user_id, campaign_name, template_used, total_recipients, successful_sends, failed_sends, status, error_message) 
-         VALUES ($1, $2, $3, 1, 0, 1, 'failed', $4) RETURNING id`, [userId, `Duplicate Block: ${templateName}`, templateName, `Duplicate blocked - Variables: ${variablesJson || 'none'}`]);
+            const campaignResult = await db_1.default.query(`INSERT INTO campaign_logs (user_id, campaign_name, template_used, total_recipients, successful_sends, failed_sends, status, error_message, sent_at, created_at, updated_at) 
+         VALUES ($1, $2, $3, 1, 0, 1, 'failed', 'duplicate msg', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id`, [userId, `Duplicate Block: ${templateName}`, templateName]);
             const newCampaignId = campaignResult.rows[0].id;
             await db_1.default.query(`UPDATE campaign_logs SET 
            recipient_number = $1, 

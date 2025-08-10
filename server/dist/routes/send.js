@@ -60,7 +60,7 @@ router.get('/template-info/:username/:templatename', async (req, res) => {
         });
     }
 });
-router.all('/send', async (req, res) => {
+router.all('/', async (req, res) => {
     try {
         const params = extractParameters(req);
         const validation = validateRequiredParams(params);
