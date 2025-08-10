@@ -1159,8 +1159,37 @@ router.post('/quick-send', auth_1.requireAuth, upload.single('headerImage'), asy
                 details: creditError instanceof Error ? creditError.message : 'Unknown error'
             });
         }
-        let successCount = campaignEntries.length;
-        let failCount = validRecipients.length - campaignEntries.length;
+        console.log(`🚀 QUICK-SEND: Starting to send ${campaignEntries.length} messages`);
+        let successCount = 0;
+        let failCount = 0;
+        const messagePromises = [];
+        for (const campaignEntry of campaignEntries) {
+            const messagePromise = sendTemplateMessage(phone_number_id, access_token, campaignEntry.recipient, template_name, language, variables, templateResult.rows[0].components, campaignEntry.id.toString(), userId, templateResult.rows[0].header_media_id, templateResult.rows[0].header_type, templateResult.rows[0].header_media_url, templateResult.rows[0].header_handle, templateResult.rows[0].media_id, templateResult.rows[0].category);
+            messagePromises.push(messagePromise);
+        }
+        const results = await Promise.allSettled(messagePromises);
+        results.forEach((result, index) => {
+            if (result.status === 'fulfilled') {
+                const response = result.value;
+                if (response?.success === false && response?.duplicate) {
+                    console.log(`🚨 QUICK-SEND MESSAGE ${index + 1}: Duplicate detected for ${campaignEntries[index].recipient}`);
+                    failCount++;
+                }
+                else if (response?.success) {
+                    console.log(`✅ QUICK-SEND MESSAGE ${index + 1}: Successfully sent to ${campaignEntries[index].recipient}`);
+                    successCount++;
+                }
+                else {
+                    console.log(`⚠️ QUICK-SEND MESSAGE ${index + 1}: Unknown response for ${campaignEntries[index].recipient}:`, response);
+                    failCount++;
+                }
+            }
+            else {
+                console.log(`❌ QUICK-SEND MESSAGE ${index + 1}: Promise rejected for ${campaignEntries[index].recipient}:`, result.reason);
+                failCount++;
+            }
+        });
+        console.log(`📊 QUICK-SEND COMPLETED: ${successCount} successful, ${failCount} failed`);
         res.json({
             success: true,
             data: {
