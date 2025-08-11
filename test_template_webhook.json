@@ -1,0 +1,27 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WABA_ID_123",
+      "changes": [
+        {
+          "field": "message_template_status_update",
+          "value": {
+            "metadata": {
+              "phone_number_id": "PNI_123456789"
+            },
+            "message_template": {
+              "name": "order_confirmation",
+              "language": {
+                "code": "en_US"
+              },
+              "category": "UTILITY"
+            },
+            "event": "APPROVED",
+            "last_updated_time": "1702934400"
+          }
+        }
+      ]
+    }
+  ]
+}

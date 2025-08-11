@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -202,38 +235,8 @@ class WAProcessors {
     }
     async handleTemplateUpdate(val) {
         try {
-            console.log('📋 [PROCESSORS] Processing template status update:', JSON.stringify(val, null, 2));
-            const userId = await this.resolveUserIdFromValue(val);
-            if (!userId)
-                return;
-            const tpl = val?.message_template || val?.template || {};
-            const name = tpl?.name || val?.name;
-            const language = tpl?.language?.code || tpl?.language || val?.language || 'en_US';
-            const status = (val?.event || val?.status || 'UNKNOWN').toUpperCase();
-            const reason = val?.reason || val?.rejected_reason || val?.failure_reason;
-            const reviewedAt = val?.last_updated_time
-                ? new Date(Number(val.last_updated_time) * 1000)
-                : val?.last_updated_ts
-                    ? new Date(Number(val.last_updated_ts) * 1000)
-                    : new Date();
-            if (!name) {
-                console.log('⚠️  [PROCESSORS] No template name found in webhook payload');
-                return;
-            }
-            console.log(`📋 [PROCESSORS] Template update: ${name} (${language}) -> ${status} for user ${userId}`);
-            await this.templatesRepo.updateStatusByNameLang(userId, name, language, status, reason || null, reviewedAt);
-            this.broadcaster.emitTemplate(userId, {
-                type: 'template_update',
-                name,
-                language,
-                status,
-                reason: reason || null,
-                at: new Date().toISOString(),
-                meta: {
-                    reviewedAt: reviewedAt.toISOString(),
-                    rawWebhook: val
-                }
-            });
+            const { handleTemplateStatusChange } = await Promise.resolve().then(() => __importStar(require('./templateProcessor')));
+            await handleTemplateStatusChange(val);
         }
         catch (error) {
             console.error('❌ [PROCESSORS] Error handling template update:', error);

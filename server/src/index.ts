@@ -35,6 +35,7 @@ import creditsRoutes from './routes/credits';
 import logsRoutes from './routes/logs';
 import metaWebhookRouter from './routes/metaWebhook';
 import sseRouter from './routes/sseRoutes';
+import templatesSyncRouter from './routes/templatesSync';
 
 // Import middleware
 import { requireAuthWithRedirect } from './middleware/auth';
@@ -270,6 +271,9 @@ app.use('/api/admin', adminLimiter, adminRoutes);
 app.use('/api/templates', readLimiter, templateRoutes);
 app.use('/api/logs', readLimiter, logsRoutes);
 app.use('/api/credits', readLimiter, creditsRoutes);
+
+// Template sync routes (moderate limits for sync operations)
+app.use('/', writeLimiter, templatesSyncRouter);
 
 // Write-heavy routes (reasonable limits for messaging operations)
 app.use('/api/whatsapp', writeLimiter, whatsappRoutes);

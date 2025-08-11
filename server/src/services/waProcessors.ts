@@ -277,49 +277,9 @@ export class WAProcessors {
   // ====== TEMPLATE STATUS UPDATES ======
   private async handleTemplateUpdate(val: AnyObj): Promise<void> {
     try {
-      console.log('📋 [PROCESSORS] Processing template status update:', JSON.stringify(val, null, 2));
-      
-      const userId = await this.resolveUserIdFromValue(val);
-      if (!userId) return;
-
-      // Extract template info from various possible webhook formats
-      const tpl = val?.message_template || val?.template || {};
-      const name: string = tpl?.name || val?.name;
-      const language: string = tpl?.language?.code || tpl?.language || val?.language || 'en_US';
-      const status: string = (val?.event || val?.status || 'UNKNOWN').toUpperCase();
-      const reason: string | undefined = val?.reason || val?.rejected_reason || val?.failure_reason;
-      
-      // Convert timestamp if provided
-      const reviewedAt = val?.last_updated_time 
-        ? new Date(Number(val.last_updated_time) * 1000) 
-        : val?.last_updated_ts
-        ? new Date(Number(val.last_updated_ts) * 1000)
-        : new Date();
-
-      if (!name) {
-        console.log('⚠️  [PROCESSORS] No template name found in webhook payload');
-        return;
-      }
-
-      console.log(`📋 [PROCESSORS] Template update: ${name} (${language}) -> ${status} for user ${userId}`);
-
-      // Update database
-      await this.templatesRepo.updateStatusByNameLang(userId, name, language, status, reason || null, reviewedAt);
-
-      // Emit SSE event
-      this.broadcaster.emitTemplate(userId, {
-        type: 'template_update',
-        name,
-        language,
-        status,
-        reason: reason || null,
-        at: new Date().toISOString(),
-        meta: {
-          reviewedAt: reviewedAt.toISOString(),
-          rawWebhook: val
-        }
-      });
-
+      // Use the enhanced template processor that includes category updates and Graph API fallback
+      const { handleTemplateStatusChange } = await import('./templateProcessor');
+      await handleTemplateStatusChange(val);
     } catch (error) {
       console.error('❌ [PROCESSORS] Error handling template update:', error);
     }
