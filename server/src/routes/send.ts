@@ -225,7 +225,7 @@ router.all('/', async (req, res) => {
     }
 
     // Step 7: Log successful send and return response
-    await logMessageSend(userId, template.id, params.recipient_number, sendResult.data.message_id, template.name);
+    await logMessageSend(userId, template.id, params.recipient_number, sendResult.data.message_id, template.name, businessInfo.whatsapp_number_id);
 
     return res.status(200).json({
       success: true,
@@ -713,7 +713,7 @@ async function sendWhatsAppMessage(payload: any, businessInfo: any): Promise<{
 /**
  * Log successful message send using campaign_logs only (no message_logs table)
  */
-async function logMessageSend(userId: string, templateId: string, recipient: string, messageId: string, templateName: string): Promise<void> {
+async function logMessageSend(userId: string, templateId: string, recipient: string, messageId: string, templateName: string, whatsappNumberId?: string): Promise<void> {
   try {
     // Validate recipient is not empty
     const cleanRecipient = recipient?.toString().trim();
@@ -723,27 +723,26 @@ async function logMessageSend(userId: string, templateId: string, recipient: str
     }
     
     // Create campaign_logs entry for API messages with proper structure
-    const campaignName = `API_SEND_${templateName}_${new Date().toISOString().split('T')[0]}`;
+    const campaignName = `API_SEND_${templateName}_${Date.now()}`;
     
-    await pool.query(`
+    const result = await pool.query(`
       INSERT INTO campaign_logs (
         user_id, campaign_name, template_used, phone_number_id, recipient_number, 
-        message_id, status, sent_at, created_at, updated_at
+        message_id, status, total_recipients, successful_sends, failed_sends,
+        sent_at, created_at, updated_at
       )
-      VALUES ($1, $2, $3, 
-        (SELECT whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND is_active = true LIMIT 1),
-        $4, $5, 'sent', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      ON CONFLICT (user_id, message_id) DO UPDATE SET
-        status = 'sent',
-        sent_at = COALESCE(campaign_logs.sent_at, CURRENT_TIMESTAMP),
-        updated_at = CURRENT_TIMESTAMP
-    `, [userId, campaignName, templateName, cleanRecipient, messageId]);
+      VALUES ($1, $2, $3, $4, $5, $6, 'sent', 1, 1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      RETURNING id
+    `, [userId, campaignName, templateName, whatsappNumberId, cleanRecipient, messageId]);
     
-    console.log(`✅ Created campaign_logs entry for API send: ${cleanRecipient} (messageId: ${messageId})`);
+    console.log(`✅ Created campaign_logs entry for API send: ${cleanRecipient} (messageId: ${messageId}, recordId: ${result.rows[0].id})`);
     
   } catch (error) {
     // Log error but don't fail the request
-    console.error('Failed to log message send:', error);
+    console.error('❌ Failed to log API message send:', error);
+    console.error('Error details:', {
+      userId, templateName, recipient, messageId, whatsappNumberId
+    });
   }
 }
 

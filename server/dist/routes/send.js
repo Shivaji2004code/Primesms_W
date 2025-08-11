@@ -154,7 +154,7 @@ router.all('/', async (req, res) => {
         catch (creditError) {
             console.error('Credit deduction error for API delivery:', creditError);
         }
-        await logMessageSend(userId, template.id, params.recipient_number, sendResult.data.message_id, template.name);
+        await logMessageSend(userId, template.id, params.recipient_number, sendResult.data.message_id, template.name, businessInfo.whatsapp_number_id);
         return res.status(200).json({
             success: true,
             message: 'Message sent successfully',
@@ -531,31 +531,30 @@ async function sendWhatsAppMessage(payload, businessInfo) {
         }
     }
 }
-async function logMessageSend(userId, templateId, recipient, messageId, templateName) {
+async function logMessageSend(userId, templateId, recipient, messageId, templateName, whatsappNumberId) {
     try {
         const cleanRecipient = recipient?.toString().trim();
         if (!cleanRecipient) {
             console.error(`⚠️  API send attempted with empty recipient for template: ${templateName}`);
             return;
         }
-        const campaignName = `API_SEND_${templateName}_${new Date().toISOString().split('T')[0]}`;
-        await db_1.default.query(`
+        const campaignName = `API_SEND_${templateName}_${Date.now()}`;
+        const result = await db_1.default.query(`
       INSERT INTO campaign_logs (
         user_id, campaign_name, template_used, phone_number_id, recipient_number, 
-        message_id, status, sent_at, created_at, updated_at
+        message_id, status, total_recipients, successful_sends, failed_sends,
+        sent_at, created_at, updated_at
       )
-      VALUES ($1, $2, $3, 
-        (SELECT whatsapp_number_id FROM user_business_info WHERE user_id = $1 AND is_active = true LIMIT 1),
-        $4, $5, 'sent', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      ON CONFLICT (user_id, message_id) DO UPDATE SET
-        status = 'sent',
-        sent_at = COALESCE(campaign_logs.sent_at, CURRENT_TIMESTAMP),
-        updated_at = CURRENT_TIMESTAMP
-    `, [userId, campaignName, templateName, cleanRecipient, messageId]);
-        console.log(`✅ Created campaign_logs entry for API send: ${cleanRecipient} (messageId: ${messageId})`);
+      VALUES ($1, $2, $3, $4, $5, $6, 'sent', 1, 1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      RETURNING id
+    `, [userId, campaignName, templateName, whatsappNumberId, cleanRecipient, messageId]);
+        console.log(`✅ Created campaign_logs entry for API send: ${cleanRecipient} (messageId: ${messageId}, recordId: ${result.rows[0].id})`);
     }
     catch (error) {
-        console.error('Failed to log message send:', error);
+        console.error('❌ Failed to log API message send:', error);
+        console.error('Error details:', {
+            userId, templateName, recipient, messageId, whatsappNumberId
+        });
     }
 }
 function analyzeTemplate(template) {

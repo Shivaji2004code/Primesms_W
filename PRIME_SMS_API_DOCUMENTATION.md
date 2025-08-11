@@ -45,6 +45,41 @@ curl -X POST "https://primesms.app/api/send" \
 
 ## 📊 **Request & Response Examples**
 
+## ✨ **Quick Examples by HTTP Method**
+
+### **🔥 GET Requests (Simple & Fast)**
+
+```bash
+# Basic message
+curl "https://primesms.app/api/send?username=YOUR_USERNAME&templatename=YOUR_TEMPLATE&recipient_number=919398424270"
+
+# With variables
+curl "https://primesms.app/api/send?username=YOUR_USERNAME&templatename=YOUR_TEMPLATE&recipient_number=919398424270&var1=John&var2=12345"
+
+# With header text
+curl "https://primesms.app/api/send?username=YOUR_USERNAME&templatename=YOUR_TEMPLATE&recipient_number=919398424270&header_text=Welcome%20Message&var1=OrderID123"
+
+# Authentication/OTP template
+curl "https://primesms.app/api/send?username=YOUR_USERNAME&templatename=otp_verification&recipient_number=919398424270&var1=123456"
+```
+
+### **🚀 POST Requests (Advanced Features)**
+
+```bash
+# JSON payload with all options
+curl -X POST "https://primesms.app/api/send" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "YOUR_USERNAME",
+    "templatename": "YOUR_TEMPLATE",
+    "recipient_number": "919398424270",
+    "var1": "John Doe",
+    "var2": "ORDER123",
+    "header_text": "Welcome Message",
+    "button_url": "https://yoursite.com/order/123"
+  }'
+```
+
 ### **✅ Success Response**
 ```json
 {

@@ -513,6 +513,24 @@ except Exception as e:
                     <p><strong>Content-Type:</strong> <code>application/json</code> (for POST)</p>
                   </div>
 
+                  <h3>GET Request Examples</h3>
+                  <div className="space-y-3">
+                    <h4 className="font-medium">Basic Template Message</h4>
+                    <code className="text-xs bg-gray-100 p-2 rounded block overflow-x-auto">
+                      GET https://primesms.app/api/send?username=YOUR_USERNAME&templatename=YOUR_TEMPLATE&recipient_number=919398424270
+                    </code>
+                    
+                    <h4 className="font-medium">With Variables</h4>
+                    <code className="text-xs bg-gray-100 p-2 rounded block overflow-x-auto">
+                      GET https://primesms.app/api/send?username=YOUR_USERNAME&templatename=YOUR_TEMPLATE&recipient_number=919398424270&var1=John&var2=12345
+                    </code>
+                    
+                    <h4 className="font-medium">With Header Text</h4>
+                    <code className="text-xs bg-gray-100 p-2 rounded block overflow-x-auto">
+                      GET https://primesms.app/api/send?username=YOUR_USERNAME&templatename=YOUR_TEMPLATE&recipient_number=919398424270&header_text=Welcome%20John&var1=OrderID123
+                    </code>
+                  </div>
+
                   <h3>Rate Limits</h3>
                   <Alert>
                     <AlertTriangle className="h-4 w-4" />
@@ -672,7 +690,7 @@ except Exception as e:
                   <div className="space-y-2">
                     <h4 className="font-medium">Example:</h4>
                     <code className="text-xs bg-gray-100 p-2 rounded block">
-                      GET /api/send/template-info/{currentUser?.username}/welcome_message
+                      GET https://primesms.app/api/send/template-info/{currentUser?.username}/welcome_message
                     </code>
                   </div>
                 </CardContent>
