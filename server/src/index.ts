@@ -37,6 +37,7 @@ import metaWebhookRouter from './routes/metaWebhook';
 import sseRouter from './routes/sseRoutes';
 import templatesSyncRouter from './routes/templatesSync';
 import templatesDebugRouter from './routes/templatesDebug';
+import templatesSyncDirectRouter from './routes/templatesSyncDirect';
 
 // Import middleware
 import { requireAuthWithRedirect } from './middleware/auth';
@@ -275,6 +276,9 @@ app.use('/api/credits', readLimiter, creditsRoutes);
 
 // Template sync routes (moderate limits for sync operations)
 app.use('/', writeLimiter, templatesSyncRouter);
+
+// Direct template sync routes (emergency sync)
+app.use('/', writeLimiter, templatesSyncDirectRouter);
 
 // Debug routes (admin/development only)
 if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_DEBUG_ROUTES === 'true') {
