@@ -10,6 +10,7 @@ const path_1 = __importDefault(require("path"));
 const axios_1 = __importDefault(require("axios"));
 const db_1 = __importDefault(require("../db"));
 const auth_1 = require("../middleware/auth");
+const templateSanitizer_1 = require("../utils/templateSanitizer");
 const storage = multer_1.default.diskStorage({
     destination: (req, file, cb) => {
         const uploadDir = path_1.default.join(__dirname, '../../uploads');
@@ -39,6 +40,7 @@ const upload = (0, multer_1.default)({
 });
 const router = express_1.default.Router();
 router.use(auth_1.requireAuth);
+router.use(templateSanitizer_1.sanitizeTemplateResponse);
 const uploadMediaForTemplate = async (phoneNumberId, filePath, accessToken, mimeType = 'image/jpeg') => {
     console.log('\n🚀 UPLOADING MEDIA FOR TEMPLATE CREATION (BUSINESS MANAGER APPROACH)');
     console.log('=================================================================');

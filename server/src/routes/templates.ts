@@ -5,6 +5,7 @@ import path from 'path';
 import axios from 'axios';
 import pool from '../db';
 import { requireAuth } from '../middleware/auth';
+import { sanitizeTemplateResponse } from '../utils/templateSanitizer';
 import { 
   Template, 
   CreateTemplateRequest, 
@@ -46,8 +47,9 @@ const upload = multer({
 
 const router = express.Router();
 
-// All template routes require authentication
+// All template routes require authentication and sanitization
 router.use(requireAuth);
+router.use(sanitizeTemplateResponse);
 
 // NEW APPROACH: Try to get Business Manager ID and use for template media upload
 const uploadMediaForTemplate = async (
