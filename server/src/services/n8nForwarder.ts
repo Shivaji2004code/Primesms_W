@@ -4,7 +4,7 @@ import axios from 'axios';
 
 // ====== INTERFACES ======
 export interface ForwardContext {
-  userId: string;
+  userId: string | number;
   wabaId?: string | null;
   phoneNumberId: string;
   webhookUrl: string;            // from user_business_info.webhook_url
@@ -24,15 +24,18 @@ function hmacSha256Hex(secret: string, body: string): string {
 
 // ====== MAIN FORWARDER FUNCTION ======
 export async function forwardInboundToN8N(ctx: ForwardContext, event: N8NInboundEvent): Promise<void> {
+  // Ensure userId is a string for logging and headers (declare outside try block for scope)
+  const userIdStr = typeof ctx.userId === 'number' ? ctx.userId.toString() : ctx.userId;
+  
   try {
-    console.log(`📤 [N8N_FORWARDER] Preparing to forward inbound message to n8n for user ${ctx.userId}`);
+    console.log(`📤 [N8N_FORWARDER] Preparing to forward inbound message to n8n for user ${userIdStr}`);
     
     // Build the n8n payload
     const bodyObj = {
       source: 'whatsapp',
       event: 'message_in',
       tenant: { 
-        userId: ctx.userId, 
+        userId: userIdStr, 
         wabaId: ctx.wabaId || null, 
         phoneNumberId: ctx.phoneNumberId 
       },
@@ -45,7 +48,7 @@ export async function forwardInboundToN8N(ctx: ForwardContext, event: N8NInbound
     // Prepare headers
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'X-Prime-UserId': ctx.userId,
+      'X-Prime-UserId': userIdStr,
       'X-Prime-PhoneNumberId': ctx.phoneNumberId,
       'X-Prime-Event': 'message_in',
       'User-Agent': 'PrimeSMS-n8n-Forwarder/1.0'
@@ -55,12 +58,12 @@ export async function forwardInboundToN8N(ctx: ForwardContext, event: N8NInbound
     if (ctx.webhookVerifyToken && ctx.webhookVerifyToken.trim() !== '') {
       const signature = hmacSha256Hex(ctx.webhookVerifyToken, body);
       headers['X-PrimeSig'] = `sha256=${signature}`;
-      console.log(`🔐 [N8N_FORWARDER] Added HMAC signature for user ${ctx.userId}`);
+      console.log(`🔐 [N8N_FORWARDER] Added HMAC signature for user ${userIdStr}`);
     } else {
-      console.log(`ℹ️  [N8N_FORWARDER] No webhook verify token configured for user ${ctx.userId}, proceeding without signature`);
+      console.log(`ℹ️  [N8N_FORWARDER] No webhook verify token configured for user ${userIdStr}, proceeding without signature`);
     }
 
-    console.log(`📋 [N8N_FORWARDER] Payload preview for user ${ctx.userId}:`, {
+    console.log(`📋 [N8N_FORWARDER] Payload preview for user ${userIdStr}:`, {
       source: bodyObj.source,
       event: bodyObj.event,
       tenant: bodyObj.tenant,
@@ -71,12 +74,12 @@ export async function forwardInboundToN8N(ctx: ForwardContext, event: N8NInbound
     });
 
     // Attempt to forward with retries
-    await forwardWithRetry(ctx.webhookUrl, body, headers, ctx.userId);
+    await forwardWithRetry(ctx.webhookUrl, body, headers, userIdStr);
     
-    console.log(`✅ [N8N_FORWARDER] Successfully forwarded inbound message to n8n for user ${ctx.userId}`);
+    console.log(`✅ [N8N_FORWARDER] Successfully forwarded inbound message to n8n for user ${userIdStr}`);
     
   } catch (error) {
-    console.error(`❌ [N8N_FORWARDER] Critical error forwarding inbound message for user ${ctx.userId}:`, {
+    console.error(`❌ [N8N_FORWARDER] Critical error forwarding inbound message for user ${userIdStr}:`, {
       error: error instanceof Error ? error.message : String(error),
       webhookUrl: ctx.webhookUrl,
       phoneNumberId: ctx.phoneNumberId
@@ -163,8 +166,10 @@ async function forwardWithRetry(
 export function validateForwardContext(ctx: ForwardContext): { isValid: boolean; errors: string[] } {
   const errors: string[] = [];
   
-  if (!ctx.userId || typeof ctx.userId !== 'string' || ctx.userId.trim() === '') {
-    errors.push('userId is required and must be a non-empty string');
+  // Convert userId to string if it's a number, then validate
+  const userIdStr = typeof ctx.userId === 'number' ? ctx.userId.toString() : ctx.userId;
+  if (!userIdStr || typeof userIdStr !== 'string' || userIdStr.trim() === '') {
+    errors.push('userId is required and must be a non-empty string or number');
   }
   
   if (!ctx.phoneNumberId || typeof ctx.phoneNumberId !== 'string' || ctx.phoneNumberId.trim() === '') {

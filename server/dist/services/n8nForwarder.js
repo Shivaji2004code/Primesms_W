@@ -15,13 +15,14 @@ function hmacSha256Hex(secret, body) {
     return crypto_1.default.createHmac('sha256', secret).update(body, 'utf8').digest('hex');
 }
 async function forwardInboundToN8N(ctx, event) {
+    const userIdStr = typeof ctx.userId === 'number' ? ctx.userId.toString() : ctx.userId;
     try {
-        console.log(`📤 [N8N_FORWARDER] Preparing to forward inbound message to n8n for user ${ctx.userId}`);
+        console.log(`📤 [N8N_FORWARDER] Preparing to forward inbound message to n8n for user ${userIdStr}`);
         const bodyObj = {
             source: 'whatsapp',
             event: 'message_in',
             tenant: {
-                userId: ctx.userId,
+                userId: userIdStr,
                 wabaId: ctx.wabaId || null,
                 phoneNumberId: ctx.phoneNumberId
             },
@@ -31,7 +32,7 @@ async function forwardInboundToN8N(ctx, event) {
         const body = JSON.stringify(bodyObj);
         const headers = {
             'Content-Type': 'application/json',
-            'X-Prime-UserId': ctx.userId,
+            'X-Prime-UserId': userIdStr,
             'X-Prime-PhoneNumberId': ctx.phoneNumberId,
             'X-Prime-Event': 'message_in',
             'User-Agent': 'PrimeSMS-n8n-Forwarder/1.0'
@@ -39,12 +40,12 @@ async function forwardInboundToN8N(ctx, event) {
         if (ctx.webhookVerifyToken && ctx.webhookVerifyToken.trim() !== '') {
             const signature = hmacSha256Hex(ctx.webhookVerifyToken, body);
             headers['X-PrimeSig'] = `sha256=${signature}`;
-            console.log(`🔐 [N8N_FORWARDER] Added HMAC signature for user ${ctx.userId}`);
+            console.log(`🔐 [N8N_FORWARDER] Added HMAC signature for user ${userIdStr}`);
         }
         else {
-            console.log(`ℹ️  [N8N_FORWARDER] No webhook verify token configured for user ${ctx.userId}, proceeding without signature`);
+            console.log(`ℹ️  [N8N_FORWARDER] No webhook verify token configured for user ${userIdStr}, proceeding without signature`);
         }
-        console.log(`📋 [N8N_FORWARDER] Payload preview for user ${ctx.userId}:`, {
+        console.log(`📋 [N8N_FORWARDER] Payload preview for user ${userIdStr}:`, {
             source: bodyObj.source,
             event: bodyObj.event,
             tenant: bodyObj.tenant,
@@ -53,11 +54,11 @@ async function forwardInboundToN8N(ctx, event) {
             textPreview: bodyObj.message?.text ? bodyObj.message.text.substring(0, 50) + '...' : 'no text',
             receivedAt: bodyObj.receivedAt
         });
-        await forwardWithRetry(ctx.webhookUrl, body, headers, ctx.userId);
-        console.log(`✅ [N8N_FORWARDER] Successfully forwarded inbound message to n8n for user ${ctx.userId}`);
+        await forwardWithRetry(ctx.webhookUrl, body, headers, userIdStr);
+        console.log(`✅ [N8N_FORWARDER] Successfully forwarded inbound message to n8n for user ${userIdStr}`);
     }
     catch (error) {
-        console.error(`❌ [N8N_FORWARDER] Critical error forwarding inbound message for user ${ctx.userId}:`, {
+        console.error(`❌ [N8N_FORWARDER] Critical error forwarding inbound message for user ${userIdStr}:`, {
             error: error instanceof Error ? error.message : String(error),
             webhookUrl: ctx.webhookUrl,
             phoneNumberId: ctx.phoneNumberId
@@ -119,8 +120,9 @@ async function forwardWithRetry(webhookUrl, body, headers, userId) {
 }
 function validateForwardContext(ctx) {
     const errors = [];
-    if (!ctx.userId || typeof ctx.userId !== 'string' || ctx.userId.trim() === '') {
-        errors.push('userId is required and must be a non-empty string');
+    const userIdStr = typeof ctx.userId === 'number' ? ctx.userId.toString() : ctx.userId;
+    if (!userIdStr || typeof userIdStr !== 'string' || userIdStr.trim() === '') {
+        errors.push('userId is required and must be a non-empty string or number');
     }
     if (!ctx.phoneNumberId || typeof ctx.phoneNumberId !== 'string' || ctx.phoneNumberId.trim() === '') {
         errors.push('phoneNumberId is required and must be a non-empty string');

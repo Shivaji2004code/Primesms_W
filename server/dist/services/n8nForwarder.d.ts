@@ -1,5 +1,5 @@
 export interface ForwardContext {
-    userId: string;
+    userId: string | number;
     wabaId?: string | null;
     phoneNumberId: string;
     webhookUrl: string;
