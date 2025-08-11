@@ -51,13 +51,13 @@ export async function forwardInboundToN8N(ctx: ForwardContext, event: N8NInbound
       'User-Agent': 'PrimeSMS-n8n-Forwarder/1.0'
     };
     
-    // Add HMAC signature if webhook verify token is available
-    if (ctx.webhookVerifyToken) {
+    // Add HMAC signature if webhook verify token is available (optional)
+    if (ctx.webhookVerifyToken && ctx.webhookVerifyToken.trim() !== '') {
       const signature = hmacSha256Hex(ctx.webhookVerifyToken, body);
       headers['X-PrimeSig'] = `sha256=${signature}`;
       console.log(`🔐 [N8N_FORWARDER] Added HMAC signature for user ${ctx.userId}`);
     } else {
-      console.log(`⚠️  [N8N_FORWARDER] No webhook verify token configured for user ${ctx.userId}, skipping signature`);
+      console.log(`ℹ️  [N8N_FORWARDER] No webhook verify token configured for user ${ctx.userId}, proceeding without signature`);
     }
 
     console.log(`📋 [N8N_FORWARDER] Payload preview for user ${ctx.userId}:`, {
@@ -176,7 +176,7 @@ export function validateForwardContext(ctx: ForwardContext): { isValid: boolean;
   }
   
   // Validate webhook URL format
-  if (ctx.webhookUrl) {
+  if (ctx.webhookUrl && ctx.webhookUrl.trim() !== '') {
     try {
       const url = new URL(ctx.webhookUrl);
       if (!['http:', 'https:'].includes(url.protocol)) {
@@ -186,6 +186,8 @@ export function validateForwardContext(ctx: ForwardContext): { isValid: boolean;
       errors.push('webhookUrl must be a valid URL');
     }
   }
+  
+  // webhookVerifyToken is optional - no validation required
   
   return {
     isValid: errors.length === 0,

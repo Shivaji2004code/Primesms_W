@@ -416,18 +416,19 @@ metaWebhookRouter.post('/meta', async (req, res) => {
         
         // 📤 NEW: Forward inbound WhatsApp messages to n8n webhooks
         try {
+          console.log('🔄 [WEBHOOK] Starting n8n forwarding process...');
           const n8nStats = await processWebhookForN8n(body, lookupByPhoneNumberId, {
             enabled: true,
-            logLevel: 'minimal' // Use 'detailed' for debugging
+            logLevel: 'detailed' // Enable detailed logging for debugging
           });
           
-          if (n8nStats.inboundMessages > 0) {
-            console.log(`📤 [WEBHOOK] n8n forwarding stats:`, {
-              inbound: n8nStats.inboundMessages,
-              forwarded: n8nStats.forwardedToN8n,
-              errors: n8nStats.errors
-            });
-          }
+          console.log(`📤 [WEBHOOK] n8n forwarding stats:`, {
+            inbound: n8nStats.inboundMessages,
+            forwarded: n8nStats.forwardedToN8n,
+            errors: n8nStats.errors,
+            totalEntries: n8nStats.totalEntries,
+            processedChanges: n8nStats.processedChanges
+          });
         } catch (n8nError) {
           console.error('❌ [WEBHOOK] Error in n8n forwarding (non-blocking):', n8nError);
           // Don't throw - we don't want n8n issues to break webhook processing

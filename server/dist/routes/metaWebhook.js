@@ -327,17 +327,18 @@ metaWebhookRouter.post('/meta', async (req, res) => {
             try {
                 await waProcessors.processWebhook(body);
                 try {
+                    console.log('🔄 [WEBHOOK] Starting n8n forwarding process...');
                     const n8nStats = await (0, n8nWebhookProcessor_1.processWebhookForN8n)(body, lookupByPhoneNumberId, {
                         enabled: true,
-                        logLevel: 'minimal'
+                        logLevel: 'detailed'
                     });
-                    if (n8nStats.inboundMessages > 0) {
-                        console.log(`📤 [WEBHOOK] n8n forwarding stats:`, {
-                            inbound: n8nStats.inboundMessages,
-                            forwarded: n8nStats.forwardedToN8n,
-                            errors: n8nStats.errors
-                        });
-                    }
+                    console.log(`📤 [WEBHOOK] n8n forwarding stats:`, {
+                        inbound: n8nStats.inboundMessages,
+                        forwarded: n8nStats.forwardedToN8n,
+                        errors: n8nStats.errors,
+                        totalEntries: n8nStats.totalEntries,
+                        processedChanges: n8nStats.processedChanges
+                    });
                 }
                 catch (n8nError) {
                     console.error('❌ [WEBHOOK] Error in n8n forwarding (non-blocking):', n8nError);

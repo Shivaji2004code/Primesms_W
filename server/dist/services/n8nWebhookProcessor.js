@@ -84,10 +84,16 @@ class N8nWebhookProcessor {
             if (!value)
                 return;
             const messages = value.messages;
+            const statuses = value.statuses;
+            console.log(`🔍 [N8N_WEBHOOK_PROCESSOR] Webhook payload analysis:`, {
+                hasMessages: Array.isArray(messages) && messages.length > 0,
+                hasStatuses: Array.isArray(statuses) && statuses.length > 0,
+                messageCount: Array.isArray(messages) ? messages.length : 0,
+                statusCount: Array.isArray(statuses) ? statuses.length : 0,
+                phoneNumberId: value?.metadata?.phone_number_id || 'not found'
+            });
             if (!Array.isArray(messages) || messages.length === 0) {
-                if (this.config.logLevel === 'detailed') {
-                    console.log('⏭️  [N8N_WEBHOOK_PROCESSOR] No inbound messages found, only status updates');
-                }
+                console.log('⏭️  [N8N_WEBHOOK_PROCESSOR] No inbound messages found, only status updates or other events');
                 return;
             }
             this.stats.inboundMessages += messages.length;
@@ -106,10 +112,11 @@ class N8nWebhookProcessor {
                 this.stats.errors++;
                 return;
             }
-            if (!userBusinessInfo.webhookUrl) {
+            if (!userBusinessInfo.webhookUrl || userBusinessInfo.webhookUrl.trim() === '') {
                 console.log(`⚠️  [N8N_WEBHOOK_PROCESSOR] No webhook URL configured for user ${userBusinessInfo.userId}, skipping n8n forward`);
                 return;
             }
+            console.log(`🎯 [N8N_WEBHOOK_PROCESSOR] Found webhook URL for user ${userBusinessInfo.userId}: ${userBusinessInfo.webhookUrl}`);
             if (this.config.logLevel === 'detailed') {
                 console.log(`📱 [N8N_WEBHOOK_PROCESSOR] Resolved phone_number_id ${phoneNumberId} to user ${userBusinessInfo.userId} with webhook URL`);
             }
