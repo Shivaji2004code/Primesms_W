@@ -5,6 +5,7 @@ import axios from 'axios';
 import pool from '../db';
 import { createProcessors } from '../services/waProcessors';
 import { sseHub } from '../services/sseBroadcaster';
+import { processWebhookForN8n } from '../services/n8nWebhookProcessor';
 
 type AnyObj = Record<string, any>;
 
@@ -412,6 +413,25 @@ metaWebhookRouter.post('/meta', async (req, res) => {
       try {
         // Use new processors for template updates and message statuses
         await waProcessors.processWebhook(body);
+        
+        // 📤 NEW: Forward inbound WhatsApp messages to n8n webhooks
+        try {
+          const n8nStats = await processWebhookForN8n(body, lookupByPhoneNumberId, {
+            enabled: true,
+            logLevel: 'minimal' // Use 'detailed' for debugging
+          });
+          
+          if (n8nStats.inboundMessages > 0) {
+            console.log(`📤 [WEBHOOK] n8n forwarding stats:`, {
+              inbound: n8nStats.inboundMessages,
+              forwarded: n8nStats.forwardedToN8n,
+              errors: n8nStats.errors
+            });
+          }
+        } catch (n8nError) {
+          console.error('❌ [WEBHOOK] Error in n8n forwarding (non-blocking):', n8nError);
+          // Don't throw - we don't want n8n issues to break webhook processing
+        }
         
         // Keep existing message processing for customer replies (if needed)
         if (ubi && body?.entry?.[0]?.changes?.[0]?.value) {

@@ -9,6 +9,7 @@ const axios_1 = __importDefault(require("axios"));
 const db_1 = __importDefault(require("../db"));
 const waProcessors_1 = require("../services/waProcessors");
 const sseBroadcaster_1 = require("../services/sseBroadcaster");
+const n8nWebhookProcessor_1 = require("../services/n8nWebhookProcessor");
 async function getUserBusinessInfo(userId) {
     const client = await db_1.default.connect();
     try {
@@ -325,6 +326,22 @@ metaWebhookRouter.post('/meta', async (req, res) => {
         setImmediate(async () => {
             try {
                 await waProcessors.processWebhook(body);
+                try {
+                    const n8nStats = await (0, n8nWebhookProcessor_1.processWebhookForN8n)(body, lookupByPhoneNumberId, {
+                        enabled: true,
+                        logLevel: 'minimal'
+                    });
+                    if (n8nStats.inboundMessages > 0) {
+                        console.log(`📤 [WEBHOOK] n8n forwarding stats:`, {
+                            inbound: n8nStats.inboundMessages,
+                            forwarded: n8nStats.forwardedToN8n,
+                            errors: n8nStats.errors
+                        });
+                    }
+                }
+                catch (n8nError) {
+                    console.error('❌ [WEBHOOK] Error in n8n forwarding (non-blocking):', n8nError);
+                }
                 if (ubi && body?.entry?.[0]?.changes?.[0]?.value) {
                     const changeValue = body.entry[0].changes[0].value;
                     if (Array.isArray(changeValue.messages) && changeValue.messages.length > 0) {
