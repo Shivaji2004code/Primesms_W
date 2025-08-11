@@ -11,6 +11,7 @@ type AnyObj = Record<string, any>;
  */
 export async function handleTemplateStatusChange(value: AnyObj): Promise<void> {
   try {
+    console.log('📋 [TEMPLATE_PROCESSOR] ===== WEBHOOK RECEIVED =====');
     console.log('📋 [TEMPLATE_PROCESSOR] Processing template status update:', JSON.stringify(value, null, 2));
     
     // Resolve user from phone_number_id
@@ -38,8 +39,23 @@ export async function handleTemplateStatusChange(value: AnyObj): Promise<void> {
 
     if (!name) {
       console.log('⚠️  [TEMPLATE_PROCESSOR] No template name found in webhook payload');
+      console.log('📋 [TEMPLATE_PROCESSOR] Available webhook data:', {
+        template_keys: Object.keys(template),
+        value_keys: Object.keys(value),
+        raw_name: value?.name,
+        template_name: template?.name
+      });
       return;
     }
+
+    console.log('📋 [TEMPLATE_PROCESSOR] ===== PROCESSING TEMPLATE =====');
+    console.log('📋 [TEMPLATE_PROCESSOR] Template details:', {
+      name,
+      language,
+      status,
+      userId: userBusiness.userId,
+      phoneNumberId: phoneNumberId
+    });
 
     // Try to get category from webhook first
     let category: string | null = (template?.category || null) as any;

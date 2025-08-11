@@ -7,6 +7,7 @@ const waGraph_1 = require("./waGraph");
 const sseBroadcaster_1 = require("./sseBroadcaster");
 async function handleTemplateStatusChange(value) {
     try {
+        console.log('📋 [TEMPLATE_PROCESSOR] ===== WEBHOOK RECEIVED =====');
         console.log('📋 [TEMPLATE_PROCESSOR] Processing template status update:', JSON.stringify(value, null, 2));
         const phoneNumberId = value?.metadata?.phone_number_id;
         if (!phoneNumberId) {
@@ -28,8 +29,22 @@ async function handleTemplateStatusChange(value) {
             : new Date();
         if (!name) {
             console.log('⚠️  [TEMPLATE_PROCESSOR] No template name found in webhook payload');
+            console.log('📋 [TEMPLATE_PROCESSOR] Available webhook data:', {
+                template_keys: Object.keys(template),
+                value_keys: Object.keys(value),
+                raw_name: value?.name,
+                template_name: template?.name
+            });
             return;
         }
+        console.log('📋 [TEMPLATE_PROCESSOR] ===== PROCESSING TEMPLATE =====');
+        console.log('📋 [TEMPLATE_PROCESSOR] Template details:', {
+            name,
+            language,
+            status,
+            userId: userBusiness.userId,
+            phoneNumberId: phoneNumberId
+        });
         let category = (template?.category || null);
         if (!category && userBusiness?.wabaId && userBusiness?.accessToken) {
             try {

@@ -29,6 +29,7 @@ const logs_1 = __importDefault(require("./routes/logs"));
 const metaWebhook_1 = __importDefault(require("./routes/metaWebhook"));
 const sseRoutes_1 = __importDefault(require("./routes/sseRoutes"));
 const templatesSync_1 = __importDefault(require("./routes/templatesSync"));
+const templatesDebug_1 = __importDefault(require("./routes/templatesDebug"));
 const auth_2 = require("./middleware/auth");
 const rateLimit_1 = require("./config/rateLimit");
 (0, errorHandler_1.setupGlobalErrorHandlers)();
@@ -173,6 +174,10 @@ app.use('/api/templates', rateLimit_1.readLimiter, templates_1.default);
 app.use('/api/logs', rateLimit_1.readLimiter, logs_1.default);
 app.use('/api/credits', rateLimit_1.readLimiter, credits_1.default);
 app.use('/', rateLimit_1.writeLimiter, templatesSync_1.default);
+if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_DEBUG_ROUTES === 'true') {
+    app.use('/', rateLimit_1.noLimiter, templatesDebug_1.default);
+    console.log('🐛 [DEBUG] Template debug routes enabled');
+}
 app.use('/api/whatsapp', rateLimit_1.writeLimiter, whatsapp_1.default);
 app.use('/api/send', rateLimit_1.writeLimiter, send_1.default);
 app.use('/api', sseRoutes_1.default);
