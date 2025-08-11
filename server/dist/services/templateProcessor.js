@@ -5,23 +5,41 @@ exports.processTemplateWebhookEntry = processTemplateWebhookEntry;
 const templatesRepo_1 = require("../repos/templatesRepo");
 const waGraph_1 = require("./waGraph");
 const sseBroadcaster_1 = require("./sseBroadcaster");
-async function handleTemplateStatusChange(value) {
+async function handleTemplateStatusChange(value, wabaId) {
     try {
         console.log('📋 [TEMPLATE_PROCESSOR] ===== WEBHOOK RECEIVED =====');
         console.log('📋 [TEMPLATE_PROCESSOR] Processing template status update:', JSON.stringify(value, null, 2));
-        const phoneNumberId = value?.metadata?.phone_number_id;
-        if (!phoneNumberId) {
-            console.log('⚠️  [TEMPLATE_PROCESSOR] No phone_number_id in webhook payload');
-            return;
+        console.log('📋 [TEMPLATE_PROCESSOR] WABA ID:', wabaId);
+        let userBusiness = null;
+        if (wabaId) {
+            userBusiness = await templatesRepo_1.userBusinessRepo.getByWabaIdWithCreds(wabaId);
+            if (!userBusiness?.userId) {
+                console.log(`⚠️  [TEMPLATE_PROCESSOR] No user found for WABA ID: ${wabaId}`);
+                return;
+            }
+            console.log(`✅ [TEMPLATE_PROCESSOR] Resolved WABA ID ${wabaId} -> user ${userBusiness.userId}`);
         }
-        const userBusiness = await templatesRepo_1.userBusinessRepo.getByPhoneNumberIdWithCreds(phoneNumberId);
-        if (!userBusiness?.userId) {
-            console.log(`⚠️  [TEMPLATE_PROCESSOR] No user found for phone_number_id: ${phoneNumberId}`);
-            return;
+        else {
+            const phoneNumberId = value?.metadata?.phone_number_id;
+            if (!phoneNumberId) {
+                console.log('⚠️  [TEMPLATE_PROCESSOR] No WABA ID or phone_number_id in webhook payload');
+                return;
+            }
+            userBusiness = await templatesRepo_1.userBusinessRepo.getByPhoneNumberIdWithCreds(phoneNumberId);
+            if (!userBusiness?.userId) {
+                console.log(`⚠️  [TEMPLATE_PROCESSOR] No user found for phone_number_id: ${phoneNumberId}`);
+                return;
+            }
+            console.log(`✅ [TEMPLATE_PROCESSOR] Resolved phone_number_id ${phoneNumberId} -> user ${userBusiness.userId}`);
         }
         const template = value?.message_template || value?.template || {};
-        const name = template?.name || value?.name;
-        const language = (template?.language?.code || template?.language || 'en_US');
+        const name = value?.message_template_name ||
+            template?.name ||
+            value?.name;
+        const language = value?.message_template_language ||
+            template?.language?.code ||
+            template?.language ||
+            'en_US';
         const status = String(value?.event || value?.status || 'UNKNOWN').toUpperCase();
         const reason = (value?.reason || value?.rejected_reason || null);
         const reviewedAt = value?.last_updated_time
@@ -43,7 +61,8 @@ async function handleTemplateStatusChange(value) {
             language,
             status,
             userId: userBusiness.userId,
-            phoneNumberId: phoneNumberId
+            wabaId: wabaId,
+            resolvedVia: wabaId ? 'WABA_ID' : 'phone_number_id'
         });
         let category = (template?.category || null);
         if (!category && userBusiness?.wabaId && userBusiness?.accessToken) {
@@ -103,9 +122,10 @@ async function handleTemplateStatusChange(value) {
 async function processTemplateWebhookEntry(entry) {
     try {
         const changes = entry?.changes || [];
+        const wabaId = entry?.id;
         for (const change of changes) {
             if (change?.field === 'message_template_status_update') {
-                await handleTemplateStatusChange(change.value);
+                await handleTemplateStatusChange(change.value, wabaId);
             }
         }
     }

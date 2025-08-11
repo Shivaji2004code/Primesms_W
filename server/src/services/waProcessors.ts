@@ -233,7 +233,8 @@ export class WAProcessors {
           console.log(`📝 [PROCESSORS] Processing field: ${field}`);
 
           if (field === 'message_template_status_update') {
-            await this.handleTemplateUpdate(value);
+            // Template status updates need WABA ID context for user resolution
+            await this.handleTemplateUpdate(value, entry.id);
             continue;
           }
 
@@ -275,11 +276,11 @@ export class WAProcessors {
   }
 
   // ====== TEMPLATE STATUS UPDATES ======
-  private async handleTemplateUpdate(val: AnyObj): Promise<void> {
+  private async handleTemplateUpdate(val: AnyObj, wabaId?: string): Promise<void> {
     try {
       // Use the enhanced template processor that includes category updates and Graph API fallback
       const { handleTemplateStatusChange } = await import('./templateProcessor');
-      await handleTemplateStatusChange(val);
+      await handleTemplateStatusChange(val, wabaId);
     } catch (error) {
       console.error('❌ [PROCESSORS] Error handling template update:', error);
     }

@@ -198,7 +198,7 @@ class WAProcessors {
                     const value = change.value;
                     console.log(`📝 [PROCESSORS] Processing field: ${field}`);
                     if (field === 'message_template_status_update') {
-                        await this.handleTemplateUpdate(value);
+                        await this.handleTemplateUpdate(value, entry.id);
                         continue;
                     }
                     if (field === 'messages') {
@@ -233,10 +233,10 @@ class WAProcessors {
             return null;
         }
     }
-    async handleTemplateUpdate(val) {
+    async handleTemplateUpdate(val, wabaId) {
         try {
             const { handleTemplateStatusChange } = await Promise.resolve().then(() => __importStar(require('./templateProcessor')));
-            await handleTemplateStatusChange(val);
+            await handleTemplateStatusChange(val, wabaId);
         }
         catch (error) {
             console.error('❌ [PROCESSORS] Error handling template update:', error);

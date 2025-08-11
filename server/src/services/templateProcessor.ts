@@ -9,28 +9,59 @@ type AnyObj = Record<string, any>;
  * Enhanced template status change handler with category support and Graph API fallback
  * This function processes Meta webhook events for template status updates
  */
-export async function handleTemplateStatusChange(value: AnyObj): Promise<void> {
+export async function handleTemplateStatusChange(value: AnyObj, wabaId?: string): Promise<void> {
   try {
     console.log('📋 [TEMPLATE_PROCESSOR] ===== WEBHOOK RECEIVED =====');
     console.log('📋 [TEMPLATE_PROCESSOR] Processing template status update:', JSON.stringify(value, null, 2));
+    console.log('📋 [TEMPLATE_PROCESSOR] WABA ID:', wabaId);
     
-    // Resolve user from phone_number_id
-    const phoneNumberId: string | undefined = value?.metadata?.phone_number_id;
-    if (!phoneNumberId) {
-      console.log('⚠️  [TEMPLATE_PROCESSOR] No phone_number_id in webhook payload');
-      return;
-    }
+    // Resolve user from WABA ID (template status updates don't have phone_number_id)
+    let userBusiness: any = null;
+    
+    if (wabaId) {
+      // Template status updates: use WABA ID from entry level
+      userBusiness = await userBusinessRepo.getByWabaIdWithCreds(wabaId);
+      if (!userBusiness?.userId) {
+        console.log(`⚠️  [TEMPLATE_PROCESSOR] No user found for WABA ID: ${wabaId}`);
+        return;
+      }
+      console.log(`✅ [TEMPLATE_PROCESSOR] Resolved WABA ID ${wabaId} -> user ${userBusiness.userId}`);
+    } else {
+      // Fallback: try phone_number_id for backward compatibility
+      const phoneNumberId: string | undefined = value?.metadata?.phone_number_id;
+      if (!phoneNumberId) {
+        console.log('⚠️  [TEMPLATE_PROCESSOR] No WABA ID or phone_number_id in webhook payload');
+        return;
+      }
 
-    const userBusiness = await userBusinessRepo.getByPhoneNumberIdWithCreds(phoneNumberId);
-    if (!userBusiness?.userId) {
-      console.log(`⚠️  [TEMPLATE_PROCESSOR] No user found for phone_number_id: ${phoneNumberId}`);
-      return;
+      userBusiness = await userBusinessRepo.getByPhoneNumberIdWithCreds(phoneNumberId);
+      if (!userBusiness?.userId) {
+        console.log(`⚠️  [TEMPLATE_PROCESSOR] No user found for phone_number_id: ${phoneNumberId}`);
+        return;
+      }
+      console.log(`✅ [TEMPLATE_PROCESSOR] Resolved phone_number_id ${phoneNumberId} -> user ${userBusiness.userId}`);
     }
 
     // Extract template information from webhook payload
+    // Meta sends different payload structures, handle both:
+    // New format: message_template_name, message_template_language directly in value
+    // Old format: message_template.name, message_template.language.code
+    
     const template = value?.message_template || value?.template || {};
-    const name: string | undefined = template?.name || value?.name;
-    const language: string = (template?.language?.code || template?.language || 'en_US') as string;
+    
+    // Try new format first (message_template_name), fallback to old format
+    const name: string | undefined = 
+      value?.message_template_name || 
+      template?.name || 
+      value?.name;
+      
+    // Try new format first (message_template_language), fallback to old format
+    const language: string = 
+      value?.message_template_language || 
+      template?.language?.code || 
+      template?.language || 
+      'en_US';
+    
     const status: string = String(value?.event || value?.status || 'UNKNOWN').toUpperCase();
     const reason: string | null = (value?.reason || value?.rejected_reason || null) as any;
     const reviewedAt: Date = value?.last_updated_time 
@@ -54,7 +85,8 @@ export async function handleTemplateStatusChange(value: AnyObj): Promise<void> {
       language,
       status,
       userId: userBusiness.userId,
-      phoneNumberId: phoneNumberId
+      wabaId: wabaId,
+      resolvedVia: wabaId ? 'WABA_ID' : 'phone_number_id'
     });
 
     // Try to get category from webhook first
@@ -138,10 +170,11 @@ export async function handleTemplateStatusChange(value: AnyObj): Promise<void> {
 export async function processTemplateWebhookEntry(entry: AnyObj): Promise<void> {
   try {
     const changes = entry?.changes || [];
+    const wabaId = entry?.id; // WABA ID is at entry level
     
     for (const change of changes) {
       if (change?.field === 'message_template_status_update') {
-        await handleTemplateStatusChange(change.value);
+        await handleTemplateStatusChange(change.value, wabaId);
       }
     }
   } catch (error) {

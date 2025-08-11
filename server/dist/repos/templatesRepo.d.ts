@@ -18,6 +18,11 @@ export declare const userBusinessRepo: {
         wabaId?: string;
         accessToken?: string;
     } | null>;
+    getByWabaIdWithCreds(wabaId: string): Promise<{
+        userId: string;
+        wabaId?: string;
+        accessToken?: string;
+    } | null>;
     getCredsByUserId(userId: string): Promise<{
         wabaId?: string;
         accessToken?: string;

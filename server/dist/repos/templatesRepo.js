@@ -113,6 +113,21 @@ exports.userBusinessRepo = {
             client.release();
         }
     },
+    async getByWabaIdWithCreds(wabaId) {
+        const client = await db_1.default.connect();
+        try {
+            const result = await client.query(`
+        SELECT user_id as "userId", waba_id as "wabaId", access_token as "accessToken"
+        FROM user_business_info
+        WHERE waba_id = $1 AND is_active = true
+        LIMIT 1
+      `, [wabaId]);
+            return result.rows.length > 0 ? result.rows[0] : null;
+        }
+        finally {
+            client.release();
+        }
+    },
     async getCredsByUserId(userId) {
         const client = await db_1.default.connect();
         try {
