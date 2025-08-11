@@ -37,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
+import { TemplateErrorBoundary } from '../components/TemplateErrorBoundary';
 import type { 
   Template, 
   TemplatesResponse,
@@ -246,7 +247,15 @@ export default function ManageTemplates({ currentUser }: ManageTemplatesProps) {
   };
 
   const renderTemplateComponents = (components: any[]) => {
+    if (!components || !Array.isArray(components)) {
+      return <div className="text-sm text-gray-400">No components</div>;
+    }
+    
     return components.map((component, index) => {
+      if (!component || typeof component !== 'object') {
+        return null;
+      }
+      
       if (component.type === 'BODY') {
         return (
           <div key={index} className="text-sm text-gray-600 truncate max-w-xs">
@@ -395,7 +404,7 @@ export default function ManageTemplates({ currentUser }: ManageTemplatesProps) {
                     <TableCell>{getCategoryBadge(template.category)}</TableCell>
                     <TableCell>{getStatusBadge(template.status)}</TableCell>
                     <TableCell>{template.language}</TableCell>
-                    <TableCell>{renderTemplateComponents(template.components)}</TableCell>
+                    <TableCell>{renderTemplateComponents(template.components || [])}</TableCell>
                     <TableCell>
                       {template.qualityRating ? (
                         <Badge variant={template.qualityRating === 'HIGH' ? 'default' : 'secondary'}>
@@ -521,25 +530,55 @@ export default function ManageTemplates({ currentUser }: ManageTemplatesProps) {
               
               <div>
                 <label className="text-sm font-medium text-gray-700">Components</label>
-                <div className="mt-2 space-y-2">
-                  {viewTemplateDialog.template.components.map((component, index) => (
-                    <div key={index} className="p-3 bg-gray-50 rounded-md">
-                      <div className="font-medium text-xs text-gray-500 uppercase">{component.type}</div>
-                      {component.text && (
-                        <div className="mt-1 text-sm">{component.text}</div>
-                      )}
-                      {component.buttons && (
-                        <div className="mt-2">
-                          {component.buttons.map((button, btnIndex) => (
-                            <Badge key={btnIndex} variant="outline" className="mr-2">
-                              {button.type}: {button.text}
-                            </Badge>
-                          ))}
+                <TemplateErrorBoundary 
+                  templateName={viewTemplateDialog.template.name}
+                  onRetry={() => fetchTemplates(pagination?.currentPage || 1)}
+                >
+                  <div className="mt-2 space-y-2">
+                    {(viewTemplateDialog.template.components || []).map((component, index) => {
+                      if (!component || typeof component !== 'object') {
+                        return (
+                          <div key={index} className="p-3 bg-red-50 rounded-md">
+                            <div className="font-medium text-xs text-red-500 uppercase">Invalid Component</div>
+                            <div className="text-sm text-red-600">Component data is corrupted</div>
+                          </div>
+                        );
+                      }
+                      
+                      return (
+                        <div key={index} className="p-3 bg-gray-50 rounded-md">
+                          <div className="font-medium text-xs text-gray-500 uppercase">{component.type || 'Unknown'}</div>
+                          {component.text && (
+                            <div className="mt-1 text-sm">{component.text}</div>
+                          )}
+                          {component.format === 'IMAGE' && (
+                            <div className="mt-1 text-xs text-blue-600">
+                              📷 Image Header {component.icon ? '(with icon)' : '(no icon)'}
+                            </div>
+                          )}
+                          {component.buttons && Array.isArray(component.buttons) && (
+                            <div className="mt-2">
+                              {component.buttons.map((button, btnIndex) => {
+                                if (!button || typeof button !== 'object') {
+                                  return (
+                                    <Badge key={btnIndex} variant="outline" className="mr-2 bg-red-100 text-red-600">
+                                      Invalid Button
+                                    </Badge>
+                                  );
+                                }
+                                return (
+                                  <Badge key={btnIndex} variant="outline" className="mr-2">
+                                    {button.type || 'Unknown'}: {button.text || 'No text'}
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                      );
+                    })}
+                  </div>
+                </TemplateErrorBoundary>
               </div>
 
               {viewTemplateDialog.template.rejectionReason && (

@@ -1,5 +1,6 @@
 // Error Boundary to catch React errors and prevent white screen
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { Component } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
 
 interface Props {
   children?: ReactNode;

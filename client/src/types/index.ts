@@ -110,6 +110,7 @@ export interface TemplateComponent {
   buttons?: TemplateButton[];
   add_security_recommendation?: boolean;
   code_expiration_minutes?: number;
+  icon?: any; // For IMAGE header components
 }
 
 export interface Template {
