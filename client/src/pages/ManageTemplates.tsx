@@ -219,7 +219,13 @@ export default function ManageTemplates({ currentUser }: ManageTemplatesProps) {
       }
     };
 
-    const config = statusConfig[status];
+    // Fallback to a safe default to avoid runtime errors from unexpected statuses
+    const config = statusConfig[status] ?? {
+      variant: 'default' as const,
+      icon: AlertCircle,
+      label: 'Unknown',
+      className: 'bg-gray-100 text-gray-800'
+    };
     const Icon = config.icon;
 
     return (
@@ -237,11 +243,12 @@ export default function ManageTemplates({ currentUser }: ManageTemplatesProps) {
       AUTHENTICATION: { variant: 'outline' as const, color: 'bg-purple-100 text-purple-800' }
     };
 
-    const config = categoryConfig[category];
+    // Fallback for unknown categories to keep UI resilient
+    const config = categoryConfig[category] ?? { variant: 'outline' as const, color: 'bg-gray-100 text-gray-800' };
 
     return (
       <Badge variant={config.variant} className={config.color}>
-        {category}
+        {category || 'Unknown'}
       </Badge>
     );
   };
