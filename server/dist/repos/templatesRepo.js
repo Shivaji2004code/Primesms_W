@@ -10,24 +10,23 @@ exports.templatesRepo = {
         const { userId, name, language, status, category, reason, reviewedAt } = input;
         const client = await db_1.default.connect();
         try {
+            const updateParams = [status, category || null, reason, userId, name, language];
             const updateResult = await client.query(`
         UPDATE templates 
         SET 
           status = $1,
-          category = CASE 
-            WHEN $2 IS NOT NULL THEN $2::varchar(20) 
-            ELSE category 
-          END,
+          category = COALESCE($2, category),
           rejection_reason = $3,
           updated_at = CURRENT_TIMESTAMP
         WHERE user_id = $4 AND name = $5 AND language = $6
         RETURNING id, name, category
-      `, [status, category, reason, userId, name, language]);
+      `, updateParams);
             if (updateResult.rows.length > 0) {
                 console.log(`✅ [TEMPLATES_REPO] Updated template: ${name} (${language}) -> ${status} for user ${userId}`);
                 return;
             }
             try {
+                const insertParams = [userId, name, language, status, category || 'UTILITY', reason];
                 await client.query(`
           INSERT INTO templates (
             user_id, name, language, status, category, rejection_reason, 
@@ -36,25 +35,23 @@ exports.templatesRepo = {
             $1, $2, $3, $4, $5, $6, 
             '[]'::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
           )
-        `, [userId, name, language, status, category || 'UTILITY', reason]);
+        `, insertParams);
                 console.log(`🆕 [TEMPLATES_REPO] Created template from webhook: ${name} (${language}) for user ${userId}`);
             }
             catch (insertError) {
                 if (insertError.code === '23505') {
                     console.log(`🔄 [TEMPLATES_REPO] Unique constraint conflict, updating without language filter for ${name}`);
+                    const fallbackParams = [status, category || null, reason, language, userId, name];
                     await client.query(`
             UPDATE templates 
             SET 
               status = $1,
-              category = CASE 
-                WHEN $2 IS NOT NULL THEN $2::varchar(20) 
-                ELSE category 
-              END,
+              category = COALESCE($2, category),
               rejection_reason = $3,
               language = $4,
               updated_at = CURRENT_TIMESTAMP
             WHERE user_id = $5 AND name = $6
-          `, [status, category, reason, language, userId, name]);
+          `, fallbackParams);
                     console.log(`✅ [TEMPLATES_REPO] Updated existing template (different language): ${name} for user ${userId}`);
                 }
                 else {

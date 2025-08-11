@@ -93,15 +93,22 @@ async function handleTemplateStatusChange(value, wabaId) {
             }
         }
         console.log(`📋 [TEMPLATE_PROCESSOR] Updating template: ${name} (${language}) -> ${status}${category ? ` [${category}]` : ''} for user ${userBusiness.userId}`);
-        await templatesRepo_1.templatesRepo.upsertStatusAndCategory({
-            userId: userBusiness.userId,
-            name,
-            language,
-            status,
-            category: category || undefined,
-            reason,
-            reviewedAt
-        });
+        try {
+            await templatesRepo_1.templatesRepo.upsertStatusAndCategory({
+                userId: userBusiness.userId,
+                name,
+                language,
+                status,
+                category: category || undefined,
+                reason,
+                reviewedAt
+            });
+            console.log(`✅ [TEMPLATE_PROCESSOR] Database update successful for ${name} (${language})`);
+        }
+        catch (dbError) {
+            console.error(`❌ [TEMPLATE_PROCESSOR] Database update failed for ${name} (${language}):`, dbError);
+            throw dbError;
+        }
         const ssePayload = {
             type: 'template_update',
             name,

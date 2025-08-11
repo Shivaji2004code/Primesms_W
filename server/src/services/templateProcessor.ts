@@ -132,15 +132,22 @@ export async function handleTemplateStatusChange(value: AnyObj, wabaId?: string)
     console.log(`📋 [TEMPLATE_PROCESSOR] Updating template: ${name} (${language}) -> ${status}${category ? ` [${category}]` : ''} for user ${userBusiness.userId}`);
 
     // Update database with status, category, and other fields
-    await templatesRepo.upsertStatusAndCategory({
-      userId: userBusiness.userId,
-      name,
-      language,
-      status,
-      category: category || undefined,
-      reason,
-      reviewedAt
-    });
+    try {
+      await templatesRepo.upsertStatusAndCategory({
+        userId: userBusiness.userId,
+        name,
+        language,
+        status,
+        category: category || undefined,
+        reason,
+        reviewedAt
+      });
+
+      console.log(`✅ [TEMPLATE_PROCESSOR] Database update successful for ${name} (${language})`);
+    } catch (dbError) {
+      console.error(`❌ [TEMPLATE_PROCESSOR] Database update failed for ${name} (${language}):`, dbError);
+      throw dbError; // Re-throw to prevent SSE emission on failed database update
+    }
 
     // Emit SSE event to notify frontend
     const ssePayload = {
