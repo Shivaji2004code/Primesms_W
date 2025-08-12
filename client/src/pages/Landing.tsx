@@ -93,7 +93,7 @@ export default function Landing() {
               <div className="bg-black rounded-[2.2rem] p-2 shadow-2xl max-w-[320px] w-full mx-auto ring-1 ring-black/10">
                 <div className="bg-white rounded-[1.8rem] overflow-hidden h-[600px] sm:h-[640px] flex flex-col">
                   {/* Status Bar */}
-                  <div className="bg-emerald-500 px-6 pt-3 pb-1">
+                  <div className="bg-emerald-500 px-4 pt-2 pb-1">
                     <div className="flex justify-between items-center text-white text-xs font-medium">
                       <span>9:41 AM</span>
                       <div className="flex items-center space-x-1">
@@ -110,15 +110,15 @@ export default function Landing() {
                   </div>
                   
                   {/* Chat Header */}
-                  <div className="bg-emerald-500 px-4 py-3 flex items-center justify-between shadow-sm">
+                  <div className="bg-emerald-500 px-3 py-2 flex items-center justify-between shadow-sm">
                     <div className="flex items-center space-x-3">
                       <div className="relative">
-                        <div className="w-10 h-10 bg-gray-300 rounded-full overflow-hidden">
+                        <div className="w-8 h-8 bg-gray-300 rounded-full overflow-hidden">
                           <div className="w-full h-full bg-emerald-400 flex items-center justify-center">
                             <span className="text-white text-lg">💬</span>
                           </div>
                         </div>
-                        <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 border-2 border-white rounded-full"></div>
+                        <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-400 border-2 border-white rounded-full"></div>
                       </div>
                       <div className="flex-1">
                         <div className="text-white font-medium text-sm">Customer Support</div>
@@ -133,14 +133,14 @@ export default function Landing() {
                   </div>
                   
                   {/* Chat Background Pattern */}
-                  <div className="flex-1 relative" style={{
+                  <div className="flex-1 relative text-[12px]" style={{
                     backgroundImage: `url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23e5e7eb' fill-opacity='0.1'%3E%3Cpath d='M0 0h20v20H0z'/%3E%3Cpath d='M10 0L0 10v10h10L20 10V0H10z' fill='%23d1d5db' fill-opacity='0.05'/%3E%3C/g%3E%3C/svg%3E")`,
                     backgroundColor: '#f0f2f5'
                   }}>
-                    {/* Chat Messages with reveal animations */}
-                    <div className="p-3 space-y-2 h-full overflow-y-auto">
+                    {/* Chat Messages with reveal animations (kept fully visible) */}
+                    <div className="p-2 space-y-1.5 h-full overflow-hidden">
                       {/* Date Separator */}
-                      <div className="flex justify-center mb-4">
+                      <div className="flex justify-center mb-2">
                         <div className="bg-white bg-opacity-90 backdrop-blur-sm px-3 py-1 rounded-full shadow-sm">
                           <span className="text-xs text-gray-600 font-medium">Today</span>
                         </div>
@@ -162,12 +162,12 @@ export default function Landing() {
                         </div>
                           <div className="max-w-[85%]">
                             {/* skeleton then content */}
-                            <div className="wa-skeleton h-7 w-56 mb-1"></div>
-                            <div className="bg-white rounded-lg rounded-bl-none px-3 py-2 shadow-sm wa-content">
-                              <p className="text-sm text-gray-800">Hi! welcome to Prime SMS. How can we help?</p>
+                            <div className="wa-skeleton h-6 w-48 mb-1"></div>
+                            <div className="bg-white rounded-lg rounded-bl-none px-2.5 py-1.5 shadow-sm wa-content">
+                              <p className="text-[12px] text-gray-800">Hi! welcome to Prime SMS. How can we help?</p>
                             </div>
                             <div className="flex items-center mt-1 space-x-1 wa-content">
-                              <span className="text-xs text-gray-500">2:30 PM</span>
+                              <span className="text-[10px] text-gray-500">2:30 PM</span>
                             </div>
                           </div>
                         </div>
@@ -176,13 +176,13 @@ export default function Landing() {
                       {/* User Message (typing dots then reveal) */}
                       <div className="flex justify-end mb-1 wa-reveal" style={{ ['--reveal-delay' as any]: '.9s' }}>
                         <div className="max-w-[85%] text-right">
-                          <div className="bg-emerald-500/10 rounded-lg rounded-br-none px-3 py-2 shadow-sm wa-skeleton h-7 w-60 mb-1"></div>
-                          <div className="bg-emerald-500 text-white rounded-lg rounded-br-none px-3 py-2 shadow-sm wa-content">
-                            <p className="text-sm">I need help with my account</p>
+                          <div className="bg-emerald-500/10 rounded-lg rounded-br-none px-2.5 py-1.5 shadow-sm wa-skeleton h-6 w-52 mb-1"></div>
+                          <div className="bg-emerald-500 text-white rounded-lg rounded-br-none px-2.5 py-1.5 shadow-sm wa-content">
+                            <p className="text-[12px]">I need help with my account</p>
                           </div>
                           <div className="flex items-center justify-end mt-1 space-x-1 wa-content">
-                            <span className="text-xs text-gray-500">2:31 PM</span>
-                            <span className="text-emerald-500 text-xs">✓✓</span>
+                            <span className="text-[10px] text-gray-500">2:31 PM</span>
+                            <span className="text-emerald-500 text-[10px]">✓✓</span>
                           </div>
                         </div>
                       </div>
@@ -194,15 +194,15 @@ export default function Landing() {
                           <span className="text-white text-xs">🎧</span>
                         </div>
                           <div className="max-w-[85%]">
-                            <div className="wa-skeleton h-16 w-64 mb-1"></div>
-                            <div className="bg-white rounded-lg rounded-bl-none px-3 py-2 shadow-sm wa-content">
-                              <p className="text-sm text-gray-800 mb-2">Your Prime SMS verification code is</p>
-                              <div className="bg-gray-100 rounded-md px-3 py-2 text-center">
-                                <span className="text-base font-mono font-bold text-emerald-600 tracking-wider">123456</span>
+                            <div className="wa-skeleton h-14 w-56 mb-1"></div>
+                            <div className="bg-white rounded-lg rounded-bl-none px-2.5 py-1.5 shadow-sm wa-content">
+                              <p className="text-[12px] text-gray-800 mb-1.5">Your Prime SMS verification code is</p>
+                              <div className="bg-gray-100 rounded-md px-2.5 py-1.5 text-center">
+                                <span className="text-sm font-mono font-bold text-emerald-600 tracking-wider">123456</span>
                               </div>
                             </div>
                             <div className="flex items-center mt-1 space-x-1 wa-content">
-                              <span className="text-xs text-gray-500">2:32 PM</span>
+                              <span className="text-[10px] text-gray-500">2:32 PM</span>
                             </div>
                           </div>
                         </div>
@@ -211,13 +211,13 @@ export default function Landing() {
                       {/* User Response (reveal) */}
                       <div className="flex justify-end mb-1 wa-reveal" style={{ ['--reveal-delay' as any]: '2s' }}>
                         <div className="max-w-[85%]">
-                          <div className="wa-skeleton h-7 w-72 mb-1"></div>
-                          <div className="bg-emerald-500 text-white rounded-lg rounded-br-none px-3 py-2 shadow-sm wa-content">
-                            <p className="text-sm">Thanks! That worked perfectly</p>
+                          <div className="wa-skeleton h-6 w-60 mb-1"></div>
+                          <div className="bg-emerald-500 text-white rounded-lg rounded-br-none px-2.5 py-1.5 shadow-sm wa-content">
+                            <p className="text-[12px]">Thanks! That worked perfectly</p>
                           </div>
                           <div className="flex items-center justify-end mt-1 space-x-1 wa-content">
-                            <span className="text-xs text-gray-500">2:33 PM</span>
-                            <span className="text-blue-500 text-xs">✓✓</span>
+                            <span className="text-[10px] text-gray-500">2:33 PM</span>
+                            <span className="text-blue-500 text-[10px]">✓✓</span>
                           </div>
                         </div>
                       </div>
@@ -236,20 +236,20 @@ export default function Landing() {
                     </div>
                   </div>
                   
-                  {/* Input Area */}
-                  <div className="bg-gray-100 px-3 py-2 flex items-center space-x-2">
-                    <div className="flex-1 bg-white rounded-full flex items-center px-3 py-2">
-                      <span className="text-gray-400 text-lg mr-2">😊</span>
+                  {/* Input Area (compact) */}
+                  <div className="bg-gray-100 px-2 py-1.5 flex items-center space-x-2">
+                    <div className="flex-1 bg-white rounded-full flex items-center px-2.5 py-1.5">
+                      <span className="text-gray-400 text-base mr-2">😊</span>
                       <input 
                         type="text" 
                         placeholder="Type a message..."
-                        className="flex-1 text-sm bg-transparent outline-none"
+                        className="flex-1 text-[12px] bg-transparent outline-none"
                       />
-                      <span className="text-gray-400 text-lg ml-2">📎</span>
-                      <span className="text-gray-400 text-lg ml-1">📷</span>
+                      <span className="text-gray-400 text-base ml-2">📎</span>
+                      <span className="text-gray-400 text-base ml-1">📷</span>
                     </div>
-                    <button className="bg-emerald-500 text-white p-2 rounded-full shadow-md">
-                      <ArrowRight className="h-4 w-4" />
+                    <button className="bg-emerald-500 text-white p-1.5 rounded-full shadow-md">
+                      <ArrowRight className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
