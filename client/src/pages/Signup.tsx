@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { MessageSquare, Eye, EyeOff } from 'lucide-react';
+import { MessageSquare, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -134,27 +134,41 @@ export default function Signup() {
     if (password.length === 0) return { strength: '', color: '' };
     if (password.length < 6) return { strength: 'Weak', color: 'text-red-500' };
     if (password.length < 10) return { strength: 'Medium', color: 'text-yellow-500' };
-    return { strength: 'Strong', color: 'text-green-500' };
+    return { strength: 'Strong', color: 'text-emerald-500' };
   };
 
   const passwordStrength = getPasswordStrength(formData.password);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-teal-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center space-x-2 text-2xl font-bold text-gray-900 hover:text-blue-600 transition-colors">
-            <MessageSquare className="h-8 w-8 text-blue-600" />
-            <span>Primes SMS</span>
-          </Link>
-          <p className="mt-2 text-gray-600">Create your account</p>
+        {/* Back to Home Button */}
+        <div className="flex justify-start mb-6">
+          <Button
+            variant="ghost"
+            onClick={() => navigate('/')}
+            className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 font-medium"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Home
+          </Button>
         </div>
 
-        <Card className="shadow-lg">
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl text-center">Sign up</CardTitle>
-            <CardDescription className="text-center">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="flex justify-center mb-4">
+            <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg ring-4 ring-emerald-100">
+              <MessageSquare className="h-8 w-8 text-white" />
+            </div>
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Join Prime SMS</h1>
+          <p className="text-gray-600">Create your account to get started</p>
+        </div>
+
+        <Card className="bg-white/80 backdrop-blur-sm shadow-xl border border-white/50 ring-1 ring-emerald-100/50">
+          <CardHeader className="space-y-1 pb-6">
+            <CardTitle className="text-2xl font-bold text-center">Create Account</CardTitle>
+            <CardDescription className="text-center text-gray-600">
               Enter your information to create an account
             </CardDescription>
           </CardHeader>
@@ -162,14 +176,14 @@ export default function Signup() {
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Success Message */}
               {successMessage && (
-                <div className="p-3 bg-green-100 border border-green-300 text-green-700 rounded-md text-sm">
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm">
                   {successMessage}
                 </div>
               )}
 
               {/* Server Error */}
               {serverError && (
-                <div className="p-3 bg-red-100 border border-red-300 text-red-700 rounded-md text-sm">
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
                   {serverError}
                 </div>
               )}
@@ -185,7 +199,7 @@ export default function Signup() {
                   placeholder="John Doe"
                   value={formData.name}
                   onChange={(e) => handleInputChange('name', e.target.value)}
-                  className={errors.name ? 'border-red-300 focus:border-red-500' : ''}
+                  className={errors.name ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-emerald-500 focus:ring-emerald-500'}
                 />
                 {errors.name && (
                   <p className="text-sm text-red-600">{errors.name}</p>
@@ -203,7 +217,7 @@ export default function Signup() {
                   placeholder="john@example.com"
                   value={formData.email}
                   onChange={(e) => handleInputChange('email', e.target.value)}
-                  className={errors.email ? 'border-red-300 focus:border-red-500' : ''}
+                  className={errors.email ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-emerald-500 focus:ring-emerald-500'}
                 />
                 {errors.email && (
                   <p className="text-sm text-red-600">{errors.email}</p>
@@ -221,7 +235,7 @@ export default function Signup() {
                   placeholder="johndoe"
                   value={formData.username}
                   onChange={(e) => handleInputChange('username', e.target.value)}
-                  className={errors.username ? 'border-red-300 focus:border-red-500' : ''}
+                  className={errors.username ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-emerald-500 focus:ring-emerald-500'}
                 />
                 {errors.username && (
                   <p className="text-sm text-red-600">{errors.username}</p>
@@ -239,7 +253,7 @@ export default function Signup() {
                   placeholder="+1 (555) 123-4567"
                   value={formData.phoneNumber}
                   onChange={(e) => handleInputChange('phoneNumber', e.target.value)}
-                  className={errors.phoneNumber ? 'border-red-300 focus:border-red-500' : ''}
+                  className={errors.phoneNumber ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-emerald-500 focus:ring-emerald-500'}
                 />
                 {errors.phoneNumber && (
                   <p className="text-sm text-red-600">{errors.phoneNumber}</p>
@@ -258,7 +272,7 @@ export default function Signup() {
                     placeholder="••••••••"
                     value={formData.password}
                     onChange={(e) => handleInputChange('password', e.target.value)}
-                    className={errors.password ? 'border-red-300 focus:border-red-500 pr-10' : 'pr-10'}
+                    className={`pr-10 ${errors.password ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-emerald-500 focus:ring-emerald-500'}`}
                   />
                   <button
                     type="button"
@@ -290,7 +304,7 @@ export default function Signup() {
                     placeholder="••••••••"
                     value={formData.confirmPassword}
                     onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-                    className={errors.confirmPassword ? 'border-red-300 focus:border-red-500 pr-10' : 'pr-10'}
+                    className={`pr-10 ${errors.confirmPassword ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-emerald-500 focus:ring-emerald-500'}`}
                   />
                   <button
                     type="button"
@@ -308,7 +322,7 @@ export default function Signup() {
               {/* Submit Button */}
               <Button 
                 type="submit" 
-                className="w-full"
+                className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
                 disabled={isLoading}
               >
                 {isLoading ? 'Creating Account...' : 'Create Account'}
@@ -317,9 +331,9 @@ export default function Signup() {
               {/* Terms */}
               <p className="text-xs text-center text-gray-600">
                 By creating an account, you agree to our{' '}
-                <a href="#" className="text-blue-600 hover:underline">Terms of Service</a>
+                <a href="#" className="text-emerald-600 hover:text-emerald-500 transition-colors">Terms of Service</a>
                 {' '}and{' '}
-                <a href="#" className="text-blue-600 hover:underline">Privacy Policy</a>
+                <a href="#" className="text-emerald-600 hover:text-emerald-500 transition-colors">Privacy Policy</a>
               </p>
             </form>
           </CardContent>
@@ -328,7 +342,7 @@ export default function Signup() {
         {/* Login Link */}
         <p className="mt-6 text-center text-sm text-gray-600">
           Already have an account?{' '}
-          <Link to="/login" className="text-blue-600 hover:underline font-medium">
+          <Link to="/login" className="text-emerald-600 hover:text-emerald-500 transition-colors font-medium">
             Sign in
           </Link>
         </p>

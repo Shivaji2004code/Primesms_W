@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { MessageSquare, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { MessageSquare, Eye, EyeOff, ArrowLeft, Home } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -274,12 +274,24 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-teal-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
+        {/* Back to Home Button */}
+        <div className="flex justify-start">
+          <Button
+            variant="ghost"
+            onClick={() => navigate('/')}
+            className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 font-medium"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Home
+          </Button>
+        </div>
+
         {/* Header */}
         <div className="text-center">
           <div className="flex justify-center">
-            <div className="w-16 h-16 bg-blue-600 rounded-lg flex items-center justify-center">
+            <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg ring-4 ring-emerald-100">
               <MessageSquare className="h-8 w-8 text-white" />
             </div>
           </div>
@@ -292,27 +304,27 @@ export default function Login() {
         </div>
 
         {/* Main Form */}
-        <Card className="bg-white shadow-lg border-0">
-          <CardHeader className="space-y-1">
+        <Card className="bg-white/80 backdrop-blur-sm shadow-xl border border-white/50 ring-1 ring-emerald-100/50">
+          <CardHeader className="space-y-1 pb-6">
             {currentView !== 'login' && (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 onClick={resetToLogin}
-                className="self-start mb-2"
+                className="self-start mb-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
               >
                 <ArrowLeft className="h-4 w-4 mr-1" />
                 Back to Login
               </Button>
             )}
-            <CardTitle className="text-2xl font-semibold text-center">
+            <CardTitle className="text-2xl font-bold text-center">
               {currentView === 'login' && 'Login'}
               {currentView === 'forgot-password' && 'Forgot Password'}
               {currentView === 'verify-otp' && 'Verify OTP'}
               {currentView === 'reset-password' && 'Reset Password'}
             </CardTitle>
-            <CardDescription className="text-center">
+            <CardDescription className="text-center text-gray-600">
               {currentView === 'login' && 'Enter your credentials to access your account'}
               {currentView === 'forgot-password' && 'Enter your username and phone number to receive OTP'}
               {currentView === 'verify-otp' && 'Enter the 6-digit OTP sent to your WhatsApp'}
@@ -338,7 +350,7 @@ export default function Login() {
                     type="text"
                     value={formData.username}
                     onChange={(e) => handleChange('username', e.target.value)}
-                    className={`${errors.username ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'}`}
+                    className={`${errors.username ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-emerald-500 focus:ring-emerald-500'}`}
                     placeholder="Enter your username"
                     disabled={isLoading}
                   />
@@ -357,7 +369,7 @@ export default function Login() {
                       type={showPassword ? 'text' : 'password'}
                       value={formData.password}
                       onChange={(e) => handleChange('password', e.target.value)}
-                      className={`pr-10 ${errors.password ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'}`}
+                      className={`pr-10 ${errors.password ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-emerald-500 focus:ring-emerald-500'}`}
                       placeholder="Enter your password"
                       disabled={isLoading}
                     />
@@ -367,9 +379,9 @@ export default function Login() {
                       onClick={() => setShowPassword(!showPassword)}
                     >
                       {showPassword ? (
-                        <EyeOff className="h-5 w-5 text-gray-400" />
+                        <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
                       ) : (
-                        <Eye className="h-5 w-5 text-gray-400" />
+                        <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
                       )}
                     </button>
                   </div>
@@ -380,7 +392,7 @@ export default function Login() {
 
                 <Button
                   type="submit"
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
                   disabled={isLoading}
                 >
                   {isLoading ? 'Signing in...' : 'Sign in'}
@@ -390,7 +402,7 @@ export default function Login() {
                   <button
                     type="button"
                     onClick={() => setCurrentView('forgot-password')}
-                    className="text-sm font-medium text-blue-600 hover:text-blue-500"
+                    className="text-sm font-medium text-emerald-600 hover:text-emerald-500 transition-colors"
                   >
                     Forgot Password?
                   </button>
@@ -398,7 +410,7 @@ export default function Login() {
                   <div>
                     <span className="text-sm text-gray-600">
                       Don't have an account?{' '}
-                      <Link to="/signup" className="font-medium text-blue-600 hover:text-blue-500">
+                      <Link to="/signup" className="font-medium text-emerald-600 hover:text-emerald-500 transition-colors">
                         Sign up
                       </Link>
                     </span>
@@ -427,6 +439,7 @@ export default function Login() {
                     onChange={(e) => setForgotPasswordData(prev => ({ ...prev, username: e.target.value }))}
                     placeholder="Enter your username"
                     disabled={isLoading}
+                    className="border-gray-300 focus:border-emerald-500 focus:ring-emerald-500"
                   />
                 </div>
 
@@ -441,6 +454,7 @@ export default function Login() {
                     onChange={(e) => setForgotPasswordData(prev => ({ ...prev, phone: e.target.value }))}
                     placeholder="Enter your phone number (e.g., +911234567890)"
                     disabled={isLoading}
+                    className="border-gray-300 focus:border-emerald-500 focus:ring-emerald-500"
                   />
                   <p className="text-xs text-gray-500">
                     Enter your phone number in international format
@@ -449,7 +463,7 @@ export default function Login() {
 
                 <Button
                   type="submit"
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
                   disabled={isLoading}
                 >
                   {isLoading ? 'Sending OTP...' : 'Send OTP'}
@@ -466,7 +480,7 @@ export default function Login() {
                   </div>
                 )}
 
-                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg text-sm">
                   OTP has been sent to your WhatsApp number ending in {forgotPasswordData.phone.slice(-4)}
                 </div>
 
@@ -482,13 +496,13 @@ export default function Login() {
                     placeholder="Enter 6-digit OTP"
                     disabled={isLoading}
                     maxLength={6}
-                    className="text-center text-lg tracking-widest"
+                    className="text-center text-lg tracking-widest border-gray-300 focus:border-emerald-500 focus:ring-emerald-500"
                   />
                 </div>
 
                 <Button
                   type="submit"
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
                   disabled={isLoading || otpData.otp.length !== 6}
                 >
                   {isLoading ? 'Verifying...' : 'Verify OTP'}
@@ -516,6 +530,7 @@ export default function Login() {
                     onChange={(e) => setOtpData(prev => ({ ...prev, newPassword: e.target.value }))}
                     placeholder="Enter new password"
                     disabled={isLoading}
+                    className="border-gray-300 focus:border-emerald-500 focus:ring-emerald-500"
                   />
                 </div>
 
@@ -530,12 +545,13 @@ export default function Login() {
                     onChange={(e) => setOtpData(prev => ({ ...prev, confirmPassword: e.target.value }))}
                     placeholder="Confirm new password"
                     disabled={isLoading}
+                    className="border-gray-300 focus:border-emerald-500 focus:ring-emerald-500"
                   />
                 </div>
 
                 <Button
                   type="submit"
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
                   disabled={isLoading}
                 >
                   {isLoading ? 'Resetting Password...' : 'Reset Password'}
