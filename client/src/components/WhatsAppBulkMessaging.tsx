@@ -758,11 +758,11 @@ export default function WhatsAppBulkMessaging() {
   return (
     <div className="space-y-6">
       {/* Progress Indicator */}
-      <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+      <Card className="bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-200">
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Campaign Setup Progress</h2>
-            <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+            <Badge variant="secondary" className="bg-emerald-100 text-emerald-800">
               {Math.round(getFormProgress())}% Complete
             </Badge>
           </div>
@@ -812,11 +812,11 @@ export default function WhatsAppBulkMessaging() {
         {/* Main Form */}
         <div className="lg:col-span-2 space-y-6">
           {/* Step 1: WhatsApp Configuration */}
-          <Card className={`border-2 ${getStepStatus(1) === 'completed' ? 'border-green-200 bg-green-50' : getStepStatus(1) === 'current' ? 'border-blue-200 bg-blue-50' : 'border-gray-200'}`}>
+          <Card className={`border-2 ${getStepStatus(1) === 'completed' ? 'border-green-200 bg-green-50' : getStepStatus(1) === 'current' ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200'}`}>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${getStepStatus(1) === 'completed' ? 'bg-green-500' : getStepStatus(1) === 'current' ? 'bg-blue-500' : 'bg-gray-300'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${getStepStatus(1) === 'completed' ? 'bg-green-500' : getStepStatus(1) === 'current' ? 'bg-emerald-500' : 'bg-gray-300'}`}>
                     {getStepStatus(1) === 'completed' ? (
                       <CheckCircle2 className="h-5 w-5 text-white" />
                     ) : (
@@ -825,7 +825,7 @@ export default function WhatsAppBulkMessaging() {
                   </div>
                   <div>
                     <CardTitle className="flex items-center text-lg">
-                      <Phone className="h-5 w-5 mr-2 text-blue-600" />
+                      <Phone className="h-5 w-5 mr-2 text-emerald-600" />
                       WhatsApp Configuration
                     </CardTitle>
                     <CardDescription>Select your WhatsApp Business number and template</CardDescription>
@@ -848,14 +848,14 @@ export default function WhatsAppBulkMessaging() {
                     onValueChange={setSelectedNumber}
                     disabled={loading.numbers}
                   >
-                    <SelectTrigger className="mt-1">
+                  <SelectTrigger className="mt-1">
                       <SelectValue placeholder={loading.numbers ? "Loading numbers..." : "Select WhatsApp number"} />
                     </SelectTrigger>
                     <SelectContent>
                       {whatsappNumbers.map((number) => (
                         <SelectItem key={number.id} value={number.phone_number_id}>
                           <div className="flex items-center">
-                            <Phone className="h-4 w-4 mr-2 text-green-600" />
+                            <Phone className="h-4 w-4 mr-2 text-emerald-600" />
                             {number.label}
                           </div>
                         </SelectItem>
@@ -874,14 +874,14 @@ export default function WhatsAppBulkMessaging() {
                     }}
                     disabled={loading.languages}
                   >
-                    <SelectTrigger className="mt-1">
+                      <SelectTrigger className="mt-1">
                       <SelectValue placeholder={loading.languages ? "Loading languages..." : "Select language"} />
                     </SelectTrigger>
                     <SelectContent>
                       {languages.map((language) => (
                         <SelectItem key={language.code} value={language.code}>
                           <div className="flex items-center">
-                            <Globe className="h-4 w-4 mr-2 text-blue-600" />
+                              <Globe className="h-4 w-4 mr-2 text-emerald-600" />
                             {language.name}
                           </div>
                         </SelectItem>
@@ -895,7 +895,7 @@ export default function WhatsAppBulkMessaging() {
                   <div className="flex items-center justify-between mb-2">
                     <Label htmlFor="template" className="text-sm font-medium flex items-center">
                       Template *
-                      {loading.templates && <Loader2 className="h-4 w-4 ml-2 animate-spin text-blue-600" />}
+                      {loading.templates && <Loader2 className="h-4 w-4 ml-2 animate-spin text-emerald-600" />}
                     </Label>
                     <Button
                       variant="ghost"
@@ -931,11 +931,11 @@ export default function WhatsAppBulkMessaging() {
           </Card>
 
           {/* Step 2: Campaign Details */}
-          <Card className={`border-2 ${getStepStatus(2) === 'completed' ? 'border-green-200 bg-green-50' : getStepStatus(2) === 'current' ? 'border-blue-200 bg-blue-50' : 'border-gray-200'}`}>
+          <Card className={`border-2 ${getStepStatus(2) === 'completed' ? 'border-green-200 bg-green-50' : getStepStatus(2) === 'current' ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200'}`}>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${getStepStatus(2) === 'completed' ? 'bg-green-500' : getStepStatus(2) === 'current' ? 'bg-blue-500' : 'bg-gray-300'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${getStepStatus(2) === 'completed' ? 'bg-green-500' : getStepStatus(2) === 'current' ? 'bg-emerald-500' : 'bg-gray-300'}`}>
                     {getStepStatus(2) === 'completed' ? (
                       <CheckCircle2 className="h-5 w-5 text-white" />
                     ) : (
@@ -944,7 +944,7 @@ export default function WhatsAppBulkMessaging() {
                   </div>
                   <div>
                     <CardTitle className="flex items-center text-lg">
-                      <Target className="h-5 w-5 mr-2 text-orange-600" />
+                      <Target className="h-5 w-5 mr-2 text-emerald-600" />
                       Campaign Details
                     </CardTitle>
                     <CardDescription>Set campaign name and recipient list</CardDescription>
@@ -1003,7 +1003,7 @@ export default function WhatsAppBulkMessaging() {
                 
                 <TabsContent value="file" className="space-y-4">
                   {/* File Upload */}
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-emerald-400 transition-colors">
                     <input
                       type="file"
                       accept=".txt,.csv,.xlsx,.xls"
@@ -1031,10 +1031,10 @@ export default function WhatsAppBulkMessaging() {
 
                   
                   {/* File Upload Instructions */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                   <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
                     <div className="flex items-start space-x-3">
-                      <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                      <div className="text-sm text-blue-800">
+                       <Info className="h-5 w-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+                       <div className="text-sm text-emerald-800">
                         <div className="font-medium mb-2">📱 Quick-Send File Import:</div>
                         <ul className="space-y-1 text-xs">
                           <li>• Excel/CSV: Phone numbers auto-imported from first column</li>
@@ -1068,7 +1068,7 @@ export default function WhatsAppBulkMessaging() {
                                 clearRecipientSelection();
                               }
                             }}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded"
                           />
                           <span>Select All ({selectedRecipients.length} selected)</span>
                         </div>
@@ -1090,7 +1090,7 @@ export default function WhatsAppBulkMessaging() {
                         variant="outline"
                         size="sm"
                         onClick={copyRecipientsToClipboard}
-                        className="text-blue-600 hover:text-blue-700"
+                         className="text-emerald-600 hover:text-emerald-700"
                       >
                         <Copy className="h-4 w-4 mr-1" />
                         Copy All
@@ -1122,7 +1122,7 @@ export default function WhatsAppBulkMessaging() {
                           variant="ghost"
                           size="sm"
                           onClick={() => removeRecipient(index)}
-                          className="text-red-600 hover:text-red-700 h-6 w-6 p-0"
+                           className="text-red-600 hover:text-red-700 h-6 w-6 p-0"
                         >
                           <Trash2 className="h-3 w-3" />
                         </Button>
@@ -1211,11 +1211,11 @@ export default function WhatsAppBulkMessaging() {
 
           {/* Step 4: Template Variables */}
           {templateDetails.hasVariables && templateDetails.variables.length > 0 && (
-            <Card className={`border-2 ${getStepStatus(4) === 'completed' ? 'border-green-200 bg-green-50' : getStepStatus(4) === 'current' ? 'border-blue-200 bg-blue-50' : 'border-gray-200'}`}>
+            <Card className={`border-2 ${getStepStatus(4) === 'completed' ? 'border-green-200 bg-green-50' : getStepStatus(4) === 'current' ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200'}`}>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${getStepStatus(4) === 'completed' ? 'bg-green-500' : getStepStatus(4) === 'current' ? 'bg-blue-500' : 'bg-gray-300'}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${getStepStatus(4) === 'completed' ? 'bg-green-500' : getStepStatus(4) === 'current' ? 'bg-emerald-500' : 'bg-gray-300'}`}>
                       {getStepStatus(4) === 'completed' ? (
                         <CheckCircle2 className="h-5 w-5 text-white" />
                       ) : (
@@ -1224,7 +1224,7 @@ export default function WhatsAppBulkMessaging() {
                     </div>
                     <div>
                       <CardTitle className="flex items-center text-lg">
-                        <Settings className="h-5 w-5 mr-2 text-purple-600" />
+                        <Settings className="h-5 w-5 mr-2 text-emerald-600" />
                         Template Variables
                       </CardTitle>
                       <CardDescription>Fill in the template variables for your message</CardDescription>
@@ -1261,7 +1261,7 @@ export default function WhatsAppBulkMessaging() {
             <Button
               onClick={handlePreviewCampaign}
               disabled={!selectedTemplate || recipients.length === 0 || loading.preview}
-              className="flex-1 h-14 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+              className="flex-1 h-14 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
             >
               {loading.preview ? (
                 <Loader2 className="h-5 w-5 mr-2 animate-spin" />
@@ -1274,7 +1274,7 @@ export default function WhatsAppBulkMessaging() {
             <Button
               onClick={handleQuickSend}
               disabled={!selectedNumber || !selectedTemplate || recipients.length === 0 || loading.sending}
-              className="flex-1 h-14 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+              className="flex-1 h-14 bg-gradient-to-r from-emerald-700 to-emerald-800 hover:from-emerald-800 hover:to-emerald-900 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
             >
               {loading.sending ? (
                 <Loader2 className="h-5 w-5 mr-2 animate-spin" />
@@ -1289,27 +1289,27 @@ export default function WhatsAppBulkMessaging() {
         {/* Right Sidebar - Preview & Info */}
         <div className="space-y-6">
           {/* Campaign Summary */}
-          <Card className="bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200">
+          <Card className="bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-200">
             <CardHeader>
               <CardTitle className="flex items-center text-lg">
-                <Sparkles className="h-5 w-5 mr-2 text-purple-600" />
+                <Sparkles className="h-5 w-5 mr-2 text-emerald-600" />
                 Campaign Summary
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="text-center p-3 bg-white rounded-lg border border-purple-200">
-                  <div className="text-2xl font-bold text-purple-600">{recipients.length}</div>
+                <div className="text-center p-3 bg-white rounded-lg border border-emerald-200">
+                  <div className="text-2xl font-bold text-emerald-600">{recipients.length}</div>
                   <div className="text-sm text-gray-600">Recipients</div>
                 </div>
-                <div className="text-center p-3 bg-white rounded-lg border border-purple-200">
+                <div className="text-center p-3 bg-white rounded-lg border border-emerald-200">
                   <div className="text-2xl font-bold text-green-600">{templateDetails.variables.length}</div>
                   <div className="text-sm text-gray-600">Variables</div>
                 </div>
               </div>
               
               {selectedTemplate && (
-                <div className="p-3 bg-white rounded-lg border border-purple-200">
+                <div className="p-3 bg-white rounded-lg border border-emerald-200">
                   <div className="text-sm font-medium text-gray-900 mb-2">Selected Template</div>
                   <div className="text-sm text-gray-600">{selectedTemplate}</div>
                   <Badge variant="outline" className="mt-1">
@@ -1325,7 +1325,7 @@ export default function WhatsAppBulkMessaging() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center text-lg">
-                  <MessageSquare className="h-5 w-5 mr-2 text-blue-600" />
+                  <MessageSquare className="h-5 w-5 mr-2 text-emerald-600" />
                   Template Preview
                 </CardTitle>
                 <CardDescription>Live preview of your message</CardDescription>
@@ -1343,7 +1343,7 @@ export default function WhatsAppBulkMessaging() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center text-lg">
-                  <Eye className="h-5 w-5 mr-2 text-green-600" />
+                  <Eye className="h-5 w-5 mr-2 text-emerald-600" />
                   Campaign Preview
                 </CardTitle>
                 <CardDescription>Preview of your campaign messages</CardDescription>
@@ -1369,10 +1369,10 @@ export default function WhatsAppBulkMessaging() {
           )}
 
           {/* Help & Tips */}
-          <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200">
+          <Card className="bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-200">
             <CardHeader>
               <CardTitle className="flex items-center text-lg">
-                <Info className="h-5 w-5 mr-2 text-blue-600" />
+                <Info className="h-5 w-5 mr-2 text-emerald-600" />
                 Tips & Help
               </CardTitle>
             </CardHeader>
