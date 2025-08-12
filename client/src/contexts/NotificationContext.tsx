@@ -53,11 +53,11 @@ export const NotificationProvider = ({ children }: NotificationProviderProps) =>
 
     setNotifications(prev => [notification, ...prev.slice(0, 49)]); // Keep max 50 notifications
 
-    // Auto-dismiss after 6 seconds for success/info notifications
+    // Auto-dismiss after 4 seconds for success/info notifications
     if (type === 'success' || type === 'info') {
       setTimeout(() => {
         setNotifications(prev => prev.filter(n => n.id !== id));
-      }, 6000);
+      }, 4000);
     }
   }, []);
 

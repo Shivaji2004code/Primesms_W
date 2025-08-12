@@ -60,7 +60,7 @@ export function NotificationSystem() {
   if (notifications.length === 0) return null;
 
   return (
-    <div className="fixed top-4 right-4 z-50 space-y-3 max-w-sm w-full">
+    <div className="fixed top-4 right-4 z-50 space-y-2 max-w-80 w-full">
       {notifications.map((notification) => {
         const IconComponent = iconMap[notification.type];
         const colors = colorMap[notification.type];
@@ -71,28 +71,29 @@ export function NotificationSystem() {
             id={`notification-${notification.id}`}
             className={cn(
               "animate-in slide-in-from-right-5 duration-300",
-              "rounded-lg border p-4 shadow-lg",
+              "rounded-lg border px-3 py-2.5 shadow-lg backdrop-blur-sm",
               colors.bg,
-              colors.border
+              colors.border,
+              "bg-opacity-95"
             )}
           >
-            <div className="flex items-start space-x-3">
+            <div className="flex items-center space-x-2.5">
               <div className="flex-shrink-0">
-                <IconComponent className={cn("h-5 w-5", colors.icon)} />
+                <IconComponent className={cn("h-4 w-4", colors.icon)} />
               </div>
               
               <div className="flex-1 min-w-0">
-                <h4 className={cn("text-sm font-semibold", colors.title)}>
+                <p className={cn("text-sm font-medium leading-tight", colors.title)}>
                   {notification.title}
-                </h4>
+                </p>
                 {notification.description && (
-                  <p className={cn("mt-1 text-sm", colors.description)}>
+                  <p className={cn("text-xs mt-0.5 leading-tight", colors.description)}>
                     {notification.description}
                   </p>
                 )}
                 
                 {notification.action && (
-                  <div className="mt-3">
+                  <div className="mt-2">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -108,26 +109,14 @@ export function NotificationSystem() {
               <button
                 onClick={() => removeNotification(notification.id)}
                 className={cn(
-                  "flex-shrink-0 p-1 rounded-full hover:bg-black/5 transition-colors",
-                  colors.button
+                  "flex-shrink-0 p-0.5 rounded-full hover:bg-black/10 transition-colors",
+                  colors.button,
+                  "opacity-60 hover:opacity-100"
                 )}
               >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5" />
               </button>
             </div>
-            
-            {/* Progress bar for timed notifications */}
-            {!notification.persistent && (
-              <div className="mt-3 h-1 bg-black/10 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-current opacity-60 animate-pulse"
-                  style={{
-                    animationDuration: `${notification.duration || 5000}ms`,
-                    animationTimingFunction: 'linear',
-                  }}
-                />
-              </div>
-            )}
           </div>
         );
       })}

@@ -62,7 +62,7 @@ export const useStore = create<AppState>((set, get) => ({
   addNotification: (notification) => {
     const id = Math.random().toString(36).substr(2, 9);
     const timestamp = Date.now();
-    const duration = notification.duration || 5000;
+    const duration = notification.duration || 4000; // Default to 4 seconds
     
     set((state) => ({
       notifications: [...state.notifications, { ...notification, id, timestamp }]
