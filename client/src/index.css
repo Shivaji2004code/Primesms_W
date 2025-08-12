@@ -75,3 +75,49 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
+
+/* WhatsApp-like chat micro-animations used on Landing page */
+@layer components {
+  @keyframes wa-shimmer {
+    0% { background-position: -300px 0; }
+    100% { background-position: 300px 0; }
+  }
+
+  @keyframes wa-fade-in-up {
+    0% { opacity: 0; transform: translateY(6px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes wa-fade-out {
+    0% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  .wa-skeleton {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.5rem;
+    background: #e5e7eb; /* gray-200 */
+    background-image: linear-gradient(90deg, rgba(229,231,235,0) 0%, rgba(209,213,219,0.9) 50%, rgba(229,231,235,0) 100%);
+    background-size: 600px 100%;
+    animation: wa-shimmer 1.4s infinite;
+  }
+
+  .wa-typing-dots { display: flex; align-items: center; gap: 4px; }
+  .wa-typing-dots span {
+    width: 6px; height: 6px; border-radius: 9999px; background: #10b981; /* emerald-500 */
+    display: inline-block; opacity: 0.6; animation: wa-bounce 1.2s infinite ease-in-out;
+  }
+  .wa-typing-dots span:nth-child(1) { animation-delay: 0s; }
+  .wa-typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+  .wa-typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes wa-bounce {
+    0%, 80%, 100% { transform: translateY(0); opacity: .4; }
+    40% { transform: translateY(-4px); opacity: 1; }
+  }
+
+  /* Reveal pattern: show skeleton first, then content fades in. Control with --reveal-delay */
+  .wa-reveal { position: relative; }
+  .wa-reveal .wa-content { opacity: 0; transform: translateY(6px); animation: wa-fade-in-up .45s ease forwards; animation-delay: var(--reveal-delay, .9s); }
+  .wa-reveal .wa-skeleton { opacity: 1; animation: wa-fade-out .35s ease forwards; animation-delay: calc(var(--reveal-delay, .9s) + .1s); }
+}

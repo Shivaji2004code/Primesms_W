@@ -89,9 +89,9 @@ export default function Landing() {
             
             {/* Mobile WhatsApp-Style Chat Interface */}
             <div className="relative lg:ml-8">
-              {/* Mobile Phone Frame */}
-              <div className="bg-black rounded-[2.5rem] p-2 shadow-2xl max-w-[280px] sm:max-w-[300px] mx-auto">
-                <div className="bg-white rounded-[2rem] overflow-hidden h-[580px] sm:h-[620px] flex flex-col">
+              {/* Subtle floating animation for phone */}
+              <div className="bg-black rounded-[2.2rem] p-2 shadow-2xl max-w-[320px] w-full mx-auto ring-1 ring-black/10">
+                <div className="bg-white rounded-[1.8rem] overflow-hidden h-[600px] sm:h-[640px] flex flex-col">
                   {/* Status Bar */}
                   <div className="bg-emerald-500 px-6 pt-3 pb-1">
                     <div className="flex justify-between items-center text-white text-xs font-medium">
@@ -137,7 +137,7 @@ export default function Landing() {
                     backgroundImage: `url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23e5e7eb' fill-opacity='0.1'%3E%3Cpath d='M0 0h20v20H0z'/%3E%3Cpath d='M10 0L0 10v10h10L20 10V0H10z' fill='%23d1d5db' fill-opacity='0.05'/%3E%3C/g%3E%3C/svg%3E")`,
                     backgroundColor: '#f0f2f5'
                   }}>
-                    {/* Chat Messages */}
+                    {/* Chat Messages with reveal animations */}
                     <div className="p-3 space-y-2 h-full overflow-y-auto">
                       {/* Date Separator */}
                       <div className="flex justify-center mb-4">
@@ -154,68 +154,77 @@ export default function Landing() {
                         </div>
                       </div>
                       
-                      {/* Bot Message */}
-                      <div className="flex items-end space-x-2 mb-1">
+                      {/* Bot Message (reveal) */}
+                      <div className="wa-reveal" style={{ ['--reveal-delay' as any]: '.4s' }}>
+                        <div className="flex items-end space-x-2 mb-1">
                         <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center flex-shrink-0">
                           <span className="text-white text-xs">🎧</span>
                         </div>
-                        <div className="max-w-[85%]">
-                          <div className="bg-white rounded-lg rounded-bl-none px-3 py-2 shadow-sm">
-                            <p className="text-sm text-gray-800">Hi! Welcome to Prime SMS. How can we help?</p>
-                          </div>
-                          <div className="flex items-center mt-1 space-x-1">
-                            <span className="text-xs text-gray-500">2:30 PM</span>
+                          <div className="max-w-[85%]">
+                            {/* skeleton then content */}
+                            <div className="wa-skeleton h-7 w-56 mb-1"></div>
+                            <div className="bg-white rounded-lg rounded-bl-none px-3 py-2 shadow-sm wa-content">
+                              <p className="text-sm text-gray-800">Hi! welcome to Prime SMS. How can we help?</p>
+                            </div>
+                            <div className="flex items-center mt-1 space-x-1 wa-content">
+                              <span className="text-xs text-gray-500">2:30 PM</span>
+                            </div>
                           </div>
                         </div>
                       </div>
                       
-                      {/* User Message */}
-                      <div className="flex justify-end mb-1">
-                        <div className="max-w-[85%]">
-                          <div className="bg-emerald-500 text-white rounded-lg rounded-br-none px-3 py-2 shadow-sm">
+                      {/* User Message (typing dots then reveal) */}
+                      <div className="flex justify-end mb-1 wa-reveal" style={{ ['--reveal-delay' as any]: '.9s' }}>
+                        <div className="max-w-[85%] text-right">
+                          <div className="bg-emerald-500/10 rounded-lg rounded-br-none px-3 py-2 shadow-sm wa-skeleton h-7 w-60 mb-1"></div>
+                          <div className="bg-emerald-500 text-white rounded-lg rounded-br-none px-3 py-2 shadow-sm wa-content">
                             <p className="text-sm">I need help with my account</p>
                           </div>
-                          <div className="flex items-center justify-end mt-1 space-x-1">
+                          <div className="flex items-center justify-end mt-1 space-x-1 wa-content">
                             <span className="text-xs text-gray-500">2:31 PM</span>
                             <span className="text-emerald-500 text-xs">✓✓</span>
                           </div>
                         </div>
                       </div>
                       
-                      {/* Bot Verification Code */}
-                      <div className="flex items-end space-x-2 mb-1">
+                      {/* Bot Verification Code (reveal) */}
+                      <div className="wa-reveal" style={{ ['--reveal-delay' as any]: '1.4s' }}>
+                        <div className="flex items-end space-x-2 mb-1">
                         <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center flex-shrink-0">
                           <span className="text-white text-xs">🎧</span>
                         </div>
-                        <div className="max-w-[85%]">
-                          <div className="bg-white rounded-lg rounded-bl-none px-3 py-2 shadow-sm">
-                            <p className="text-sm text-gray-800 mb-2">Your Prime SMS verification code is</p>
-                            <div className="bg-gray-100 rounded-md px-3 py-2 text-center">
-                              <span className="text-base font-mono font-bold text-emerald-600 tracking-wider">123456</span>
+                          <div className="max-w-[85%]">
+                            <div className="wa-skeleton h-16 w-64 mb-1"></div>
+                            <div className="bg-white rounded-lg rounded-bl-none px-3 py-2 shadow-sm wa-content">
+                              <p className="text-sm text-gray-800 mb-2">Your Prime SMS verification code is</p>
+                              <div className="bg-gray-100 rounded-md px-3 py-2 text-center">
+                                <span className="text-base font-mono font-bold text-emerald-600 tracking-wider">123456</span>
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex items-center mt-1 space-x-1">
-                            <span className="text-xs text-gray-500">2:32 PM</span>
+                            <div className="flex items-center mt-1 space-x-1 wa-content">
+                              <span className="text-xs text-gray-500">2:32 PM</span>
+                            </div>
                           </div>
                         </div>
                       </div>
                       
-                      {/* User Response */}
-                      <div className="flex justify-end mb-1">
+                      {/* User Response (reveal) */}
+                      <div className="flex justify-end mb-1 wa-reveal" style={{ ['--reveal-delay' as any]: '2s' }}>
                         <div className="max-w-[85%]">
-                          <div className="bg-emerald-500 text-white rounded-lg rounded-br-none px-3 py-2 shadow-sm">
+                          <div className="wa-skeleton h-7 w-72 mb-1"></div>
+                          <div className="bg-emerald-500 text-white rounded-lg rounded-br-none px-3 py-2 shadow-sm wa-content">
                             <p className="text-sm">Thanks! That worked perfectly</p>
                           </div>
-                          <div className="flex items-center justify-end mt-1 space-x-1">
+                          <div className="flex items-center justify-end mt-1 space-x-1 wa-content">
                             <span className="text-xs text-gray-500">2:33 PM</span>
                             <span className="text-blue-500 text-xs">✓✓</span>
                           </div>
                         </div>
                       </div>
                       
-                      {/* System Status */}
-                      <div className="flex justify-center pt-2">
-                        <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-xs flex items-center shadow-sm">
+                      {/* System Status (reveal) */}
+                      <div className="flex justify-center pt-2 wa-reveal" style={{ ['--reveal-delay' as any]: '2.6s' }}>
+                        <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-xs flex items-center shadow-sm wa-content">
                           <Check className="h-3 w-3 mr-1" />
                           <span className="font-medium">Webhook delivered successfully</span>
                         </div>
