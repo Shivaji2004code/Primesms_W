@@ -28,6 +28,7 @@ import CustomizeMessage from './pages/CustomizeMessage';
 import ManageReports from './pages/ManageReports';
 import Support from './pages/Support';
 import APIManagement from './pages/APIManagement';
+import Privacy from './pages/Privacy';
 
 // Create a client
 const queryClient = new QueryClient({
@@ -183,6 +184,9 @@ function App() {
               </UserRoute>
             } 
           />
+
+          {/* Public: Privacy Policy */}
+          <Route path="/privacy" element={<Layout><Privacy /></Layout>} />
 
           {/* Profile routes - accessible by both admin and user */}
           <Route 

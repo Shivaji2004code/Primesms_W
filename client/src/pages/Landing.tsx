@@ -442,8 +442,8 @@ export default function Landing() {
           
           <div className="flex justify-center">
             <Link to="/signup">
-              <Button size="lg" className="bg-white text-emerald-600 hover:bg-gray-50 px-8 py-4 text-lg font-semibold">
-                Start Free
+              <Button size="lg" className="bg-white text-emerald-600 hover:bg-gray-50 px-8 py-4 text-lg font-semibold" asChild>
+                <Link to="/privacy">Privacy</Link>
               </Button>
             </Link>
           </div>
