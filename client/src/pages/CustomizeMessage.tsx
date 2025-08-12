@@ -432,6 +432,11 @@ export default function CustomizeMessage() {
       return;
     }
 
+    // Check if we should use bulk messaging (more than 50 recipients)
+    if (excelData.length > 50) {
+      return handleBulkCustomSend();
+    }
+
     setSendingLoading(true);
     try {
       console.log('Sending custom messages...');
@@ -499,6 +504,79 @@ export default function CustomizeMessage() {
       console.error('Error sending messages:', error);
       toast({
         title: "Sending failed",
+        description: error instanceof Error ? error.message : "Please try again",
+        variant: "destructive"
+      });
+    } finally {
+      setSendingLoading(false);
+    }
+  };
+
+  const handleBulkCustomSend = async () => {
+    setSendingLoading(true);
+    try {
+      console.log('Sending bulk custom messages...');
+      console.log('Template:', selectedTemplate?.name);
+      console.log('Recipients:', excelData.length);
+      
+      // Convert variable mappings from {{1}} format to 1 format for backend
+      const convertedMappings: Record<string, string> = {};
+      Object.keys(variableMappings).forEach(variable => {
+        // Extract number from {{1}} format
+        const match = variable.match(/\{\{(\d+)\}\}/);
+        if (match) {
+          const variableIndex = match[1];
+          convertedMappings[variableIndex] = variableMappings[variable];
+        }
+      });
+      
+      const payload = {
+        templateName: selectedTemplate?.name,
+        language: selectedLanguage,
+        phoneNumberId: selectedWabaId,
+        recipientColumn: recipientColumn,
+        variableMappings: convertedMappings,
+        data: excelData
+      };
+      
+      console.log('Bulk custom payload:', payload);
+      
+      const response = await fetch('/api/whatsapp/bulk-customize-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload)
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Bulk send result:', result);
+        
+        toast({
+          title: "Bulk custom messages started successfully",
+          description: `Processing ${excelData.length} personalized messages in batches. Job ID: ${result.jobId}. You can track progress in real-time.`,
+          variant: "default"
+        });
+        
+        // Reset form
+        setSelectedWabaId('');
+        setSelectedTemplate(null);
+        setUploadedFile(null);
+        setRecipientColumn('');
+        setVariableMappings({});
+        setPreviewData(null);
+        setExcelData([]);
+        setColumnNames([]);
+        
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.error || `Bulk sending failed with status ${response.status}`);
+      }
+      
+    } catch (error) {
+      console.error('Error sending bulk custom messages:', error);
+      toast({
+        title: "Bulk sending failed",
         description: error instanceof Error ? error.message : "Please try again",
         variant: "destructive"
       });
@@ -898,7 +976,7 @@ export default function CustomizeMessage() {
                 ) : (
                   <Send className="h-5 w-5 mr-2" />
                 )}
-                Send Messages ({excelData.length})
+                {excelData.length > 50 ? 'Bulk Send' : 'Send Messages'} ({excelData.length})
               </Button>
             </div>
           </div>

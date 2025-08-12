@@ -567,6 +567,11 @@ export default function WhatsAppBulkMessaging() {
       return;
     }
 
+    // Check if we should use bulk messaging (more than 50 recipients)
+    if (recipients.length > 50) {
+      return handleBulkQuickSend();
+    }
+
     // Check if template requires image but no image uploaded
     if (templateDetails.templateTypeInfo?.hasStaticImage && !headerImage) {
       setAlertState({
@@ -647,6 +652,53 @@ export default function WhatsAppBulkMessaging() {
     }
   };
 
+  const handleBulkQuickSend = async () => {
+    setLoading(prev => ({ ...prev, sending: true }));
+    try {
+      const payload = {
+        phone_number_id: selectedNumber,
+        template_name: selectedTemplate,
+        language: selectedLanguage,
+        recipients_text: recipients.join('\n'),
+        variables: templateVariables,
+        campaign_name: campaignName || `Bulk Quick Send - ${selectedTemplate} - ${new Date().toISOString()}`
+      };
+
+      const response = await fetch('/api/whatsapp/bulk-quick-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        setAlertState({
+          show: true,
+          type: 'success',
+          title: 'Bulk campaign started successfully',
+          message: `Processing ${recipients.length} recipients in batches of ${data.batchSize || 50}. Job ID: ${data.jobId}. You can track progress in real-time.`
+        });
+        
+        // Reset form
+        resetForm();
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.message || errorData.error || 'Bulk send failed');
+      }
+    } catch (error) {
+      console.error('Error with bulk quick send:', error);
+      setAlertState({
+        show: true,
+        type: 'error',
+        title: 'Bulk send failed',
+        message: error instanceof Error ? error.message : 'Please try again'
+      });
+    } finally {
+      setLoading(prev => ({ ...prev, sending: false }));
+    }
+  };
 
   const resetForm = () => {
     setSelectedNumber('');
@@ -1281,7 +1333,7 @@ export default function WhatsAppBulkMessaging() {
               ) : (
                 <Send className="h-5 w-5 mr-2" />
               )}
-              Quick Send ({recipients.length})
+              {recipients.length > 50 ? 'Bulk Send' : 'Quick Send'} ({recipients.length})
             </Button>
           </div>
         </div>
