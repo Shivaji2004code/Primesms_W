@@ -1,0 +1,19 @@
+# Coolify configuration for Prime SMS
+version: '1'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker-compose.production.yml
+    environment:
+      - NODE_ENV=production
+    ports:
+      - "3000:3000"
+      - "5000:5000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
