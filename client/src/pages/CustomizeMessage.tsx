@@ -557,15 +557,15 @@ export default function CustomizeMessage() {
 
 
         {/* Progress Indicator */}
-        <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 shadow-lg">
+        <Card className="bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-200 shadow-lg">
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Setup Progress</h2>
-              <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+              <Badge variant="secondary" className="bg-emerald-100 text-emerald-800">
                 {Math.round(getFormProgress())}% Complete
               </Badge>
             </div>
-            <Progress value={getFormProgress()} className="h-3 bg-blue-100" />
+            <Progress value={getFormProgress()} className="h-3 bg-emerald-100" />
             <div className="flex justify-between mt-3 text-sm text-gray-600">
               <span className="flex items-center">
                 <Target className="h-4 w-4 mr-1" />
@@ -591,7 +591,7 @@ export default function CustomizeMessage() {
           {/* Main Form */}
           <div className="lg:col-span-2 space-y-6">
             {/* Step 1: WhatsApp Configuration */}
-            <Card className={`border-2 shadow-lg transition-all duration-300 ${getStepStatus(1) === 'completed' ? 'border-green-200 bg-gradient-to-br from-green-50 to-emerald-50' : getStepStatus(1) === 'current' ? 'border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50' : 'border-gray-200 bg-white'}`}>
+            <Card className={`border-2 shadow-lg transition-all duration-300 ${getStepStatus(1) === 'completed' ? 'border-green-200 bg-gradient-to-br from-green-50 to-emerald-50' : getStepStatus(1) === 'current' ? 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-green-50' : 'border-gray-200 bg-white'}`}>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
@@ -604,7 +604,7 @@ export default function CustomizeMessage() {
                     </div>
                     <div>
                       <CardTitle className="flex items-center text-xl">
-                        <Phone className="h-6 w-6 mr-3 text-blue-600" />
+                        <Phone className="h-6 w-6 mr-3 text-emerald-600" />
                         WhatsApp Configuration
                       </CardTitle>
                       <CardDescription className="text-base">Select your WhatsApp Business number and template</CardDescription>
@@ -623,7 +623,7 @@ export default function CustomizeMessage() {
                   <div className="space-y-2">
                     <Label htmlFor="whatsapp-number" className="text-sm font-semibold text-gray-700">WhatsApp Business Number *</Label>
                     <Select value={selectedWabaId} onValueChange={setSelectedWabaId}>
-                      <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors">
+                      <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-emerald-300 focus:border-emerald-500 transition-colors">
                         <SelectValue placeholder="Select WhatsApp number" />
                       </SelectTrigger>
                       <SelectContent>
@@ -658,7 +658,7 @@ export default function CustomizeMessage() {
                         setSelectedTemplate(null); // Reset template when language changes
                       }}
                     >
-                      <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors">
+                      <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-emerald-300 focus:border-emerald-500 transition-colors">
                         <SelectValue placeholder={languages.length === 0 ? "Loading languages..." : "Select language"} />
                       </SelectTrigger>
                       <SelectContent>
@@ -676,7 +676,7 @@ export default function CustomizeMessage() {
                   <div className="flex items-center justify-between">
                     <Label htmlFor="template" className="text-sm font-semibold text-gray-700 flex items-center">
                       Template *
-                      {templatesLoading && <Loader2 className="h-4 w-4 ml-2 animate-spin text-blue-600" />}
+                      {templatesLoading && <Loader2 className="h-4 w-4 ml-2 animate-spin text-emerald-600" />}
                     </Label>
                     <Button
                       variant="ghost"
@@ -697,7 +697,7 @@ export default function CustomizeMessage() {
                     }}
                     disabled={templatesLoading}
                   >
-                    <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors">
+                    <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-emerald-300 focus:border-emerald-500 transition-colors">
                       <SelectValue placeholder={templatesLoading ? "Loading templates..." : templates.length === 0 ? "No templates available" : "Select template"} />
                     </SelectTrigger>
                     <SelectContent>
@@ -732,7 +732,7 @@ export default function CustomizeMessage() {
             </Card>
 
             {/* Step 2: Excel Data Upload */}
-            <Card className={`border-2 shadow-lg transition-all duration-300 ${getStepStatus(3) === 'completed' ? 'border-green-200 bg-gradient-to-br from-green-50 to-emerald-50' : getStepStatus(3) === 'current' ? 'border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50' : 'border-gray-200 bg-white'}`}>
+            <Card className={`border-2 shadow-lg transition-all duration-300 ${getStepStatus(3) === 'completed' ? 'border-green-200 bg-gradient-to-br from-green-50 to-emerald-50' : getStepStatus(3) === 'current' ? 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-green-50' : 'border-gray-200 bg-white'}`}>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
@@ -777,7 +777,7 @@ export default function CustomizeMessage() {
                       {uploadedFile ? `${excelData.length} rows processed` : 'Drag and drop or click to browse'}
                     </div>
                     {!uploadedFile && (
-                      <Button variant="outline" className="bg-white border-2 border-gray-300 hover:border-green-400 hover:bg-green-50 transition-all duration-300">
+                       <Button variant="outline" className="bg-white border-2 border-gray-300 hover:border-emerald-400 hover:bg-emerald-50 transition-all duration-300">
                         <Upload className="h-5 w-5 mr-2" />
                         Choose File
                       </Button>
@@ -789,7 +789,7 @@ export default function CustomizeMessage() {
                   <div className="space-y-2">
                     <Label htmlFor="recipient-column" className="text-sm font-semibold text-gray-700">Recipient Phone Number Column *</Label>
                     <Select value={recipientColumn} onValueChange={setRecipientColumn}>
-                      <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors">
+                       <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-emerald-300 focus:border-emerald-500 transition-colors">
                         <SelectValue placeholder="Select column containing phone numbers" />
                       </SelectTrigger>
                       <SelectContent>
@@ -810,7 +810,7 @@ export default function CustomizeMessage() {
 
             {/* Step 3: Variable Mapping */}
             {useVariables && templateVariables.length > 0 && (
-              <Card className={`border-2 shadow-lg transition-all duration-300 ${getStepStatus(4) === 'completed' ? 'border-green-200 bg-gradient-to-br from-green-50 to-emerald-50' : getStepStatus(4) === 'current' ? 'border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50' : 'border-gray-200 bg-white'}`}>
+              <Card className={`border-2 shadow-lg transition-all duration-300 ${getStepStatus(4) === 'completed' ? 'border-green-200 bg-gradient-to-br from-green-50 to-emerald-50' : getStepStatus(4) === 'current' ? 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-green-50' : 'border-gray-200 bg-white'}`}>
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
@@ -852,7 +852,7 @@ export default function CustomizeMessage() {
                           value={variableMappings[variable] || ''} 
                           onValueChange={(value) => handleMappingChange(variable, value)}
                         >
-                          <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors">
+                          <SelectTrigger className="h-12 border-2 border-gray-200 hover:border-emerald-300 focus:border-emerald-500 transition-colors">
                             <SelectValue placeholder="Select column" />
                           </SelectTrigger>
                           <SelectContent>
@@ -878,7 +878,7 @@ export default function CustomizeMessage() {
               <Button
                 onClick={generatePreview}
                 disabled={!selectedTemplate || !uploadedFile || !recipientColumn || previewLoading}
-                className="flex-1 h-14 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                className="flex-1 h-14 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
               >
                 {previewLoading ? (
                   <Loader2 className="h-5 w-5 mr-2 animate-spin" />
@@ -891,7 +891,7 @@ export default function CustomizeMessage() {
               <Button
                 onClick={handleSendCustomMessages}
                 disabled={!selectedWabaId || !selectedTemplate || !uploadedFile || !recipientColumn || sendingLoading}
-                className="flex-1 h-14 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                className="flex-1 h-14 bg-gradient-to-r from-emerald-700 to-emerald-800 hover:from-emerald-800 hover:to-emerald-900 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
               >
                 {sendingLoading ? (
                   <Loader2 className="h-5 w-5 mr-2 animate-spin" />
@@ -906,27 +906,27 @@ export default function CustomizeMessage() {
           {/* Right Sidebar - Preview & Info */}
           <div className="space-y-6">
             {/* Campaign Summary */}
-            <Card className="bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200 shadow-lg">
+            <Card className="bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-200 shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center text-lg">
-                  <Sparkles className="h-5 w-5 mr-2 text-purple-600" />
+                  <Sparkles className="h-5 w-5 mr-2 text-emerald-600" />
                   Campaign Summary
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center p-4 bg-white rounded-lg border border-purple-200 shadow-sm">
-                    <div className="text-3xl font-bold text-purple-600">{excelData.length}</div>
+                  <div className="text-center p-4 bg-white rounded-lg border border-emerald-200 shadow-sm">
+                    <div className="text-3xl font-bold text-emerald-600">{excelData.length}</div>
                     <div className="text-sm text-gray-600">Recipients</div>
                   </div>
-                  <div className="text-center p-4 bg-white rounded-lg border border-purple-200 shadow-sm">
+                  <div className="text-center p-4 bg-white rounded-lg border border-emerald-200 shadow-sm">
                     <div className="text-3xl font-bold text-green-600">{templateVariables.length}</div>
                     <div className="text-sm text-gray-600">Variables</div>
                   </div>
                 </div>
                 
                 {selectedTemplate && (
-                  <div className="p-4 bg-white rounded-lg border border-purple-200 shadow-sm">
+                  <div className="p-4 bg-white rounded-lg border border-emerald-200 shadow-sm">
                     <div className="text-sm font-semibold text-gray-900 mb-2">Selected Template</div>
                     <div className="text-sm text-gray-600 mb-2">{selectedTemplate.name.replace(/_(UTILITY|MARKETING|AUTHENTICATION)$/, '').replace(/_/g, ' ')}</div>
                     <div className="flex items-center justify-between">
@@ -968,10 +968,10 @@ export default function CustomizeMessage() {
             )}
 
             {/* Help & Tips */}
-            <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200 shadow-lg">
+            <Card className="bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-200 shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center text-lg">
-                  <Info className="h-5 w-5 mr-2 text-blue-600" />
+                  <Info className="h-5 w-5 mr-2 text-emerald-600" />
                   Tips & Help
                 </CardTitle>
               </CardHeader>
