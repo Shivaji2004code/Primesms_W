@@ -140,27 +140,19 @@ export default function UserDashboard() {
             </p>
           </div>
 
-          {/* Right side - Key metrics */}
+          {/* Right side - Key metric (Credits only) */}
           <div className="flex gap-6">
             <div className="text-center px-6 py-4 bg-gray-50 rounded-xl">
               <div className="text-2xl font-bold text-gray-900 mb-1">{stats.credits.toLocaleString()}</div>
               <div className="text-sm text-gray-600">Available Credits</div>
             </div>
-            <div className="text-center px-6 py-4 bg-gray-50 rounded-xl">
-              <div className="text-2xl font-bold text-gray-900 mb-1">{stats.totalMessages}</div>
-              <div className="text-sm text-gray-600">Messages Sent</div>
-            </div>
-            <div className="text-center px-6 py-4 bg-gray-50 rounded-xl">
-              <div className="text-2xl font-bold text-gray-900 mb-1">{stats.activeTemplates}</div>
-              <div className="text-sm text-gray-600">Active Templates</div>
-            </div>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+      <div className="space-y-8">
         {/* Main Content - Quick Actions */}
-        <div className="xl:col-span-2">
+        <div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
             {/* Header */}
             <div className="px-8 py-6 border-b border-gray-100">
@@ -211,7 +203,7 @@ export default function UserDashboard() {
             </div>
           </div>
 
-          {/* Performance Overview */}
+          {/* Performance Overview (Credits only) */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mt-8">
             <div className="px-8 py-6 border-b border-gray-100">
               <div className="flex items-center justify-between">
@@ -232,7 +224,7 @@ export default function UserDashboard() {
             </div>
 
             <div className="p-8">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
                 <div className="text-center p-6 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl border border-blue-200">
                   <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm">
                     <CreditCard className="h-6 w-6 text-white" />
@@ -241,129 +233,6 @@ export default function UserDashboard() {
                   <div className="text-blue-700 font-medium mb-1">Available Credits</div>
                   <div className="text-blue-600 text-xs">Ready to use</div>
                 </div>
-
-                <div className="text-center p-6 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl border border-emerald-200">
-                  <div className="w-12 h-12 bg-emerald-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm">
-                    <Send className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="text-2xl font-bold text-emerald-900 mb-2">{stats.totalMessages}</div>
-                  <div className="text-emerald-700 font-medium mb-1">Messages Sent</div>
-                  <div className="text-emerald-600 text-xs">All time</div>
-                </div>
-
-                <div className="text-center p-6 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl border border-purple-200">
-                  <div className="w-12 h-12 bg-purple-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm">
-                    <FileText className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="text-2xl font-bold text-purple-900 mb-2">{stats.activeTemplates}</div>
-                  <div className="text-purple-700 font-medium mb-1">Active Templates</div>
-                  <div className="text-purple-600 text-xs">Ready to use</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Sidebar - Recent Activity & Support */}
-        <div className="xl:col-span-1 space-y-8">
-          {/* Recent Activity */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
-            <div className="px-6 py-5 border-b border-gray-100">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
-                  <Activity className="h-4 w-4 text-emerald-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">Recent Activity</h3>
-                  <p className="text-xs text-gray-600">Latest updates</p>
-                </div>
-              </div>
-            </div>
-            <div className="p-6">
-              <div className="space-y-4">
-                {recentActivity.map((activity, index) => (
-                  <div key={activity.id} className="flex items-start gap-3">
-                    <div className="flex-shrink-0 mt-1">
-                      {activity.status === 'success' ? (
-                        <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                      ) : (
-                        <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900">{activity.action}</p>
-                      <p className="text-xs text-gray-600 mt-1">{activity.time}</p>
-                    </div>
-                  </div>
-                ))}
-                <div className="pt-3 border-t border-gray-100">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="w-full text-gray-600 hover:text-gray-900"
-                    onClick={() => navigate('/user/manage-reports')}
-                  >
-                    View All Activity
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Support Card */}
-          <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl shadow-sm text-white">
-            <div className="p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                  <LifeBuoy className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Need Help?</h3>
-                  <p className="text-white/80 text-sm">Get support from our team</p>
-                </div>
-              </div>
-              <p className="text-white/90 text-sm mb-4 leading-relaxed">
-                Our support team is here to help you get the most out of Prime SMS.
-              </p>
-              <Button 
-                onClick={() => navigate('/user/support')}
-                className="w-full bg-white text-gray-900 hover:bg-white/90 font-medium"
-              >
-                Contact Support
-              </Button>
-            </div>
-          </div>
-
-          {/* Quick Stats */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
-            <div className="px-6 py-5 border-b border-gray-100">
-              <h3 className="font-semibold text-gray-900">Quick Stats</h3>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Account Status</span>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                  <span className="text-sm font-medium text-emerald-600">Active</span>
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Credit Balance</span>
-                <span className="text-sm font-bold text-gray-900">{stats.credits.toLocaleString()}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Messages Today</span>
-                <span className="text-sm font-bold text-gray-900">0</span>
-              </div>
-              <div className="pt-3 border-t border-gray-100">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="w-full"
-                  onClick={() => navigate('/user/profile')}
-                >
-                  View Profile
-                </Button>
               </div>
             </div>
           </div>
