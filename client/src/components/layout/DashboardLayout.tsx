@@ -34,7 +34,7 @@ export default function DashboardLayout({ children, title, subtitle }: Dashboard
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex">
       {/* Fixed Desktop Sidebar */}
       <SideNav />
       
@@ -45,7 +45,7 @@ export default function DashboardLayout({ children, title, subtitle }: Dashboard
       />
       
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 md:ml-64 w-full">
+      <div className="flex-1 flex flex-col min-w-0 md:ml-72 w-full">
         {/* Mobile Header Bar */}
         <div className="md:hidden bg-white border-b border-gray-200 p-4 flex items-center justify-between">
           <Button
@@ -69,7 +69,7 @@ export default function DashboardLayout({ children, title, subtitle }: Dashboard
         <Header title={title} subtitle={subtitle} />
         
         {/* Main Content */}
-        <main className="flex-1 w-full p-8 space-y-8 overflow-auto">
+        <main className="flex-1 w-full p-8 space-y-8 overflow-auto max-w-screen-xl mx-auto">
           {children}
         </main>
         
