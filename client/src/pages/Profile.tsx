@@ -166,7 +166,7 @@ const Profile = () => {
               className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden"
             >
         {/* Header with Avatar */}
-        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-8 text-center">
+        <div className="bg-gradient-to-r from-emerald-600 to-green-600 px-6 py-8 text-center">
           <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <User className="w-10 h-10 text-white" />
           </div>
@@ -190,7 +190,7 @@ const Profile = () => {
                 onClick={() => setIsEditing(true)}
                 variant="outline"
                 size="sm"
-                className="flex items-center space-x-2"
+                className="flex items-center space-x-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
               >
                 <Edit2 className="w-4 h-4" />
                 <span>Edit</span>
@@ -200,7 +200,7 @@ const Profile = () => {
                 <Button
                   onClick={handleEditSubmit}
                   size="sm"
-                  className="flex items-center space-x-2"
+                  className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700"
                 >
                   <Save className="w-4 h-4" />
                   <span>Save</span>
@@ -209,7 +209,7 @@ const Profile = () => {
                   onClick={handleCancelEdit}
                   variant="outline"
                   size="sm"
-                  className="flex items-center space-x-2"
+                  className="flex items-center space-x-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
                 >
                   <X className="w-4 h-4" />
                   <span>Cancel</span>
@@ -329,14 +329,14 @@ const Profile = () => {
           Account Overview
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="text-center p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-            <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+          <div className="text-center p-4 bg-emerald-50 dark:bg-gray-700 rounded-lg border border-emerald-200">
+            <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">
               {user.creditBalance?.toLocaleString() || '0'}
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">SMS Credits</div>
           </div>
-          <div className="text-center p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+          <div className="text-center p-4 bg-emerald-50 dark:bg-gray-700 rounded-lg border border-emerald-200">
+            <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">
               {user.role === 'admin' ? 'Admin' : 'Active'}
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">Account Status</div>
@@ -353,8 +353,8 @@ const Profile = () => {
           className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6"
         >
           <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-3">
-              <CreditCard className="w-6 h-6 text-indigo-600" />
+          <div className="flex items-center space-x-3">
+            <CreditCard className="w-6 h-6 text-emerald-600" />
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   Credit History
@@ -365,7 +365,7 @@ const Profile = () => {
               </div>
             </div>
             <div className="text-right">
-              <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+            <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">
                 {user?.creditBalance?.toLocaleString() || '0'}
               </div>
               <div className="text-sm text-gray-500">Current Balance</div>
@@ -400,7 +400,7 @@ const Profile = () => {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
-                  className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-emerald-50/50 dark:hover:bg-gray-700 transition-colors"
                 >
                   <div className="flex items-center space-x-4">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
@@ -420,7 +420,7 @@ const Profile = () => {
                           {item.type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
                         </p>
                         {item.templateName && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">
                             {item.templateName}
                           </span>
                         )}
