@@ -9,6 +9,7 @@ const bulkQueue_1 = require("../services/bulkQueue");
 const bulkRepos_1 = require("../repos/bulkRepos");
 const bulkSSE_1 = require("../services/bulkSSE");
 const logger_1 = require("../utils/logger");
+const template_helper_1 = require("../utils/template-helper");
 const db_1 = __importDefault(require("../db"));
 const router = (0, express_1.Router)();
 const bulkQueue = new bulkQueue_1.BulkQueue(bulkRepos_1.userBusinessRepo, bulkRepos_1.bulkCampaignLogsRepo, (jobId, payload) => bulkSSE_1.bulkSSE.emit(jobId, payload));
@@ -70,6 +71,24 @@ router.post('/bulk-quick-send', bulkRateLimit, requireAuth, async (req, res) => 
             });
         }
         if (recipients.length > 50) {
+            let templateComponents = [];
+            try {
+                const templatesResult = await db_1.default.query('SELECT * FROM user_templates WHERE user_id = $1 AND name = $2 AND language = $3 LIMIT 1', [authenticatedUserId, template_name, language]);
+                if (templatesResult.rows.length > 0) {
+                    const template = templatesResult.rows[0];
+                    const templateInfo = {
+                        name: template.name,
+                        category: template.category,
+                        language: template.language,
+                        status: template.status,
+                        components: template.components || []
+                    };
+                    templateComponents = (0, template_helper_1.buildTemplatePayload)(template_name, language, templateInfo.components, variables);
+                }
+            }
+            catch (error) {
+                logger_1.logger.error('[BULK-INTEGRATION] Failed to fetch template details', { error, template_name, userId: authenticatedUserId });
+            }
             const jobInput = {
                 userId: authenticatedUserId,
                 campaignId: campaign_name,
@@ -79,7 +98,7 @@ router.post('/bulk-quick-send', bulkRateLimit, requireAuth, async (req, res) => 
                     template: {
                         name: template_name,
                         language_code: language,
-                        components: []
+                        components: templateComponents
                     }
                 },
                 variables
@@ -156,6 +175,24 @@ router.post('/bulk-customize-send', bulkRateLimit, requireAuth, async (req, res)
             });
         }
         if (recipients.length > 50) {
+            let templateComponents = [];
+            try {
+                const templatesResult = await db_1.default.query('SELECT * FROM user_templates WHERE user_id = $1 AND name = $2 AND language = $3 LIMIT 1', [authenticatedUserId, templateName, language]);
+                if (templatesResult.rows.length > 0) {
+                    const template = templatesResult.rows[0];
+                    const templateInfo = {
+                        name: template.name,
+                        category: template.category,
+                        language: template.language,
+                        status: template.status,
+                        components: template.components || []
+                    };
+                    templateComponents = templateInfo.components;
+                }
+            }
+            catch (error) {
+                logger_1.logger.error('[BULK-INTEGRATION] Failed to fetch template details', { error, templateName, userId: authenticatedUserId });
+            }
             const jobInput = {
                 userId: authenticatedUserId,
                 campaignId: `Custom_${templateName}_${Date.now()}`,
@@ -165,7 +202,7 @@ router.post('/bulk-customize-send', bulkRateLimit, requireAuth, async (req, res)
                     template: {
                         name: templateName,
                         language_code: language,
-                        components: []
+                        components: templateComponents
                     }
                 },
                 recipientVariables

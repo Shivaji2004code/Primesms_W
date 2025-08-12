@@ -6,6 +6,7 @@ import { BulkQueue, BulkJobInput } from '../services/bulkQueue';
 import { userBusinessRepo, bulkCampaignLogsRepo } from '../repos/bulkRepos';
 import { bulkSSE } from '../services/bulkSSE';
 import { logger } from '../utils/logger';
+import { analyzeTemplate, buildTemplatePayload } from '../utils/template-helper';
 import pool from '../db';
 
 const router = Router();
@@ -102,6 +103,36 @@ router.post('/bulk-quick-send', bulkRateLimit, requireAuth, async (req: Request,
 
     // Check bulk threshold - if more than 50, use bulk queue
     if (recipients.length > 50) {
+      // Fetch template details to build proper components
+      let templateComponents: any[] = [];
+      try {
+        const templatesResult = await pool.query(
+          'SELECT * FROM user_templates WHERE user_id = $1 AND name = $2 AND language = $3 LIMIT 1',
+          [authenticatedUserId, template_name, language]
+        );
+        
+        if (templatesResult.rows.length > 0) {
+          const template = templatesResult.rows[0];
+          const templateInfo = {
+            name: template.name,
+            category: template.category,
+            language: template.language,
+            status: template.status,
+            components: template.components || []
+          };
+          
+          // Build template components using existing helper
+          templateComponents = buildTemplatePayload(
+            template_name,
+            language,
+            templateInfo.components,
+            variables
+          );
+        }
+      } catch (error) {
+        logger.error('[BULK-INTEGRATION] Failed to fetch template details', { error, template_name, userId: authenticatedUserId });
+      }
+
       const jobInput: BulkJobInput = {
         userId: authenticatedUserId!,
         campaignId: campaign_name,
@@ -111,7 +142,7 @@ router.post('/bulk-quick-send', bulkRateLimit, requireAuth, async (req: Request,
           template: {
             name: template_name,
             language_code: language,
-            components: [] // Will be filled by existing template processing
+            components: templateComponents
           }
         },
         variables // Static variables for all recipients
@@ -217,6 +248,32 @@ router.post('/bulk-customize-send', bulkRateLimit, requireAuth, async (req: Requ
 
     // Check bulk threshold - if more than 50, use bulk queue
     if (recipients.length > 50) {
+      // Fetch template details to build proper components
+      let templateComponents: any[] = [];
+      try {
+        const templatesResult = await pool.query(
+          'SELECT * FROM user_templates WHERE user_id = $1 AND name = $2 AND language = $3 LIMIT 1',
+          [authenticatedUserId, templateName, language]
+        );
+        
+        if (templatesResult.rows.length > 0) {
+          const template = templatesResult.rows[0];
+          const templateInfo = {
+            name: template.name,
+            category: template.category,
+            language: template.language,
+            status: template.status,
+            components: template.components || []
+          };
+          
+          // For customize, we'll build template components per recipient
+          // Store the base template structure for the bulk processor
+          templateComponents = templateInfo.components;
+        }
+      } catch (error) {
+        logger.error('[BULK-INTEGRATION] Failed to fetch template details', { error, templateName, userId: authenticatedUserId });
+      }
+
       const jobInput: BulkJobInput = {
         userId: authenticatedUserId!,
         campaignId: `Custom_${templateName}_${Date.now()}`,
@@ -226,7 +283,7 @@ router.post('/bulk-customize-send', bulkRateLimit, requireAuth, async (req: Requ
           template: {
             name: templateName,
             language_code: language,
-            components: [] // Will be filled by existing template processing
+            components: templateComponents
           }
         },
         recipientVariables // Per-recipient variables

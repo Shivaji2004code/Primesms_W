@@ -479,24 +479,22 @@ export default function WhatsAppBulkMessaging() {
     reader.readAsText(file);
   };
 
-  const handleManualRecipientsAdd = () => {
-    if (!manualRecipients.trim()) return;
+  const handleManualRecipientsChange = (value: string) => {
+    setManualRecipients(value);
     
-    const numbers = manualRecipients
-      .split(/[,\n]/)
-      .map(num => num.trim())
-      .filter(num => num.length > 0);
-    
-    const newRecipients = [...new Set([...recipients, ...numbers])];
-    setRecipients(newRecipients);
-    setManualRecipients('');
-    
-    setAlertState({
-      show: true,
-      type: 'success',
-      title: 'Recipients added',
-      message: `Added ${numbers.length} new recipients. Total: ${newRecipients.length}`
-    });
+    // Auto-add recipients as they're typed/pasted
+    if (value.trim()) {
+      const numbers = value
+        .split(/[,\n]/)
+        .map(num => num.trim())
+        .filter(num => num.length > 0);
+      
+      // Update recipients list in real-time
+      const newRecipients = [...new Set([...numbers])];
+      setRecipients(newRecipients);
+    } else {
+      setRecipients([]);
+    }
   };
 
   const handleVariableChange = (index: string, value: string) => {
@@ -506,55 +504,22 @@ export default function WhatsAppBulkMessaging() {
     }));
   };
 
-  const handlePreviewCampaign = async () => {
-    if (!selectedTemplate || recipients.length === 0) return;
-    
-    setLoading(prev => ({ ...prev, preview: true }));
-    try {
-      // Use the recipients data which now preserves CSV format
-      const recipientsText = recipients.slice(0, 3).join('\n');
-      
-      const payload = {
-        templateName: selectedTemplate,
-        language: selectedLanguage,
-        recipients_text: recipientsText, // Send CSV data for processing
-        variables: templateVariables
-      };
-
-      const response = await fetch('/api/whatsapp/preview-campaign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(payload)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        // Handle the new recipient_previews format from server
-        const previewData = data.data.recipient_previews || data.data;
-        setCampaignPreview(previewData);
-        
-        setAlertState({
-          show: true,
-          type: 'success',
-          title: 'Preview generated',
-          message: `Showing preview for ${Math.min(3, recipients.length)} recipients`
-        });
-      } else {
-        throw new Error('Preview failed');
-      }
-    } catch (error) {
-      console.error('Error generating preview:', error);
-      setAlertState({
-        show: true,
-        type: 'error',
-        title: 'Preview failed',
-        message: 'Please check your template and variables'
-      });
-    } finally {
-      setLoading(prev => ({ ...prev, preview: false }));
+  // Auto-generate preview when template and recipients are available
+  useEffect(() => {
+    if (selectedTemplate && recipients.length > 0) {
+      // Auto-generate simple preview for first 3 recipients
+      const previewData = recipients.slice(0, 3).map((recipient, index) => ({
+        phone: recipient,
+        recipient: recipient,
+        variables: templateVariables,
+        preview: generateLivePreview(),
+        message: generateLivePreview()
+      }));
+      setCampaignPreview(previewData);
+    } else {
+      setCampaignPreview(null);
     }
-  };
+  }, [selectedTemplate, recipients, templateVariables, templatePreview]);
 
   const handleQuickSend = async () => {
     if (!selectedNumber || !selectedTemplate || recipients.length === 0) {
@@ -1034,23 +999,15 @@ export default function WhatsAppBulkMessaging() {
                     <Textarea
                       id="manual-recipients"
                       value={manualRecipients}
-                      onChange={(e) => setManualRecipients(e.target.value)}
+                      onChange={(e) => handleManualRecipientsChange(e.target.value)}
                       placeholder="Enter phone numbers separated by commas or new lines (e.g., 1234567890, 919876543210)"
                       className="mt-1"
                       rows={4}
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      Include country code (e.g., 1 for US, 91 for India)
+                      Include country code (e.g., 1 for US, 91 for India). Recipients are added automatically as you type.
                     </p>
                   </div>
-                  <Button 
-                    onClick={handleManualRecipientsAdd}
-                    disabled={!manualRecipients.trim()}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Recipients
-                  </Button>
                 </TabsContent>
                 
                 <TabsContent value="file" className="space-y-4">
@@ -1308,25 +1265,12 @@ export default function WhatsAppBulkMessaging() {
             </Card>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4">
-            <Button
-              onClick={handlePreviewCampaign}
-              disabled={!selectedTemplate || recipients.length === 0 || loading.preview}
-              className="flex-1 h-14 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
-            >
-              {loading.preview ? (
-                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-              ) : (
-                <Eye className="h-5 w-5 mr-2" />
-              )}
-              Preview Campaign
-            </Button>
-            
+          {/* Action Button */}
+          <div className="flex justify-center">
             <Button
               onClick={handleQuickSend}
               disabled={!selectedNumber || !selectedTemplate || recipients.length === 0 || loading.sending}
-              className="flex-1 h-14 bg-gradient-to-r from-emerald-700 to-emerald-800 hover:from-emerald-800 hover:to-emerald-900 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+              className="w-full h-14 bg-gradient-to-r from-emerald-700 to-emerald-800 hover:from-emerald-800 hover:to-emerald-900 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
             >
               {loading.sending ? (
                 <Loader2 className="h-5 w-5 mr-2 animate-spin" />

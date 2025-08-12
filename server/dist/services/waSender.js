@@ -6,12 +6,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendWhatsAppMessage = sendWhatsAppMessage;
 const axios_1 = __importDefault(require("axios"));
 const logger_1 = require("../utils/logger");
+const template_helper_1 = require("../utils/template-helper");
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 function processTemplateComponents(components, variables) {
-    if (!components || components.length === 0)
-        return components;
+    if (!components || components.length === 0) {
+        return (0, template_helper_1.buildTemplatePayload)('', '', [], variables);
+    }
     return components.map(component => {
         if (component.parameters) {
             const processedParameters = component.parameters.map((param) => {

@@ -2,6 +2,7 @@
 // Handles individual message sending with retry logic and rate limiting
 import axios from 'axios';
 import { logger } from '../utils/logger';
+import { buildTemplatePayload } from '../utils/template-helper';
 
 export interface SendResult {
   ok: boolean;
@@ -43,7 +44,10 @@ function sleep(ms: number): Promise<void> {
 }
 
 function processTemplateComponents(components: any[], variables: BulkMessageVariables): any[] {
-  if (!components || components.length === 0) return components;
+  if (!components || components.length === 0) {
+    // If no pre-built components, use buildTemplatePayload to create them
+    return buildTemplatePayload('', '', [], variables);
+  }
   
   return components.map(component => {
     if (component.parameters) {
