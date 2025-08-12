@@ -61,10 +61,6 @@ export default function Landing() {
                     Start Free Trial
                   </Button>
                 </Link>
-                <Button variant="outline" size="lg" className="border-gray-300 text-gray-700 hover:bg-gray-50 px-8 py-3 text-base font-medium">
-                  View Demo
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
               </div>
 
               <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-sm text-gray-600">
@@ -75,14 +71,6 @@ export default function Landing() {
                     ))}
                   </div>
                   <span className="font-medium">4.9/5 rating</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full mr-2" />
-                  <span>10k+ businesses</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full mr-2" />
-                  <span>150+ countries</span>
                 </div>
               </div>
             </div>
@@ -121,7 +109,7 @@ export default function Landing() {
                         <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-400 border-2 border-white rounded-full"></div>
                       </div>
                       <div className="flex-1">
-                        <div className="text-white font-medium text-sm">Customer Support</div>
+                        <div className="text-white font-medium text-sm">Prime SMS</div>
                         <div className="text-emerald-100 text-xs">Online</div>
                       </div>
                     </div>
@@ -167,7 +155,7 @@ export default function Landing() {
                               <p className="text-[12px] text-gray-800">Hi! welcome to Prime SMS. How can we help?</p>
                             </div>
                             <div className="flex items-center mt-1 space-x-1 wa-content">
-                              <span className="text-[10px] text-gray-500">2:30 PM</span>
+                              <span className="text-[10px] text-gray-500">9:41 AM</span>
                             </div>
                           </div>
                         </div>
@@ -181,7 +169,7 @@ export default function Landing() {
                             <p className="text-[12px]">I need help with my account</p>
                           </div>
                           <div className="flex items-center justify-end mt-1 space-x-1 wa-content">
-                            <span className="text-[10px] text-gray-500">2:31 PM</span>
+                            <span className="text-[10px] text-gray-500">9:41 AM</span>
                             <span className="text-emerald-500 text-[10px]">✓✓</span>
                           </div>
                         </div>
@@ -202,7 +190,7 @@ export default function Landing() {
                               </div>
                             </div>
                             <div className="flex items-center mt-1 space-x-1 wa-content">
-                              <span className="text-[10px] text-gray-500">2:32 PM</span>
+                              <span className="text-[10px] text-gray-500">9:42 AM</span>
                             </div>
                           </div>
                         </div>
@@ -216,7 +204,7 @@ export default function Landing() {
                             <p className="text-[12px]">Thanks! That worked perfectly</p>
                           </div>
                           <div className="flex items-center justify-end mt-1 space-x-1 wa-content">
-                            <span className="text-[10px] text-gray-500">2:33 PM</span>
+                            <span className="text-[10px] text-gray-500">9:42 AM</span>
                             <span className="text-blue-500 text-[10px]">✓✓</span>
                           </div>
                         </div>
@@ -231,7 +219,7 @@ export default function Landing() {
                       </div>
                       
                       <div className="text-center pt-1">
-                        <span className="text-xs text-gray-400">2:34 PM</span>
+                        <span className="text-xs text-gray-400">9:43 AM</span>
                       </div>
                     </div>
                   </div>
