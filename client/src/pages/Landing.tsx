@@ -441,9 +441,9 @@ export default function Landing() {
           </p>
           
           <div className="flex justify-center">
-            <Link to="/signup">
-              <Button size="lg" className="bg-white text-emerald-600 hover:bg-gray-50 px-8 py-4 text-lg font-semibold" asChild>
-                <Link to="/privacy">Privacy</Link>
+            <Link to="/privacy">
+              <Button size="lg" className="bg-white text-emerald-600 hover:bg-gray-50 px-8 py-4 text-lg font-semibold">
+                Privacy
               </Button>
             </Link>
           </div>
@@ -502,8 +502,8 @@ export default function Landing() {
               © 2025 Prime SMS. All rights reserved.
             </p>
             <div className="flex space-x-6 mt-4 md:mt-0">
-              <a href="#" className="text-gray-400 hover:text-emerald-400 transition-colors text-sm">Privacy</a>
-              <a href="#" className="text-gray-400 hover:text-emerald-400 transition-colors text-sm">Terms</a>
+              <Link to="/privacy" className="text-gray-400 hover:text-emerald-400 transition-colors text-sm">Privacy</Link>
+              <Link to="/refund-policy" className="text-gray-400 hover:text-emerald-400 transition-colors text-sm">Refund Policy</Link>
             </div>
           </div>
         </div>
