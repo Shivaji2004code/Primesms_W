@@ -224,9 +224,7 @@ export default function Privacy() {
               </div>
             </details>
 
-            <div className="mt-10 text-sm text-gray-600">
-              <p>Questions? <Link to="/support" className="text-emerald-700">Contact Support</Link>.</p>
-            </div>
+            {/* Removed Questions / Contact Support section for a cleaner public policy page */}
           </div>
         </div>
       </div>

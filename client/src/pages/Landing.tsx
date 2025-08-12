@@ -441,9 +441,9 @@ export default function Landing() {
           </p>
           
           <div className="flex justify-center">
-            <Link to="/privacy">
+            <Link to="/signup">
               <Button size="lg" className="bg-white text-emerald-600 hover:bg-gray-50 px-8 py-4 text-lg font-semibold">
-                Privacy
+                Get Started
               </Button>
             </Link>
           </div>

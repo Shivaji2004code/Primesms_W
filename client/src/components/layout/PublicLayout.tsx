@@ -17,12 +17,12 @@ export function PublicLayout({ children }: PublicLayoutProps) {
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-900">
+    <div className="min-h-screen bg-white">
       {/* Public Header */}
       <motion.header
         initial={{ y: -100 }}
         animate={{ y: 0 }}
-        className="sticky top-0 z-50 w-full border-b bg-white/95 dark:bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-gray-900/60"
+        className="sticky top-0 z-50 w-full border-b bg-white"
       >
         <div className="container flex h-16 items-center px-4">
           {/* Logo */}
@@ -39,7 +39,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
 
           <div className="flex items-center space-x-4">
             {/* Theme toggle */}
-            <Button variant="ghost" size="sm" onClick={toggleTheme}>
+            <Button variant="ghost" size="sm" onClick={toggleTheme} className="text-gray-600">
               {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
             </Button>
 
@@ -70,7 +70,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.3 }}
-        className="border-t bg-gray-50 dark:bg-gray-800/50"
+        className="border-t bg-white"
       >
         <div className="container px-4 py-8">
           <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
@@ -78,11 +78,11 @@ export function PublicLayout({ children }: PublicLayoutProps) {
               <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
                 <MessageSquare className="h-3 w-3 text-white" />
               </div>
-              <span className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="text-sm text-gray-600">
                 © 2025 Prime SMS. All rights reserved.
               </span>
             </div>
-            <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-400">
+            <div className="flex items-center space-x-4 text-sm text-gray-600">
               <Link to="/privacy" className="hover:text-indigo-600 dark:hover:text-indigo-400">
                 Privacy Policy
               </Link>
