@@ -86,8 +86,8 @@ export function PublicLayout({ children }: PublicLayoutProps) {
               <Link to="/privacy" className="hover:text-indigo-600 dark:hover:text-indigo-400">
                 Privacy Policy
               </Link>
-              <Link to="/terms" className="hover:text-indigo-600 dark:hover:text-indigo-400">
-                Terms of Service
+              <Link to="/refund-policy" className="hover:text-indigo-600 dark:hover:text-indigo-400">
+                Refund Policy
               </Link>
               <Link to="/support" className="hover:text-indigo-600 dark:hover:text-indigo-400">
                 Support

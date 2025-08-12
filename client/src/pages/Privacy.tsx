@@ -33,6 +33,11 @@ export default function Privacy() {
                 <h1 className="text-3xl md:text-4xl font-bold text-gray-900">Privacy Policy</h1>
                 <p className="mt-2 text-gray-600">Prime SMS Technologies Pvt. Ltd. ("Prime SMS", "we", "us")</p>
                 <p className="mt-1 text-sm text-gray-500">Last updated: 12 Aug 2025</p>
+                <div className="mt-4">
+                  <Link to="/" className="inline-flex items-center text-emerald-700 hover:text-emerald-900">
+                    ← Back to home
+                  </Link>
+                </div>
               </div>
               {/* Table of contents */}
               <Card className="md:w-[420px]">
