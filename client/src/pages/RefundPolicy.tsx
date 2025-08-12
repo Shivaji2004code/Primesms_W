@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import Layout from '../components/layout/Layout';
+import { PublicLayout } from '../components/layout/PublicLayout';
 import { Card, CardContent } from '../components/ui/card';
 
 const sections = [
@@ -18,7 +18,7 @@ const sections = [
 
 export default function RefundPolicy() {
   return (
-    <Layout>
+    <PublicLayout>
       <div className="min-h-screen bg-white">
         {/* Hero */}
         <div className="bg-gradient-to-r from-emerald-50 to-green-50 border-b border-emerald-100">
@@ -170,7 +170,7 @@ export default function RefundPolicy() {
           </div>
         </div>
       </div>
-    </Layout>
+    </PublicLayout>
   );
 }
 

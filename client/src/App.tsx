@@ -187,8 +187,8 @@ function App() {
           />
 
           {/* Public: Privacy Policy */}
-          <Route path="/privacy" element={<Layout><Privacy /></Layout>} />
-          <Route path="/refund-policy" element={<Layout><RefundPolicy /></Layout>} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/refund-policy" element={<RefundPolicy />} />
 
           {/* Profile routes - accessible by both admin and user */}
           <Route 
