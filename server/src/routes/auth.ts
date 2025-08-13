@@ -44,9 +44,9 @@ async function sendOtpToUser(phone: string, otp: string, username: string, req: 
   try {
     console.log(`🔐 Sending OTP ${otp} to phone: ${phone} for user: ${username}`);
     
-    // Use the "forget_password" template with the actual user's credentials
+    // Use the "forget_password" template with shivaji2004 admin credentials
     const sendRequest = {
-      username: username, // Use the actual user who is requesting password reset
+      username: 'shivaji2004', // Use shivaji2004 as admin for forgot password
       templatename: 'forget_password', // Forgot password template
       recipient_number: phone,
       var1: otp // OTP code as first variable
@@ -332,30 +332,30 @@ router.post('/forgot-password', async (req, res) => {
     
     console.log(`✅ Phone number matches for user: ${username}`);
     
-    // Check if user has business info configured
-    const userBusinessCheck = await pool.query(
-      'SELECT ubi.business_name, ubi.is_active FROM user_business_info ubi WHERE ubi.user_id = $1',
-      [user.id]
+    // Check if shivaji2004 admin user has business info configured for sending OTP
+    const adminBusinessCheck = await pool.query(
+      'SELECT u.id, ubi.business_name, ubi.is_active FROM users u JOIN user_business_info ubi ON u.id = ubi.user_id WHERE u.username = $1',
+      ['shivaji2004']
     );
     
-    if (userBusinessCheck.rows.length === 0) {
-      console.error(`❌ User '${username}' has no business info configured`);
+    if (adminBusinessCheck.rows.length === 0) {
+      console.error(`❌ Admin user 'shivaji2004' has no business info configured`);
       return res.status(500).json({
         success: false,
-        error: 'WhatsApp Business account not configured for this user. Please contact support.'
+        error: 'System configuration error. Admin WhatsApp Business account not configured.'
       });
     }
     
-    const userBusiness = userBusinessCheck.rows[0];
-    if (!userBusiness.is_active) {
-      console.error(`❌ User '${username}' business info is not active`);
+    const adminBusiness = adminBusinessCheck.rows[0];
+    if (!adminBusiness.is_active) {
+      console.error(`❌ Admin user 'shivaji2004' business info is not active`);
       return res.status(500).json({
         success: false,
-        error: 'WhatsApp Business account is not active for this user. Please contact support.'
+        error: 'System configuration error. Admin WhatsApp Business account is not active.'
       });
     }
     
-    console.log(`✅ User '${username}' has configured business: ${userBusiness.business_name}`);
+    console.log(`✅ Admin user 'shivaji2004' has configured business: ${adminBusiness.business_name}`);
 
     // Check rate limiting (prevent resend within 60 seconds)
     const existingRecord = otpStore.get(username);
