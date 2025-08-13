@@ -45,6 +45,7 @@ export interface UserBusinessInfo {
   accessToken?: string;
   webhookUrl?: string;
   webhookVerifyToken?: string;
+  appSecret?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -62,6 +63,7 @@ export interface CreateBusinessInfoRequest {
   accessToken?: string;
   webhookUrl?: string;
   webhookVerifyToken?: string;
+  appSecret?: string;
   isActive?: boolean;
 }
 

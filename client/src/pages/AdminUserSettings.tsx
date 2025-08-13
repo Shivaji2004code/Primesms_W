@@ -18,6 +18,7 @@ export default function AdminUserSettings() {
   const [error, setError] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [showAccessToken, setShowAccessToken] = useState(false);
+  const [showAppSecret, setShowAppSecret] = useState(false);
 
   // Form states
   const [basicFormData, setBasicFormData] = useState({
@@ -37,6 +38,7 @@ export default function AdminUserSettings() {
     accessToken: '',
     webhookUrl: '',
     webhookVerifyToken: '',
+    appSecret: '',
     isActive: true
   });
 
@@ -78,6 +80,7 @@ export default function AdminUserSettings() {
             accessToken: data.user.businessInfo.accessToken || '',
             webhookUrl: data.user.businessInfo.webhookUrl || '',
             webhookVerifyToken: data.user.businessInfo.webhookVerifyToken || '',
+            appSecret: data.user.businessInfo.appSecret || '',
             isActive: data.user.businessInfo.isActive ?? true
           });
         }
@@ -507,6 +510,29 @@ export default function AdminUserSettings() {
                       placeholder="Your webhook verification token"
                       className="focus:ring-green-200"
                     />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700 mb-2 block">App Secret</label>
+                    <div className="relative">
+                      <Input
+                        type={showAppSecret ? 'text' : 'password'}
+                        value={businessFormData.appSecret || ''}
+                        onChange={(e) => handleInputChange('appSecret', e.target.value, true)}
+                        placeholder="Meta App Secret for webhook signature verification"
+                        className="pr-12 focus:ring-green-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowAppSecret(!showAppSecret)}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                      >
+                        {showAppSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Required for webhook signature verification. Get this from Meta Developers Console.
+                    </p>
                   </div>
                 </div>
 
