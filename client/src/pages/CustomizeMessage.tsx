@@ -473,7 +473,7 @@ export default function CustomizeMessage() {
     setSendingLoading(true);
     try {
       console.log('Sending custom messages...');
-      console.log('Template:', selectedTemplate.name);
+      console.log('Template:', selectedTemplate?.name);
       console.log('Recipients:', excelData.length);
       
       // Prepare the payload for sending
@@ -489,7 +489,7 @@ export default function CustomizeMessage() {
       });
       
       const payload = {
-        templateName: selectedTemplate.name,
+        templateName: selectedTemplate?.name,
         language: selectedLanguage,
         phoneNumberId: selectedWabaId,
         recipientColumn: recipientColumn,
