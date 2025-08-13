@@ -23,11 +23,11 @@ function constantTimeEqual(a, b) {
         return false;
     return crypto_1.default.timingSafeEqual(ab, bb);
 }
-async function sendOtpToUser(phone, otp, req) {
+async function sendOtpToUser(phone, otp, username, req) {
     try {
-        console.log(`🔐 Sending OTP ${otp} to phone: ${phone}`);
+        console.log(`🔐 Sending OTP ${otp} to phone: ${phone} for user: ${username}`);
         const sendRequest = {
-            username: 'primesms',
+            username: username,
             templatename: 'forget_password',
             recipient_number: phone,
             var1: otp
@@ -244,23 +244,23 @@ router.post('/forgot-password', async (req, res) => {
             });
         }
         console.log(`✅ Phone number matches for user: ${username}`);
-        const adminCheck = await db_1.default.query('SELECT u.id, u.username, ubi.business_name, ubi.is_active FROM users u LEFT JOIN user_business_info ubi ON u.id = ubi.user_id WHERE u.username = $1', ['primesms']);
-        if (adminCheck.rows.length === 0) {
-            console.error(`❌ Admin user 'primesms' not found in database`);
+        const userBusinessCheck = await db_1.default.query('SELECT ubi.business_name, ubi.is_active FROM user_business_info ubi WHERE ubi.user_id = $1', [user.id]);
+        if (userBusinessCheck.rows.length === 0) {
+            console.error(`❌ User '${username}' has no business info configured`);
             return res.status(500).json({
                 success: false,
-                error: 'System configuration error. Please contact support.'
+                error: 'WhatsApp Business account not configured for this user. Please contact support.'
             });
         }
-        const admin = adminCheck.rows[0];
-        if (!admin.is_active) {
-            console.error(`❌ Admin user 'primesms' business info is not active`);
+        const userBusiness = userBusinessCheck.rows[0];
+        if (!userBusiness.is_active) {
+            console.error(`❌ User '${username}' business info is not active`);
             return res.status(500).json({
                 success: false,
-                error: 'System configuration error. Please contact support.'
+                error: 'WhatsApp Business account is not active for this user. Please contact support.'
             });
         }
-        console.log(`✅ Admin user 'primesms' configured with business: ${admin.business_name}`);
+        console.log(`✅ User '${username}' has configured business: ${userBusiness.business_name}`);
         const existingRecord = otpStore.get(username);
         const now = Date.now();
         if (existingRecord && (now - existingRecord.lastSent) < 60000) {
@@ -278,7 +278,7 @@ router.post('/forgot-password', async (req, res) => {
             expires,
             lastSent: now
         });
-        const otpSent = await sendOtpToUser(phone, otp, req);
+        const otpSent = await sendOtpToUser(phone, otp, username, req);
         if (!otpSent) {
             otpStore.delete(username);
             return res.status(500).json({

@@ -40,13 +40,13 @@ interface ApiResponse {
 }
 
 // Helper function to send OTP via WhatsApp using authentication template
-async function sendOtpToUser(phone: string, otp: string, req: express.Request): Promise<boolean> {
+async function sendOtpToUser(phone: string, otp: string, username: string, req: express.Request): Promise<boolean> {
   try {
-    console.log(`🔐 Sending OTP ${otp} to phone: ${phone}`);
+    console.log(`🔐 Sending OTP ${otp} to phone: ${phone} for user: ${username}`);
     
-    // Use the "forget_password" template with admin user "primesms"
+    // Use the "forget_password" template with the actual user's credentials
     const sendRequest = {
-      username: 'primesms',
+      username: username, // Use the actual user who is requesting password reset
       templatename: 'forget_password', // Forgot password template
       recipient_number: phone,
       var1: otp // OTP code as first variable
@@ -332,30 +332,30 @@ router.post('/forgot-password', async (req, res) => {
     
     console.log(`✅ Phone number matches for user: ${username}`);
     
-    // Check if primesms admin user exists and has business info
-    const adminCheck = await pool.query(
-      'SELECT u.id, u.username, ubi.business_name, ubi.is_active FROM users u LEFT JOIN user_business_info ubi ON u.id = ubi.user_id WHERE u.username = $1',
-      ['primesms']
+    // Check if user has business info configured
+    const userBusinessCheck = await pool.query(
+      'SELECT ubi.business_name, ubi.is_active FROM user_business_info ubi WHERE ubi.user_id = $1',
+      [user.id]
     );
     
-    if (adminCheck.rows.length === 0) {
-      console.error(`❌ Admin user 'primesms' not found in database`);
+    if (userBusinessCheck.rows.length === 0) {
+      console.error(`❌ User '${username}' has no business info configured`);
       return res.status(500).json({
         success: false,
-        error: 'System configuration error. Please contact support.'
+        error: 'WhatsApp Business account not configured for this user. Please contact support.'
       });
     }
     
-    const admin = adminCheck.rows[0];
-    if (!admin.is_active) {
-      console.error(`❌ Admin user 'primesms' business info is not active`);
+    const userBusiness = userBusinessCheck.rows[0];
+    if (!userBusiness.is_active) {
+      console.error(`❌ User '${username}' business info is not active`);
       return res.status(500).json({
         success: false,
-        error: 'System configuration error. Please contact support.'
+        error: 'WhatsApp Business account is not active for this user. Please contact support.'
       });
     }
     
-    console.log(`✅ Admin user 'primesms' configured with business: ${admin.business_name}`);
+    console.log(`✅ User '${username}' has configured business: ${userBusiness.business_name}`);
 
     // Check rate limiting (prevent resend within 60 seconds)
     const existingRecord = otpStore.get(username);
@@ -382,7 +382,7 @@ router.post('/forgot-password', async (req, res) => {
     });
 
     // Send OTP via WhatsApp
-    const otpSent = await sendOtpToUser(phone, otp, req);
+    const otpSent = await sendOtpToUser(phone, otp, username, req);
     
     if (!otpSent) {
       // Remove OTP from store if sending failed
