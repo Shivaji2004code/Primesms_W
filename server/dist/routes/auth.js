@@ -74,9 +74,9 @@ router.post('/signup', async (req, res) => {
             return res.status(400).json({ error: 'Invalid email format' });
         }
         if (phoneNumber) {
-            const phoneRegex = /^\+?[\d\s-()]+$/;
+            const phoneRegex = /^[1-9]\d{10,14}$/;
             if (!phoneRegex.test(phoneNumber)) {
-                return res.status(400).json({ error: 'Invalid phone number format' });
+                return res.status(400).json({ error: 'Invalid phone number format. Use format: country code + number (e.g., 919398424270)' });
             }
         }
         const existingUser = await db_1.default.query('SELECT id FROM users WHERE email = $1 OR username = $2', [email, username]);
@@ -209,11 +209,11 @@ router.post('/forgot-password', async (req, res) => {
                 error: 'Username and phone number are required'
             });
         }
-        const phoneRegex = /^\+[1-9]\d{1,14}$/;
+        const phoneRegex = /^[1-9]\d{10,14}$/;
         if (!phoneRegex.test(phone)) {
             return res.status(400).json({
                 success: false,
-                error: 'Invalid phone number format. Use international format (e.g., +911234567890)'
+                error: 'Invalid phone number format. Use format: country code + number (e.g., 919398424270)'
             });
         }
         const result = await db_1.default.query('SELECT id, username, phone_number FROM users WHERE username = $1', [username]);
@@ -225,10 +225,7 @@ router.post('/forgot-password', async (req, res) => {
         }
         const user = result.rows[0];
         const userPhone = user.phone_number;
-        const phoneMatch = userPhone === phone ||
-            userPhone === phone.replace(/^\+91/, '') ||
-            `+91${userPhone}` === phone;
-        if (!phoneMatch) {
+        if (userPhone !== phone) {
             return res.status(404).json({
                 success: false,
                 error: 'Phone number does not match our records'

@@ -106,11 +106,11 @@ router.post('/signup', async (req, res) => {
       return res.status(400).json({ error: 'Invalid email format' });
     }
 
-    // Phone number validation (optional)
+    // Phone number validation (optional) - format: country code + number (e.g., 919398424270)
     if (phoneNumber) {
-      const phoneRegex = /^\+?[\d\s-()]+$/;
+      const phoneRegex = /^[1-9]\d{10,14}$/; // Country code + number, 11-15 digits total
       if (!phoneRegex.test(phoneNumber)) {
-        return res.status(400).json({ error: 'Invalid phone number format' });
+        return res.status(400).json({ error: 'Invalid phone number format. Use format: country code + number (e.g., 919398424270)' });
       }
     }
 
@@ -279,12 +279,12 @@ router.post('/forgot-password', async (req, res) => {
       });
     }
 
-    // Validate phone format (basic E.164 check)
-    const phoneRegex = /^\+[1-9]\d{1,14}$/;
+    // Validate phone format (country code + number without +)
+    const phoneRegex = /^[1-9]\d{10,14}$/; // Country code + number, 11-15 digits total
     if (!phoneRegex.test(phone)) {
       return res.status(400).json({ 
         success: false, 
-        error: 'Invalid phone number format. Use international format (e.g., +911234567890)' 
+        error: 'Invalid phone number format. Use format: country code + number (e.g., 919398424270)' 
       });
     }
 
@@ -303,13 +303,9 @@ router.post('/forgot-password', async (req, res) => {
 
     const user = result.rows[0];
     
-    // Check if phone number matches (handle both with and without country code)
+    // Check if phone number matches (exact match required)
     const userPhone = user.phone_number;
-    const phoneMatch = userPhone === phone || 
-                     userPhone === phone.replace(/^\+91/, '') || 
-                     `+91${userPhone}` === phone;
-
-    if (!phoneMatch) {
+    if (userPhone !== phone) {
       return res.status(404).json({ 
         success: false, 
         error: 'Phone number does not match our records' 

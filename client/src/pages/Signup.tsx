@@ -67,11 +67,11 @@ export default function Signup() {
       newErrors.confirmPassword = 'Passwords do not match';
     }
 
-    // Phone number validation (optional)
+    // Phone number validation (optional) - format: country code + number (e.g., 919398424270)
     if (formData.phoneNumber && formData.phoneNumber.trim()) {
-      const phoneRegex = /^\+?[\d\s-()]+$/;
+      const phoneRegex = /^[1-9]\d{10,14}$/; // Country code + number, 11-15 digits total
       if (!phoneRegex.test(formData.phoneNumber)) {
-        newErrors.phoneNumber = 'Please enter a valid phone number';
+        newErrors.phoneNumber = 'Please enter phone number as: country code + number (e.g., 919398424270)';
       }
     }
 
@@ -250,9 +250,9 @@ export default function Signup() {
                 <Input
                   id="phoneNumber"
                   type="tel"
-                  placeholder="+1 (555) 123-4567"
+                  placeholder="919398424270"
                   value={formData.phoneNumber}
-                  onChange={(e) => handleInputChange('phoneNumber', e.target.value)}
+                  onChange={(e) => handleInputChange('phoneNumber', e.target.value.replace(/\D/g, ''))}
                   className={errors.phoneNumber ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-emerald-500 focus:ring-emerald-500'}
                 />
                 {errors.phoneNumber && (

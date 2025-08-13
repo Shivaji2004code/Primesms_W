@@ -326,7 +326,7 @@ export default function Login() {
             </CardTitle>
             <CardDescription className="text-center text-gray-600">
               {currentView === 'login' && 'Enter your credentials to access your account'}
-              {currentView === 'forgot-password' && 'Enter your username and phone number to receive OTP'}
+              {currentView === 'forgot-password' && 'Enter your username and phone number (without +) to receive OTP'}
               {currentView === 'verify-otp' && 'Enter the 6-digit OTP sent to your WhatsApp'}
               {currentView === 'reset-password' && 'Create your new password'}
             </CardDescription>
@@ -451,13 +451,13 @@ export default function Login() {
                     id="forgot-phone"
                     type="tel"
                     value={forgotPasswordData.phone}
-                    onChange={(e) => setForgotPasswordData(prev => ({ ...prev, phone: e.target.value }))}
-                    placeholder="Enter your phone number (e.g., +911234567890)"
+                    onChange={(e) => setForgotPasswordData(prev => ({ ...prev, phone: e.target.value.replace(/\D/g, '') }))}
+                    placeholder="919398424270"
                     disabled={isLoading}
                     className="border-gray-300 focus:border-emerald-500 focus:ring-emerald-500"
                   />
                   <p className="text-xs text-gray-500">
-                    Enter your phone number in international format
+                    Enter your phone number as: country code + number (e.g., 919398424270)
                   </p>
                 </div>
 
