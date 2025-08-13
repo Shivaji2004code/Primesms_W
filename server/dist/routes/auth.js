@@ -23,7 +23,7 @@ function constantTimeEqual(a, b) {
         return false;
     return crypto_1.default.timingSafeEqual(ab, bb);
 }
-async function sendOtpToUser(phone, otp) {
+async function sendOtpToUser(phone, otp, req) {
     try {
         console.log(`🔐 Sending OTP ${otp} to phone: ${phone}`);
         const sendRequest = {
@@ -33,7 +33,10 @@ async function sendOtpToUser(phone, otp) {
             var1: otp
         };
         console.log(`📤 Making WhatsApp API call with:`, JSON.stringify(sendRequest, null, 2));
-        const response = await fetch('http://localhost:5050/api/send', {
+        const apiBaseUrl = process.env.NODE_ENV === 'production'
+            ? `https://${req.get('host')}`
+            : 'http://localhost:5050';
+        const response = await fetch(`${apiBaseUrl}/api/send`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -47,7 +50,11 @@ async function sendOtpToUser(phone, otp) {
             return true;
         }
         else {
-            console.error(`❌ WhatsApp API Error:`, result.error || result.message || 'Unknown error');
+            console.error(`❌ WhatsApp API Error (${response.status}):`, result.error || result.message || 'Unknown error');
+            console.error(`📤 Failed request details:`, JSON.stringify(sendRequest, null, 2));
+            if (result.error && result.error.includes('not found')) {
+                console.log(`🔄 Template 'forget_password' not found, this needs to be created in WhatsApp Business API`);
+            }
             return false;
         }
     }
@@ -216,21 +223,44 @@ router.post('/forgot-password', async (req, res) => {
                 error: 'Invalid phone number format. Use format: country code + number (e.g., 919398424270)'
             });
         }
+        console.log(`🔍 Looking up user: ${username}`);
         const result = await db_1.default.query('SELECT id, username, phone_number FROM users WHERE username = $1', [username]);
+        console.log(`📊 User lookup result: ${result.rows.length} rows found`);
         if (result.rows.length === 0) {
+            console.log(`❌ User not found: ${username}`);
             return res.status(404).json({
                 success: false,
                 error: 'User not found'
             });
         }
         const user = result.rows[0];
+        console.log(`👤 Found user: ${user.username}, stored phone: ${user.phone_number}`);
         const userPhone = user.phone_number;
         if (userPhone !== phone) {
+            console.log(`❌ Phone mismatch - provided: ${phone}, stored: ${userPhone}`);
             return res.status(404).json({
                 success: false,
                 error: 'Phone number does not match our records'
             });
         }
+        console.log(`✅ Phone number matches for user: ${username}`);
+        const adminCheck = await db_1.default.query('SELECT u.id, u.username, ubi.business_name, ubi.is_active FROM users u LEFT JOIN user_business_info ubi ON u.id = ubi.user_id WHERE u.username = $1', ['primesms']);
+        if (adminCheck.rows.length === 0) {
+            console.error(`❌ Admin user 'primesms' not found in database`);
+            return res.status(500).json({
+                success: false,
+                error: 'System configuration error. Please contact support.'
+            });
+        }
+        const admin = adminCheck.rows[0];
+        if (!admin.is_active) {
+            console.error(`❌ Admin user 'primesms' business info is not active`);
+            return res.status(500).json({
+                success: false,
+                error: 'System configuration error. Please contact support.'
+            });
+        }
+        console.log(`✅ Admin user 'primesms' configured with business: ${admin.business_name}`);
         const existingRecord = otpStore.get(username);
         const now = Date.now();
         if (existingRecord && (now - existingRecord.lastSent) < 60000) {
@@ -248,7 +278,7 @@ router.post('/forgot-password', async (req, res) => {
             expires,
             lastSent: now
         });
-        const otpSent = await sendOtpToUser(phone, otp);
+        const otpSent = await sendOtpToUser(phone, otp, req);
         if (!otpSent) {
             otpStore.delete(username);
             return res.status(500).json({
@@ -264,10 +294,11 @@ router.post('/forgot-password', async (req, res) => {
         });
     }
     catch (error) {
-        console.error('Forgot password error:', error);
+        console.error('❌ Forgot password error:', error);
+        console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
         res.status(500).json({
             success: false,
-            error: 'Internal server error'
+            error: 'Failed to send OTP. Please try again.'
         });
     }
 });
