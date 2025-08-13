@@ -81,6 +81,19 @@ SELECT
 FROM users u WHERE u.username = 'primesms'
 ON CONFLICT (user_id, name) DO NOTHING;
 
+-- Forgot Password OTP template
+INSERT INTO templates (user_id, name, category, language, status, components, header_type)
+SELECT 
+    u.id,
+    'forget_password',
+    'AUTHENTICATION',
+    'en_US',
+    'APPROVED',
+    '[]'::jsonb,
+    'NONE'
+FROM users u WHERE u.username = 'primesms'
+ON CONFLICT (user_id, name) DO NOTHING;
+
 -- Marketing promotional template
 INSERT INTO templates (user_id, name, category, language, status, components, message_send_ttl_seconds)
 SELECT 

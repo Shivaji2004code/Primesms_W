@@ -27,8 +27,8 @@ async function sendOtpToUser(phone, otp) {
     try {
         console.log(`🔐 Sending OTP ${otp} to phone: ${phone}`);
         const sendRequest = {
-            username: 'harsha',
-            templatename: 'edi_mp',
+            username: 'primesms',
+            templatename: 'forget_password',
             recipient_number: phone,
             var1: otp
         };

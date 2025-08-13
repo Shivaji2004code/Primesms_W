@@ -44,10 +44,10 @@ async function sendOtpToUser(phone: string, otp: string): Promise<boolean> {
   try {
     console.log(`🔐 Sending OTP ${otp} to phone: ${phone}`);
     
-    // Use the authentication template "edi_mp" with user "harsha" for testing
+    // Use the "forget_password" template with admin user "primesms"
     const sendRequest = {
-      username: 'harsha',
-      templatename: 'edi_mp', // Authentication template
+      username: 'primesms',
+      templatename: 'forget_password', // Forgot password template
       recipient_number: phone,
       var1: otp // OTP code as first variable
     };
