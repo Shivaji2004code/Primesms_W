@@ -22,6 +22,7 @@ import {
 import { Button } from '../components/ui/button';
 import { useAuth } from '../hooks/useAuth';
 import DashboardLayout from '../components/layout/DashboardLayout';
+import { FadeIn, SlideUp, StaggerContainer, SoftHoverCard } from '../components/ui/motion-components';
 
 export default function UserDashboard() {
   const navigate = useNavigate();
@@ -120,7 +121,8 @@ export default function UserDashboard() {
       subtitle={`Welcome back, ${user?.name}! Here's your WhatsApp Business overview.`}
     >
       {/* Header Stats Section */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 mb-8">
+      <FadeIn>
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 mb-8">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
           {/* Left side - Welcome */}
           <div className="flex-1">
@@ -149,10 +151,12 @@ export default function UserDashboard() {
           </div>
         </div>
       </div>
+      </FadeIn>
 
       <div className="space-y-8">
         {/* Main Content - Quick Actions */}
         <div>
+          <FadeIn delay={0.05}>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
             {/* Header */}
             <div className="px-8 py-6 border-b border-gray-100">
@@ -175,14 +179,14 @@ export default function UserDashboard() {
 
             {/* Actions Grid */}
             <div className="p-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {quickActions.map((action) => {
+              <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {quickActions.map((action, idx) => {
                   const Icon = action.icon;
                   return (
-                    <button
+                    <SoftHoverCard
                       key={action.id}
                       onClick={() => navigate(action.path)}
-                      className="group p-6 rounded-xl border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all duration-200 text-left bg-white hover:bg-gray-50"
+                      className="group p-6 rounded-xl border border-gray-200 hover:border-gray-300 transition-all duration-200 text-left bg-white hover:bg-gray-50 cursor-pointer"
                     >
                       <div className="flex items-start justify-between mb-4">
                         <div className={`w-12 h-12 ${action.iconBg} rounded-xl flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow`}>
@@ -196,14 +200,16 @@ export default function UserDashboard() {
                       <p className="text-gray-600 text-sm leading-relaxed">
                         {action.description}
                       </p>
-                    </button>
+                    </SoftHoverCard>
                   );
                 })}
-              </div>
+              </StaggerContainer>
             </div>
           </div>
+          </FadeIn>
 
           {/* Performance Overview (Credits only) */}
+          <FadeIn delay={0.1}>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mt-8">
             <div className="px-8 py-6 border-b border-gray-100">
               <div className="flex items-center justify-between">
@@ -225,17 +231,18 @@ export default function UserDashboard() {
 
             <div className="p-8">
               <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
-                <div className="text-center p-6 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl border border-blue-200">
+                <SoftHoverCard className="text-center p-6 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl border border-blue-200">
                   <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm">
                     <CreditCard className="h-6 w-6 text-white" />
                   </div>
                   <div className="text-2xl font-bold text-blue-900 mb-2">{stats.credits.toLocaleString()}</div>
                   <div className="text-blue-700 font-medium mb-1">Available Credits</div>
                   <div className="text-blue-600 text-xs">Ready to use</div>
-                </div>
+                </SoftHoverCard>
               </div>
             </div>
           </div>
+          </FadeIn>
         </div>
       </div>
     </DashboardLayout>

@@ -1,5 +1,13 @@
-import { motion, type HTMLMotionProps } from 'framer-motion';
+import { motion, type HTMLMotionProps, useReducedMotion } from 'framer-motion';
 import { forwardRef } from 'react';
+
+// Motion tokens for consistent feel
+export const motionTimings = {
+  durationFast: 0.2,
+  durationBase: 0.4,
+  durationSlow: 0.6,
+  easeStandard: [0.22, 1, 0.36, 1] as [number, number, number, number]
+};
 
 // Fade In Animation
 export const FadeIn = forwardRef<
@@ -8,7 +16,7 @@ export const FadeIn = forwardRef<
     delay?: number;
     duration?: number;
   }
->(({ children, delay = 0, duration = 0.4, ...props }, ref) => (
+>(({ children, delay = 0, duration = motionTimings.durationBase, ...props }, ref) => (
   <motion.div
     ref={ref}
     initial={{ opacity: 0, y: 20 }}
@@ -16,7 +24,7 @@ export const FadeIn = forwardRef<
     transition={{
       duration,
       delay,
-      ease: 'easeOut'
+      ease: motionTimings.easeStandard
     }}
     {...props}
   >
@@ -41,7 +49,7 @@ export const SlideUp = forwardRef<
     transition={{
       duration: 0.45,
       delay,
-      ease: [0.25, 0.46, 0.45, 0.94],
+      ease: motionTimings.easeStandard,
       staggerChildren
     }}
     {...props}
@@ -63,7 +71,7 @@ export const HoverScale = forwardRef<
     ref={ref}
     whileHover={{ 
       scale,
-      transition: { duration: 0.2 }
+      transition: { duration: motionTimings.durationFast }
     }}
     whileTap={{ scale: 0.98 }}
     {...props}
@@ -81,9 +89,8 @@ export const TiltOnHover = forwardRef<
     tiltAngle?: number;
   }
 >(({ children, tiltAngle = 6, ...props }, ref) => {
-  // Check for reduced motion preference
-  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  
+  const prefersReducedMotion = useReducedMotion();
+
   return (
     <motion.div
       ref={ref}
@@ -91,7 +98,7 @@ export const TiltOnHover = forwardRef<
         rotateX: tiltAngle,
         rotateY: tiltAngle / 2,
         scale: 1.02,
-        transition: { duration: 0.3 }
+        transition: { duration: motionTimings.durationBase }
       } : undefined}
       style={!prefersReducedMotion ? {
         transformStyle: 'preserve-3d',
@@ -133,3 +140,20 @@ export const StaggerContainer = forwardRef<
 ));
 
 StaggerContainer.displayName = 'StaggerContainer';
+
+// Soft hover lift with subtle shadow for cards
+export const SoftHoverCard = forwardRef<
+  HTMLDivElement,
+  HTMLMotionProps<'div'>
+>(({ children, ...props }, ref) => (
+  <motion.div
+    ref={ref}
+    whileHover={{ y: -2, boxShadow: '0 8px 24px rgba(0,0,0,0.06)' }}
+    transition={{ duration: motionTimings.durationFast, ease: motionTimings.easeStandard }}
+    {...props}
+  >
+    {children}
+  </motion.div>
+));
+
+SoftHoverCard.displayName = 'SoftHoverCard';
