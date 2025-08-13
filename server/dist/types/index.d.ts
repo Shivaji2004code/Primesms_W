@@ -41,6 +41,7 @@ export interface UserBusinessInfo {
     webhookVerifyToken?: string;
     isActive: boolean;
     appId?: string;
+    appSecret?: string;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -57,6 +58,7 @@ export interface CreateBusinessInfoRequest {
     webhookVerifyToken?: string;
     isActive?: boolean;
     appId?: string;
+    appSecret?: string;
 }
 export type TemplateCategory = 'UTILITY' | 'MARKETING' | 'AUTHENTICATION';
 export type TemplateStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'ACTIVE' | 'REJECTED' | 'PAUSED' | 'DISABLED';

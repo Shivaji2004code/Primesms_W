@@ -30,6 +30,7 @@ async function getUserBusinessInfo(userId) {
             webhookVerifyToken: row.webhook_verify_token,
             isActive: row.is_active,
             appId: row.app_id,
+            appSecret: row.app_secret,
             createdAt: row.created_at,
             updatedAt: row.updated_at
         };
@@ -58,6 +59,7 @@ async function lookupByPhoneNumberId(phoneNumberId) {
             webhookVerifyToken: row.webhook_verify_token,
             isActive: row.is_active,
             appId: row.app_id,
+            appSecret: row.app_secret,
             createdAt: row.created_at,
             updatedAt: row.updated_at
         };
@@ -200,14 +202,13 @@ function constantTimeEqual(a, b) {
     const B = Buffer.from(b);
     return A.length === B.length && crypto_1.default.timingSafeEqual(A, B);
 }
-function verifyMetaSignature(req) {
+async function verifyMetaSignature(req, ubi) {
     const isDev = process.env.NODE_ENV === 'development';
     const skip = isDev && (process.env.META_SKIP_SIGNATURE_VERIFY || '').toLowerCase() === 'true';
     if (skip) {
         console.log('🔓 [WEBHOOK] DEV MODE: Signature verification SKIPPED (META_SKIP_SIGNATURE_VERIFY=true)');
         return true;
     }
-    const appSecret = env('META_APP_SECRET', true);
     const hdr = req.header('x-hub-signature-256') || req.header('X-Hub-Signature-256');
     if (!hdr || !hdr.startsWith('sha256=')) {
         console.log('❌ [WEBHOOK] Missing or invalid signature header');
@@ -217,15 +218,31 @@ function verifyMetaSignature(req) {
         console.log('❌ [WEBHOOK] No raw body available for signature verification');
         return false;
     }
-    const expected = 'sha256=' + crypto_1.default.createHmac('sha256', appSecret).update(req.rawBody).digest('hex');
-    const isValid = constantTimeEqual(hdr, expected);
-    if (!isValid) {
-        console.log('❌ [WEBHOOK] Signature verification failed');
+    if (ubi && ubi.appSecret) {
+        const expected = 'sha256=' + crypto_1.default.createHmac('sha256', ubi.appSecret).update(req.rawBody).digest('hex');
+        const isValid = constantTimeEqual(hdr, expected);
+        if (isValid) {
+            console.log(`✅ [WEBHOOK] Signature verification passed for user ${ubi.userId}`);
+            return true;
+        }
+        else {
+            console.log(`❌ [WEBHOOK] Signature verification failed for user ${ubi.userId} with their app secret`);
+        }
     }
-    else {
-        console.log('✅ [WEBHOOK] Signature verification passed');
+    const globalAppSecret = env('META_APP_SECRET', false);
+    if (globalAppSecret) {
+        const expected = 'sha256=' + crypto_1.default.createHmac('sha256', globalAppSecret).update(req.rawBody).digest('hex');
+        const isValid = constantTimeEqual(hdr, expected);
+        if (isValid) {
+            console.log('✅ [WEBHOOK] Signature verification passed with global app secret');
+            return true;
+        }
+        else {
+            console.log('❌ [WEBHOOK] Signature verification failed with global app secret');
+        }
     }
-    return isValid;
+    console.log('❌ [WEBHOOK] Signature verification failed - no valid app secret found');
+    return false;
 }
 function summarize(body) {
     try {
@@ -287,13 +304,7 @@ metaWebhookRouter.get('/meta', (req, res) => {
 metaWebhookRouter.post('/meta', async (req, res) => {
     try {
         console.log('📩 [WEBHOOK] POST /meta - Received webhook event');
-        if (!verifyMetaSignature(req)) {
-            console.log('❌ [WEBHOOK] Signature verification failed');
-            return res.status(401).json({ error: 'Invalid signature' });
-        }
         const body = req.body;
-        console.log('✅ [WEBHOOK] Signature verified, processing event');
-        res.status(200).json({ received: true });
         const pni = body?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
         let ubi;
         if (pni) {
@@ -310,6 +321,12 @@ metaWebhookRouter.post('/meta', async (req, res) => {
                 console.error(`❌ [WEBHOOK] Error looking up phone_number_id ${pni}:`, e);
             }
         }
+        if (!(await verifyMetaSignature(req, ubi))) {
+            console.log('❌ [WEBHOOK] Signature verification failed');
+            return res.status(401).json({ error: 'Invalid signature' });
+        }
+        console.log('✅ [WEBHOOK] Signature verified, processing event');
+        res.status(200).json({ received: true });
         const logItem = {
             ts: new Date().toISOString(),
             summary: summarize(body),
