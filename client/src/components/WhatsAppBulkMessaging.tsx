@@ -17,7 +17,9 @@ import {
   Settings,
   Info,
   RefreshCw,
-  Copy
+  Copy,
+  DollarSign,
+  X
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -83,6 +85,13 @@ interface ImportResult {
 }
 
 
+// Pricing constants
+const PRICING = {
+  MARKETING: 0.80,
+  UTILITY: 0.15,
+  AUTHENTICATION: 0.15,
+};
+
 export default function WhatsAppBulkMessaging() {
   const notifier = useNotifier();
   
@@ -96,6 +105,10 @@ export default function WhatsAppBulkMessaging() {
   const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
   const [templatePreview, setTemplatePreview] = useState<string>('');
   const [campaignPreview, setCampaignPreview] = useState<any>(null);
+  
+  // Pricing modal state
+  const [showPricingModal, setShowPricingModal] = useState<boolean>(false);
+  const [calculatedCost, setCalculatedCost] = useState<number>(0);
   
   // Excel import state (for future customize feature)
   
@@ -532,11 +545,6 @@ export default function WhatsAppBulkMessaging() {
       return;
     }
 
-    // Check if we should use bulk messaging (more than 50 recipients)
-    if (recipients.length > 50) {
-      return handleBulkQuickSend();
-    }
-
     // Check if template requires image but no image uploaded
     if (templateDetails.templateTypeInfo?.hasStaticImage && !headerImage) {
       setAlertState({
@@ -546,6 +554,20 @@ export default function WhatsAppBulkMessaging() {
         message: 'This template requires an image header. Please upload an image.'
       });
       return;
+    }
+
+    // Calculate cost and show pricing modal
+    const cost = calculateCampaignCost();
+    setCalculatedCost(cost);
+    setShowPricingModal(true);
+  };
+
+  const confirmAndSend = async () => {
+    setShowPricingModal(false);
+
+    // Check if we should use bulk messaging (more than 50 recipients)
+    if (recipients.length > 50) {
+      return handleBulkQuickSend();
     }
 
     setLoading(prev => ({ ...prev, sending: true }));
@@ -750,6 +772,21 @@ export default function WhatsAppBulkMessaging() {
 
   const clearRecipientSelection = () => {
     setSelectedRecipients([]);
+  };
+
+  const calculateCampaignCost = () => {
+    const selectedTemplateObj = templates.find(t => t.name === selectedTemplate);
+    if (!selectedTemplateObj || recipients.length === 0) return 0;
+
+    const category = selectedTemplateObj.category.toUpperCase();
+    const pricePerMessage = PRICING[category as keyof typeof PRICING] || PRICING.UTILITY;
+    
+    return recipients.length * pricePerMessage;
+  };
+
+  const getSelectedTemplateCategory = () => {
+    const selectedTemplateObj = templates.find(t => t.name === selectedTemplate);
+    return selectedTemplateObj?.category || 'UTILITY';
   };
 
   const generateLivePreview = () => {
@@ -1369,6 +1406,121 @@ export default function WhatsAppBulkMessaging() {
           </Card>
         </div>
       </div>
+
+      {/* Pricing Modal */}
+      {showPricingModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
+                    <DollarSign className="h-5 w-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">Campaign Cost Preview</h3>
+                    <p className="text-sm text-gray-600">Review campaign details and cost</p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowPricingModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+
+              {/* Campaign Details */}
+              <div className="space-y-4 mb-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="text-2xl font-bold text-blue-600">{recipients.length}</div>
+                    <div className="text-sm text-blue-800">Recipients</div>
+                  </div>
+                  <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                    <div className="text-2xl font-bold text-purple-600">{getSelectedTemplateCategory()}</div>
+                    <div className="text-sm text-purple-800">Template Type</div>
+                  </div>
+                </div>
+
+                {/* Pricing Breakdown */}
+                <div className="p-4 bg-gray-50 rounded-lg border">
+                  <div className="text-lg font-semibold text-gray-900 mb-3">Pricing Breakdown</div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Template Category:</span>
+                      <span className="font-medium">{getSelectedTemplateCategory()}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Cost per message:</span>
+                      <span className="font-medium">₹{PRICING[getSelectedTemplateCategory().toUpperCase() as keyof typeof PRICING] || PRICING.UTILITY}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Number of recipients:</span>
+                      <span className="font-medium">{recipients.length}</span>
+                    </div>
+                    <div className="border-t pt-2 mt-2">
+                      <div className="flex justify-between items-center text-lg font-bold">
+                        <span className="text-gray-900">Total Cost:</span>
+                        <span className="text-emerald-600">₹{calculatedCost.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Campaign Details */}
+                {campaignName && (
+                  <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                    <div className="text-sm font-semibold text-emerald-800 mb-1">Campaign Name</div>
+                    <div className="text-emerald-700">{campaignName}</div>
+                  </div>
+                )}
+
+                {/* Template Preview */}
+                {templatePreview && (
+                  <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                    <div className="text-sm font-semibold text-yellow-800 mb-2">Message Preview</div>
+                    <div className="text-sm text-yellow-700 whitespace-pre-wrap">
+                      {generateLivePreview()}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="flex space-x-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowPricingModal(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={confirmAndSend}
+                  disabled={loading.sending}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  {loading.sending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      Confirm & Send (₹{calculatedCost.toFixed(2)})
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
