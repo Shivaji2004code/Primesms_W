@@ -447,35 +447,24 @@ except Exception as e:
                     Select Template *
                   </Label>
                   <Select
+                    className="h-10 border border-gray-300"
                     value={selectedTemplate}
                     onValueChange={(value) => {
                       setSelectedTemplate(value);
                       analyzeTemplate(value);
                     }}
                   >
-                    <SelectTrigger className="h-10 border border-gray-300">
-                      <SelectValue placeholder="Choose a template to test" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-72 p-1">
-                      {templates.map((template) => (
-                        <SelectItem
-                          key={template.id}
-                          value={template.name}
-                          className="py-2.5 pl-8 pr-3 text-sm"
-                        >
-                          <div className="flex items-center justify-between w-full gap-2">
-                            <span className="font-medium truncate max-w-[240px]">
-                              {template.name
-                                .replace(/_(UTILITY|MARKETING|AUTHENTICATION)$/,'')
-                                .replace(/_/g,' ')}
-                            </span>
-                            <Badge variant="outline" className="ml-2 text-xs whitespace-nowrap">
-                              {template.category}
-                            </Badge>
-                          </div>
+                    <SelectValue placeholder="Choose a template to test" />
+                    {templates.map((template) => {
+                      const formattedName = template.name
+                        .replace(/_(UTILITY|MARKETING|AUTHENTICATION)$/,'')
+                        .replace(/_/g,' ');
+                      return (
+                        <SelectItem key={template.id} value={template.name}>
+                          {`${formattedName} — ${template.category}`}
                         </SelectItem>
-                      ))}
-                    </SelectContent>
+                      );
+                    })}
                   </Select>
                 </div>
 
