@@ -995,17 +995,27 @@ export default function WhatsAppBulkMessaging() {
                 
                 <TabsContent value="manual" className="space-y-4">
                   <div>
-                    <Label htmlFor="manual-recipients" className="text-sm font-medium">Phone Numbers *</Label>
+                    <div className="flex items-center justify-between mb-2">
+                      <Label htmlFor="manual-recipients" className="text-sm font-medium">Phone Numbers *</Label>
+                      {recipients.length > 0 && (
+                        <Badge variant="secondary" className="bg-blue-50 text-blue-700">
+                          {recipients.length} numbers detected
+                        </Badge>
+                      )}
+                    </div>
                     <Textarea
                       id="manual-recipients"
                       value={manualRecipients}
                       onChange={(e) => handleManualRecipientsChange(e.target.value)}
-                      placeholder="Enter phone numbers separated by commas or new lines (e.g., 1234567890, 919876543210)"
+                      placeholder="Type or paste phone numbers here:&#10;919876543210&#10;918765432109&#10;917654321098&#10;...&#10;&#10;Numbers are processed automatically as you type!"
                       className="mt-1"
-                      rows={4}
+                      rows={6}
                     />
+                    <p className="text-xs text-emerald-600 mt-1 font-medium">
+                      ⚡ Auto-processing: Numbers are detected and ready as you type or paste!
+                    </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      Include country code (e.g., 1 for US, 91 for India). Recipients are added automatically as you type.
+                      Format: Include country code (91 for India, 1 for US). Separate with commas or new lines.
                     </p>
                   </div>
                 </TabsContent>
@@ -1059,47 +1069,22 @@ export default function WhatsAppBulkMessaging() {
                 </TabsContent>
               </Tabs>
 
-              {/* Recipients List */}
+              {/* Recipients Summary - No individual list */}
               {recipients.length > 0 && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <Label className="text-sm font-medium">Recipients ({recipients.length})</Label>
-                      {recipients.length > 0 && (
-                        <div className="flex items-center gap-2 text-xs text-gray-600">
-                          <input
-                            type="checkbox"
-                            checked={selectedRecipients.length === recipients.length}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                selectAllRecipients();
-                              } else {
-                                clearRecipientSelection();
-                              }
-                            }}
-                            className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded"
-                          />
-                          <span>Select All ({selectedRecipients.length} selected)</span>
-                        </div>
-                      )}
+                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                        {recipients.length} numbers ready
+                      </Badge>
                     </div>
                     <div className="flex gap-2">
-                      {selectedRecipients.length > 0 && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={copySelectedRecipientsToClipboard}
-                          className="text-green-600 hover:text-green-700"
-                        >
-                          <Copy className="h-4 w-4 mr-1" />
-                          Copy Selected ({selectedRecipients.length})
-                        </Button>
-                      )}
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={copyRecipientsToClipboard}
-                         className="text-emerald-600 hover:text-emerald-700"
+                        className="text-emerald-600 hover:text-emerald-700"
                       >
                         <Copy className="h-4 w-4 mr-1" />
                         Copy All
@@ -1107,7 +1092,10 @@ export default function WhatsAppBulkMessaging() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setRecipients([])}
+                        onClick={() => {
+                          setRecipients([]);
+                          setManualRecipients('');
+                        }}
                         className="text-red-600 hover:text-red-700"
                       >
                         <Trash2 className="h-4 w-4 mr-1" />
@@ -1115,28 +1103,15 @@ export default function WhatsAppBulkMessaging() {
                       </Button>
                     </div>
                   </div>
-                  <div className="max-h-40 overflow-y-auto space-y-2">
-                    {recipients.map((recipient, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded border">
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="checkbox"
-                            checked={selectedRecipients.includes(index)}
-                            onChange={() => toggleRecipientSelection(index)}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          />
-                          <span className="text-sm font-mono">{recipient}</span>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeRecipient(index)}
-                           className="text-red-600 hover:text-red-700 h-6 w-6 p-0"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="text-sm text-green-800">
+                      ✅ <strong>{recipients.length} phone numbers</strong> are ready to receive your message.
+                      {recipients.length > 50 && (
+                        <span className="block mt-1 text-green-700">
+                          📊 Large batch detected - will use optimized bulk delivery.
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
