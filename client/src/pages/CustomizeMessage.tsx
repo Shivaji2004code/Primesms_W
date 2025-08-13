@@ -37,6 +37,13 @@ import { useNotifier } from '../contexts/NotificationContext';
 import { apiRequest } from '../lib/api';
 import { useToast } from '../components/ui/use-toast';
 
+// Pricing constants per message in INR
+const PRICING = {
+  MARKETING: 0.80,
+  UTILITY: 0.15,
+  AUTHENTICATION: 0.15
+} as const;
+
 interface WhatsAppNumber {
   id: string;
   phone_number_id: string;
@@ -88,6 +95,9 @@ export default function CustomizeMessage() {
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [sendingLoading, setSendingLoading] = useState(false);
+
+  // Pricing modal state
+  const [showPricingModal, setShowPricingModal] = useState(false);
 
   // Form progress tracking
   const [currentStep, setCurrentStep] = useState(1);
@@ -191,6 +201,24 @@ export default function CustomizeMessage() {
     if (uploadedFile && recipientColumn) completed++;
     if (useVariables ? Object.keys(variableMappings).length === templateVariables.length : true) completed++;
     return (completed / totalSteps) * 100;
+  };
+
+  // Get selected template category for pricing
+  const getSelectedTemplateCategory = () => {
+    if (!selectedTemplate) return 'UTILITY';
+    return selectedTemplate.category?.toUpperCase() || 'UTILITY';
+  };
+
+  // Calculate campaign cost
+  const calculateCampaignCost = () => {
+    const category = getSelectedTemplateCategory() as keyof typeof PRICING;
+    const pricePerMessage = PRICING[category] || PRICING.UTILITY;
+    const totalMessages = excelData.length;
+    return {
+      pricePerMessage,
+      totalMessages,
+      totalCost: (pricePerMessage * totalMessages).toFixed(2)
+    };
   };
 
   const loadWhatsAppNumbers = async () => {
@@ -432,6 +460,11 @@ export default function CustomizeMessage() {
       return;
     }
 
+    // Show pricing modal first
+    setShowPricingModal(true);
+  };
+
+  const actualSendCustomMessages = async () => {
     // Check if we should use bulk messaging (more than 50 recipients)
     if (excelData.length > 50) {
       return handleBulkCustomSend();
@@ -593,7 +626,173 @@ export default function CustomizeMessage() {
     return 'pending';
   };
 
+  // Generate first recipient preview for pricing modal
+  const generateFirstRecipientPreview = () => {
+    if (!selectedTemplate || !excelData.length || !recipientColumn) return null;
+
+    const firstRow = excelData[0];
+    let messageText = '';
+    
+    // Replace variables in template components
+    if (selectedTemplate.components) {
+      selectedTemplate.components.forEach(component => {
+        if (component.type === 'BODY' && component.text) {
+          let text = component.text;
+          
+          // Replace variables with actual data from Excel
+          Object.keys(variableMappings).forEach(variable => {
+            const columnName = variableMappings[variable];
+            const value = firstRow[columnName];
+            
+            if (value !== undefined && value !== null) {
+              text = text.replace(new RegExp(variable.replace(/[{}]/g, '\\$&'), 'g'), value.toString());
+            }
+          });
+          
+          messageText += text + '\n';
+        }
+      });
+    }
+    
+    return {
+      recipient: firstRow[recipientColumn] || 'Unknown',
+      message: messageText.trim()
+    };
+  };
+
+  const confirmAndSend = async () => {
+    setShowPricingModal(false);
+    await actualSendCustomMessages();
+  };
+
   return (
+    <>
+      {/* Professional Pricing Modal */}
+      {showPricingModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden border border-gray-100">
+            {/* Header with gradient */}
+            <div className="bg-gradient-to-r from-emerald-600 to-blue-600 px-6 py-5 text-white relative overflow-hidden">
+              <div className="absolute inset-0 bg-black opacity-10"></div>
+              <div className="relative">
+                <h3 className="text-2xl font-bold mb-2 flex items-center">
+                  <Crown className="h-6 w-6 mr-2" />
+                  Campaign Cost Preview
+                </h3>
+                <p className="text-blue-100 text-sm">Review your campaign details and pricing before sending</p>
+              </div>
+              <div className="absolute -top-4 -right-4 w-24 h-24 bg-white opacity-10 rounded-full"></div>
+              <div className="absolute -bottom-2 -left-2 w-16 h-16 bg-white opacity-10 rounded-full"></div>
+            </div>
+
+            <div className="p-6 max-h-[calc(90vh-140px)] overflow-y-auto">
+              {/* Campaign Stats Cards */}
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-100 text-center">
+                  <div className="text-2xl font-bold text-blue-600 mb-1">{calculateCampaignCost().totalMessages}</div>
+                  <div className="text-xs text-blue-600 font-medium">Recipients</div>
+                </div>
+                <div className="bg-gradient-to-br from-purple-50 to-pink-50 p-4 rounded-xl border border-purple-100 text-center">
+                  <div className="text-2xl font-bold text-purple-600 mb-1">{getSelectedTemplateCategory()}</div>
+                  <div className="text-xs text-purple-600 font-medium">Template Type</div>
+                </div>
+                <div className="bg-gradient-to-br from-emerald-50 to-green-50 p-4 rounded-xl border border-emerald-100 text-center">
+                  <div className="text-2xl font-bold text-emerald-600 mb-1">₹{calculateCampaignCost().totalCost}</div>
+                  <div className="text-xs text-emerald-600 font-medium">Total Cost</div>
+                </div>
+              </div>
+
+              {/* Pricing Breakdown */}
+              <div className="bg-gray-50 rounded-xl p-5 mb-6 border border-gray-200">
+                <h4 className="font-semibold text-gray-900 mb-3 flex items-center">
+                  <Star className="h-4 w-4 mr-2 text-yellow-500" />
+                  Pricing Breakdown
+                </h4>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
+                    <div className="flex items-center">
+                      <div className="w-2 h-2 bg-emerald-500 rounded-full mr-3"></div>
+                      <span className="text-sm text-gray-700">Cost per message ({getSelectedTemplateCategory()})</span>
+                    </div>
+                    <span className="font-semibold text-gray-900">₹{calculateCampaignCost().pricePerMessage}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
+                    <div className="flex items-center">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
+                      <span className="text-sm text-gray-700">Number of recipients</span>
+                    </div>
+                    <span className="font-semibold text-gray-900">{calculateCampaignCost().totalMessages}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-3 px-4 bg-gradient-to-r from-emerald-100 to-green-100 rounded-lg border border-emerald-200">
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-emerald-600 rounded-full mr-3"></div>
+                      <span className="font-semibold text-emerald-800">Total Campaign Cost</span>
+                    </div>
+                    <span className="text-xl font-bold text-emerald-800">₹{calculateCampaignCost().totalCost}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* First Recipient Preview */}
+              {generateFirstRecipientPreview() && (
+                <div className="bg-blue-50 rounded-xl p-5 mb-6 border border-blue-200">
+                  <h4 className="font-semibold text-blue-900 mb-3 flex items-center">
+                    <Eye className="h-4 w-4 mr-2 text-blue-600" />
+                    First Recipient Preview
+                  </h4>
+                  <div className="bg-white rounded-lg p-4 border border-blue-200">
+                    <div className="text-sm font-semibold text-gray-900 mb-2">
+                      To: {generateFirstRecipientPreview()?.recipient}
+                    </div>
+                    <div className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 p-3 rounded border">
+                      {generateFirstRecipientPreview()?.message}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Template Information */}
+              {selectedTemplate && (
+                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-5 mb-6 border border-indigo-200">
+                  <h4 className="font-semibold text-indigo-900 mb-3 flex items-center">
+                    <FileText className="h-4 w-4 mr-2 text-indigo-600" />
+                    Template Details
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-xs text-indigo-600 font-medium mb-1">Template Name</div>
+                      <div className="text-sm font-semibold text-indigo-900">{selectedTemplate.name.replace(/_(UTILITY|MARKETING|AUTHENTICATION)$/, '').replace(/_/g, ' ')}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-indigo-600 font-medium mb-1">Language</div>
+                      <div className="text-sm font-semibold text-indigo-900">{languages.find(l => l.code === selectedLanguage)?.name || selectedLanguage}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3">
+              <Button
+                onClick={() => setShowPricingModal(false)}
+                variant="outline"
+                className="flex-1 h-12 border-2 border-gray-300 hover:border-gray-400 text-gray-700 font-semibold transition-all duration-200"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Cancel
+              </Button>
+              <Button
+                onClick={confirmAndSend}
+                className="flex-1 h-12 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+              >
+                <Zap className="h-4 w-4 mr-2" />
+                Confirm & Send (₹{calculateCampaignCost().totalCost})
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     <DashboardLayout
       title="Customize Message"
       subtitle="Send personalized WhatsApp messages using Excel data with dynamic variables"
@@ -1083,5 +1282,6 @@ export default function CustomizeMessage() {
         </div>
       </div>
     </DashboardLayout>
+    </>
   );
 }
